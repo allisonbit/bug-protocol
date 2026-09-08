@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #07090d;
+  --color-ink-soft: #0d1117;
+  --color-line: #1c2230;
+  --color-mist: #8b95a7;
+  --color-chalk: #e8ecf3;
+  --color-bug: #7ee787;
+  --color-bug-dim: #2ea043;
+  --color-warn: #f0883e;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-chalk);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Faint grid, so the page reads as an instrument panel rather than a poster. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-line) 55%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

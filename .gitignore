@@ -4,3 +4,4 @@ cache/
 .env
 .env.*
 typechain-types/
+.freebuff/
