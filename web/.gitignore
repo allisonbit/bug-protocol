@@ -6,3 +6,6 @@ next-dev.log
 .vercel
 .env
 .env.*
+
+.vercel
+.env*

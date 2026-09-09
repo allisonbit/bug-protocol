@@ -1,28 +1,24 @@
-import { defineChain } from "viem";
-
 /**
- * Robinhood Chain — the Arbitrum Orbit L2 $BUG launches on.
- * Values verified against the chain itself: chainId 4663, ~101 ms blocks,
- * native asset ETH.
+ * Back-compat shim. The chain registry now lives in ./chains (multi-chain).
+ * Single-argument txUrl/addressUrl resolve against the default (Robinhood)
+ * chain; chain-aware code should use useExplorer() from ./reads or the *On
+ * helpers so links follow the connected wallet's chain.
  */
-export const robinhoodChain = defineChain({
-  id: 4663,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: {
-      http: [process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Blockscout",
-      url: "https://robinhoodchain.blockscout.com",
-    },
-  },
-});
+export {
+  robinhoodChain,
+  CHAINS,
+  SUPPORTED_CHAINS,
+  DEFAULT_CHAIN_ID,
+  chainMeta,
+  txUrlOn,
+  addressUrlOn,
+  assetInfo,
+  NATIVE,
+  type ChainMeta,
+} from "./chains";
 
-export const EXPLORER = robinhoodChain.blockExplorers.default.url;
+import { DEFAULT_CHAIN_ID, chainMeta, txUrlOn, addressUrlOn } from "./chains";
 
-export const txUrl = (hash: string) => `${EXPLORER}/tx/${hash}`;
-export const addressUrl = (address: string) => `${EXPLORER}/address/${address}`;
+export const EXPLORER = chainMeta(DEFAULT_CHAIN_ID).explorer;
+export const txUrl = (hash: string) => txUrlOn(DEFAULT_CHAIN_ID, hash);
+export const addressUrl = (a: string) => addressUrlOn(DEFAULT_CHAIN_ID, a);

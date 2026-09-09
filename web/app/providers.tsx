@@ -4,17 +4,21 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { robinhoodChain } from "@/lib/chain";
+import type { Chain } from "viem";
+import { SUPPORTED_CHAINS } from "@/lib/chains";
 
 /**
- * Injected wallets work with no configuration. WalletConnect needs a project id
- * from the user's own WalletConnect account, so it is added only when that id is
- * present rather than shipping a broken connector.
+ * Multi-chain config: Robinhood (home), Base, Arbitrum, Optimism, Base Sepolia.
+ * Injected wallets work with no configuration; WalletConnect needs a project id
+ * from the user's own account, so it is added only when that id is present
+ * rather than shipping a broken connector.
  */
+const chains = SUPPORTED_CHAINS as unknown as readonly [Chain, ...Chain[]];
+
 const config = createConfig({
-  chains: [robinhoodChain],
+  chains,
   connectors: [injected()],
-  transports: { [robinhoodChain.id]: http() },
+  transports: Object.fromEntries(chains.map((c) => [c.id, http()])),
   ssr: true,
 });
 

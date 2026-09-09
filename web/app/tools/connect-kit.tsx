@@ -1,0 +1,177 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import { useBounty } from "@/lib/reads";
+import { downloadText } from "@/lib/commit";
+import { Button, Card, Copyable, Field, Input, SectionTitle } from "@/components/ui";
+import { mcpConfig, MCP_TOOLS, MCP_PACKAGE, CLI_PACKAGE, REPO_URL, reconKitInstaller } from "./kit-templates";
+
+/** Multi-line code block with a copy button. */
+function CodeBlock({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="relative">
+      {label && <div className="mb-1 text-[11px] text-mist">{label}</div>}
+      <pre className="overflow-auto rounded border border-line bg-ink p-3 pr-16 text-[11px] leading-relaxed whitespace-pre-wrap text-chalk">
+        {text}
+      </pre>
+      <button
+        onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true))}
+        className="absolute top-2 right-2 rounded border border-line bg-ink-soft px-2 py-1 text-[10px] text-mist hover:text-chalk"
+      >
+        {copied ? "✓ copied" : "copy"}
+      </button>
+    </div>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card className="p-5">
+      <SectionTitle>{title}</SectionTitle>
+      <div className="mt-4">{children}</div>
+    </Card>
+  );
+}
+
+export function ConnectKit() {
+  return (
+    <div className="space-y-5">
+      <McpPanel />
+      <div className="grid gap-5 md:grid-cols-2">
+        <CliPanel />
+        <ReconPanel />
+      </div>
+    </div>
+  );
+}
+
+/** Wire the protocol into any MCP client so AI agents can hunt + triage. */
+function McpPanel() {
+  const { address: bounty, meta, isDeployed } = useBounty();
+  const [addr, setAddr] = useState("");
+  const [chain, setChain] = useState("");
+  const [rpc, setRpc] = useState("");
+
+  const cfg = mcpConfig({
+    bounty: addr || (isDeployed ? (bounty as string) : ""),
+    chain: chain || String(meta.chain.id),
+    rpc,
+  });
+  const json = JSON.stringify(cfg, null, 2);
+
+  return (
+    <Panel title="Connect an AI agent (MCP)">
+      <p className="text-xs leading-relaxed text-mist">
+        The <span className="text-chalk">{MCP_PACKAGE}</span> server exposes the whole hunt/triage loop as MCP
+        tools. Paste this into Claude Desktop (or any MCP client). Read-only tools need no key; write tools
+        need a signer.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <Field label="BOUNTY_ADDRESS">
+          <Input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={isDeployed ? (bounty as string) : "0x…"} />
+        </Field>
+        <Field label="CHAIN">
+          <Input value={chain} onChange={(e) => setChain(e.target.value)} placeholder={`${meta.chain.id} / ${meta.label.toLowerCase()}`} />
+        </Field>
+        <Field label="RPC_URL (optional)">
+          <Input value={rpc} onChange={(e) => setRpc(e.target.value)} placeholder="defaults to chain RPC" />
+        </Field>
+      </div>
+      <div className="mt-4">
+        <CodeBlock text={json} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button variant="ghost" onClick={() => downloadText("bug-protocol.mcp.json", json, "application/json")}>
+          download config
+        </Button>
+        <span className="text-[11px] text-mist">
+          or run directly: <span className="font-mono text-chalk">npx -y {MCP_PACKAGE}</span>
+        </span>
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {MCP_TOOLS.map((t) => (
+          <div key={t.name} className="rounded border border-line bg-ink px-2.5 py-1.5 text-[11px]">
+            <span className="font-mono text-chalk">{t.name}</span>
+            <span className={`ml-1.5 ${t.write ? "text-warn" : "text-bug-dim"}`}>{t.write ? "write" : "read"}</span>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/** The terminal path: an instant zero-dep script, or the full signing CLI. */
+function CliPanel() {
+  return (
+    <Panel title="Terminal / CLI">
+      <p className="text-xs leading-relaxed text-mist">
+        <span className="text-chalk">Instant, zero-install:</span> a single Node file for the offline crypto —
+        checksums, commit salts, report encryption. No dependencies, works today.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <a
+          href="/downloads/bug.mjs"
+          download
+          className="inline-block rounded border border-bug-dim bg-bug-dim/10 px-4 py-2 text-sm text-bug transition-colors hover:bg-bug-dim/20"
+        >
+          ↓ download bug.mjs
+        </a>
+      </div>
+      <div className="mt-3">
+        <CodeBlock
+          text={[
+            "node bug.mjs checksum ./mytool.zip      # 0x… to publish/verify",
+            "node bug.mjs verify ./mytool.zip 0x…    # confirm a download",
+            "node bug.mjs encrypt report.md --pass s # → report.md.enc.json",
+            "node bug.mjs salt                       # random commit salt",
+          ].join("\n")}
+        />
+      </div>
+      <p className="mt-5 text-xs leading-relaxed text-mist">
+        <span className="text-chalk">Full CLI</span> (signs transactions — submit, reveal, triage, claim on any
+        chain, ETH or USDC, no $BUG required):
+      </p>
+      <div className="mt-3 space-y-2">
+        <CodeBlock text={`npm i -g ${CLI_PACKAGE}`} />
+        <CodeBlock
+          text={["export BUG_BOUNTY_ADDRESS=0xYourContract", "export BUG_CHAIN=robinhood", "export BUG_PRIVATE_KEY=0x…   # write actions only", "bug --help"].join("\n")}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+/** Generate a runnable recon + live-triage kit for an in-scope target. */
+function ReconPanel() {
+  const [target, setTarget] = useState("");
+  const script = reconKitInstaller(target);
+  return (
+    <Panel title="Recon + live-triage kit">
+      <p className="text-xs leading-relaxed text-mist">
+        A one-file installer that stands up the ProjectDiscovery pipeline in Docker —
+        subfinder → httpx → nuclei, plus naabu, gau and ffuf. Point it at a host a
+        live program lists in scope; feed the nuclei output into a report.
+      </p>
+      <div className="mt-4">
+        <Field label="Target host" hint="Bare hostname. Only test assets covered by a program's on-chain scope + safe harbour.">
+          <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="example.com" />
+        </Field>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button variant="ghost" onClick={() => downloadText("bug-recon-kit.sh", script, "text/x-shellscript")}>
+          ↓ download kit installer
+        </Button>
+        <a className="text-[11px] text-bug underline" href={REPO_URL} target="_blank" rel="noreferrer">
+          full protocol repo ↗
+        </a>
+      </div>
+      <details className="mt-4">
+        <summary className="cursor-pointer text-[11px] text-mist hover:text-chalk">preview installer</summary>
+        <div className="mt-2">
+          <CodeBlock text={script} />
+        </div>
+      </details>
+    </Panel>
+  );
+}

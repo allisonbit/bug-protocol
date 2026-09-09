@@ -1,137 +1,131 @@
-import { createPublicClient, http, formatEther, type Address } from "viem";
-import { robinhoodChain, addressUrl } from "@/lib/chain";
-import { BOUNTY_ADDRESS, bountyAbi, isDeployed, ProgramStatus } from "@/lib/contract";
+"use client";
 
-export const revalidate = 30;
+import Link from "next/link";
+import { useMemo } from "react";
+import { useReadContracts } from "wagmi";
+import { bountyAbi, type ProgramView } from "@/lib/contract";
+import { useProtocolMeta, useBounty, useExplorer } from "@/lib/reads";
+import { assetInfo } from "@/lib/chains";
+import { fmtAmount, statusName, statusTone } from "@/lib/format";
+import { Badge, Card, Empty, LinkButton } from "@/components/ui";
 
-type ProgramTuple = {
-  owner: Address;
-  rewardToken: Address;
-  scopeHash: `0x${string}`;
-  triageDeadline: bigint;
-  disclosureDelay: bigint;
-  status: number;
-  pool: bigint;
-  locked: bigint;
-  bond: bigint;
-  scopeURI: string;
-};
+export default function Programs() {
+  const { address: bounty, isDeployed, chainId, meta: chain } = useBounty();
+  const explorer = useExplorer();
+  const base = { address: bounty ?? undefined, abi: bountyAbi } as const;
+  const meta = useProtocolMeta();
+  const ids = useMemo(
+    () => Array.from({ length: Math.max(0, Number(meta.nextProgramId ?? 1n) - 1) }, (_, i) => i + 1),
+    [meta.nextProgramId],
+  );
 
-type Row = ProgramTuple & {
-  id: bigint;
-  topTier: bigint;
-  pending: bigint;
-};
-
-async function readPrograms(): Promise<Row[]> {
-  if (!BOUNTY_ADDRESS) return [];
-  const client = createPublicClient({ chain: robinhoodChain, transport: http() });
-  const base = { address: BOUNTY_ADDRESS, abi: bountyAbi } as const;
-
-  const next = await client.readContract({ ...base, functionName: "nextProgramId" });
-  const ids = Array.from({ length: Number(next) - 1 }, (_, i) => BigInt(i + 1));
-  if (ids.length === 0) return [];
-
-  const results = await client.multicall({
+  const q = useReadContracts({
     contracts: ids.flatMap((id) => [
-      { ...base, functionName: "getProgram", args: [id] } as const,
-      { ...base, functionName: "topTier", args: [id] } as const,
-      { ...base, functionName: "pendingCount", args: [id] } as const,
+      { ...base, functionName: "getProgram", args: [BigInt(id)] },
+      { ...base, functionName: "topTier", args: [BigInt(id)] },
+      { ...base, functionName: "pendingCount", args: [BigInt(id)] },
     ]),
+    query: { enabled: !!bounty && ids.length > 0, refetchInterval: 20_000 },
   });
 
-  return ids.flatMap((id, i) => {
-    const [p, top, pending] = results.slice(i * 3, i * 3 + 3);
-    if (p.status !== "success") return [];
-    const g = p.result as ProgramTuple;
-    return [
-      {
-        ...g,
+  const rows = ids
+    .map((id, i) => {
+      const p = q.data?.[i * 3];
+      const top = q.data?.[i * 3 + 1];
+      const pending = q.data?.[i * 3 + 2];
+      if (p?.status !== "success") return null;
+      return {
         id,
-        topTier: top.status === "success" ? (top.result as bigint) : 0n,
-        pending: pending.status === "success" ? (pending.result as bigint) : 0n,
-      },
-    ];
-  });
-}
-
-export default async function Programs() {
-  let rows: Row[] = [];
-  let error: string | null = null;
-  if (isDeployed) {
-    try {
-      rows = await readPrograms();
-    } catch (e) {
-      error = e instanceof Error ? e.message : "chain read failed";
-    }
-  }
+        p: p.result as ProgramView,
+        top: top?.status === "success" ? (top.result as bigint) : 0n,
+        pending: pending?.status === "success" ? (pending.result as bigint) : 0n,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
-    <section className="mx-auto max-w-5xl px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Programs</h1>
-      <p className="mt-3 max-w-2xl leading-relaxed text-mist text-pretty">
-        Every row is read live from Robinhood Chain. Escrow shown is real money already locked in
-        the contract — a program cannot be listed here without it.
-      </p>
-
-      {!isDeployed && (
-        <div className="mt-10 rounded-lg border border-line bg-ink-soft p-8">
-          <p className="text-sm text-warn">Protocol not deployed yet.</p>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-mist text-pretty">
-            The contracts are written and tested; deployment needs the $BUG token address. There is
-            deliberately no placeholder data here — an empty list is the honest answer.
+    <section className="mx-auto max-w-6xl px-6 py-12">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Programs</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mist">
+            Every row is read live from <span className="text-chalk">{chain.label}</span>. Escrow shown
+            is real money locked in the contract — a program can&apos;t go Live without it.
           </p>
         </div>
+        <LinkButton href="/programs/new" variant="primary">
+          + create program
+        </LinkButton>
+      </div>
+
+      {!isDeployed && (
+        <Card className="mt-8 p-6">
+          <p className="text-sm text-warn">Protocol not deployed on {chain.label} yet.</p>
+          <p className="mt-2 max-w-xl text-sm text-mist">
+            No placeholder data here — an empty list is the honest answer. Switch networks in the top
+            bar, or the list fills from chain the moment the contract ships here.
+          </p>
+        </Card>
       )}
 
-      {error && (
-        <div className="mt-10 rounded-lg border border-warn/40 bg-warn/5 p-6">
-          <p className="text-sm text-warn">Could not reach the chain.</p>
-          <p className="mt-2 font-mono text-xs break-all text-mist">{error}</p>
+      {isDeployed && q.isLoading && <p className="mt-8 text-sm text-mist">reading chain…</p>}
+
+      {isDeployed && !q.isLoading && rows.length === 0 && (
+        <div className="mt-8">
+          <Empty>
+            No programs yet. The contract is live and waiting for its first client —{" "}
+            <Link href="/programs/new" className="text-bug hover:underline">
+              create one
+            </Link>
+            .
+          </Empty>
         </div>
-      )}
-
-      {isDeployed && !error && rows.length === 0 && (
-        <p className="mt-10 text-sm text-mist">
-          No programs yet. The contract is live and waiting for its first client.
-        </p>
       )}
 
       {rows.length > 0 && (
-        <ul className="mt-10 grid gap-px overflow-hidden rounded-lg border border-line bg-line">
-          {rows.map((r) => (
-            <li key={String(r.id)} className="bg-ink-soft p-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <h2 className="text-base text-chalk">Program #{String(r.id)}</h2>
-                <span className="text-xs text-mist">{ProgramStatus[r.status] ?? "?"}</span>
-              </div>
-              <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-4">
-                <div>
-                  <dt className="text-mist">escrow</dt>
-                  <dd className="mt-1 text-chalk">{formatEther(r.pool)}</dd>
-                </div>
-                <div>
-                  <dt className="text-mist">top severity</dt>
-                  <dd className="mt-1 text-chalk">{formatEther(r.topTier)}</dd>
-                </div>
-                <div>
-                  <dt className="text-mist">open reports</dt>
-                  <dd className="mt-1 text-chalk">{String(r.pending)}</dd>
-                </div>
-                <div>
-                  <dt className="text-mist">client</dt>
-                  <dd className="mt-1">
-                    <a className="text-bug underline underline-offset-4" href={addressUrl(r.owner)}>
-                      {r.owner.slice(0, 10)}…
-                    </a>
-                  </dd>
-                </div>
-              </dl>
-              {r.scopeURI && (
-                <p className="mt-4 truncate text-xs text-mist">scope: {r.scopeURI}</p>
-              )}
-            </li>
-          ))}
+        <ul className="mt-8 grid gap-3 md:grid-cols-2">
+          {rows.map((r) => {
+            const a = assetInfo(chainId, r.p.rewardToken);
+            return (
+              <li key={r.id}>
+                <Link href={`/programs/${r.id}`}>
+                  <Card className="p-6 transition-colors hover:border-mist">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-base text-chalk">Program #{r.id}</h2>
+                      <Badge tone={statusTone[statusName(r.p.status)]}>{statusName(r.p.status)}</Badge>
+                    </div>
+                    <dl className="mt-5 grid grid-cols-3 gap-4 text-xs">
+                      <div>
+                        <dt className="text-mist">escrow</dt>
+                        <dd className="mt-1 text-chalk">{fmtAmount(r.p.pool, a.decimals, a.symbol)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-mist">top severity</dt>
+                        <dd className="mt-1 text-chalk">{fmtAmount(r.top, a.decimals, a.symbol)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-mist">open reports</dt>
+                        <dd className="mt-1 text-chalk">{String(r.pending)}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-4 flex items-center justify-between border-t border-line pt-4 text-xs">
+                      <span className="text-mist">
+                        client{" "}
+                        <a
+                          className="text-bug underline underline-offset-4"
+                          href={explorer.address(r.p.owner)}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {r.p.owner.slice(0, 10)}…
+                        </a>
+                      </span>
+                      {r.p.scopeURI && <span className="truncate text-mist">scope ↗</span>}
+                    </div>
+                  </Card>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
