@@ -1,0 +1,40 @@
+{
+  "name": "@bug-protocol/cli",
+  "version": "0.1.0",
+  "description": "bug-cli — command-line tool for the $BUG bug-bounty protocol. Drive the full hunt/triage loop from a terminal on any EVM chain (ETH or USDC, no $BUG token required).",
+  "type": "module",
+  "bin": {
+    "bug": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "bug-bounty",
+    "security",
+    "ethereum",
+    "viem",
+    "cli",
+    "web3"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}

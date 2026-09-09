@@ -1,0 +1,32 @@
+{
+  "name": "bug-protocol",
+  "displayName": "$BUG Bug-Bounty Protocol",
+  "version": "0.1.0",
+  "description": "MCP server exposing the $BUG bug-bounty protocol so AI agents can query programs, compute commits, submit findings, triage, and claim rewards on-chain.",
+  "homepage": "https://github.com/allisonbit/bug-protocol",
+  "command": "npx",
+  "args": ["-y", "@bug-protocol/mcp"],
+  "env": [
+    { "name": "BOUNTY_ADDRESS", "required": true, "description": "Deployed BugBounty contract address." },
+    { "name": "CHAIN", "required": false, "default": "4663", "description": "Chain id or slug: 4663/robinhood, 8453/base, 42161/arbitrum, 10/optimism, 84532/base-sepolia." },
+    { "name": "RPC_URL", "required": false, "description": "Override the default RPC endpoint for the chain." },
+    { "name": "BUG_TOKEN", "required": false, "description": "$BUG token address (for bond approvals). Read from chain if unset." },
+    { "name": "PRIVATE_KEY", "required": false, "description": "0x-prefixed signer key. Required only for write tools (submit, reveal, triage, escalate, claim, withdraw)." }
+  ],
+  "tools": [
+    { "name": "protocol_info", "write": false, "description": "Protocol config + active chain metadata." },
+    { "name": "list_programs", "write": false, "description": "List programs with status, owner, pool, top tier, scope." },
+    { "name": "get_program", "write": false, "description": "Full detail for one program incl. payout tiers." },
+    { "name": "get_submission", "write": false, "description": "Full detail for one submission incl. triage/embargo state." },
+    { "name": "compute_commit", "write": false, "description": "Derive salt + commit hash off-chain." },
+    { "name": "encrypt_report", "write": false, "description": "AES-GCM/PBKDF2 encrypt a report body." },
+    { "name": "decrypt_report", "write": false, "description": "Decrypt a report envelope." },
+    { "name": "submit_finding", "write": true, "description": "Submit a commit on-chain (auto-approves bond)." },
+    { "name": "reveal_report", "write": true, "description": "Reveal reportURI + salt to unlock payout." },
+    { "name": "triage", "write": true, "description": "Owner verdict: accept/reject/duplicate/spam." },
+    { "name": "escalate", "write": true, "description": "Escalate to the arbiter." },
+    { "name": "resolve_escalation", "write": true, "description": "Arbiter ruling on an escalated submission." },
+    { "name": "claim", "write": true, "description": "Withdraw credited rewards (pull-payment)." },
+    { "name": "withdraw_bond", "write": true, "description": "Withdraw refundable $BUG bond credit." }
+  ]
+}
