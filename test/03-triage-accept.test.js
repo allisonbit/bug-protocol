@@ -15,7 +15,7 @@ async function submitted(bounty, client, hunter, cover = 1n) {
   return { id, subId };
 }
 
-describe("BugBounty — triage: accept", function () {
+describe("BugBounty: triage accept", function () {
   it("credits the award net of protocol fee, in the same call", async function () {
     const { bounty, client, hunter, fees } = await loadFixture(H.fixture);
     const { id, subId } = await submitted(bounty, client, hunter);

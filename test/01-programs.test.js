@@ -6,7 +6,7 @@ const S = require("./shared");
 const { ETH, Sev, Status, PStatus, DAY, TRIAGE, EMBARGO, DISPUTE, SUB_BOND, PROG_BOND, tiers } = H;
 const { draft, live, commit, SALT, REPORT, SCOPE, SCOPE_URI, CRIT } = S;
 
-describe("BugBounty — program lifecycle", function () {
+describe("BugBounty: program lifecycle", function () {
   it("records scope and payout tiers on creation", async function () {
     const { bounty, client } = await loadFixture(H.fixture);
     const id = await draft(bounty, client);
@@ -43,7 +43,7 @@ describe("BugBounty — program lifecycle", function () {
   });
 });
 
-describe("BugBounty — the Live gate", function () {
+describe("BugBounty: the Live gate", function () {
   it("will not go Live without the client bond", async function () {
     const { bounty, client } = await loadFixture(H.fixture);
     const id = await draft(bounty, client);

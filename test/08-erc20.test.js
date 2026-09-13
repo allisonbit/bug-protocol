@@ -11,7 +11,7 @@ const { commit, SALT, REPORT, SCOPE, SCOPE_URI, CRIT } = S;
  * ERC-20 path is exercised end to end here, including the fee-on-transfer
  * safeguard (balance deltas, not the requested amount, are what get credited).
  */
-describe("BugBounty — ERC-20 reward pools", function () {
+describe("BugBounty: ERC-20 reward pools", function () {
   async function usdcFixture() {
     const base = await H.fixture();
     const usdc = await (await ethers.getContractFactory("MockERC20")).deploy("USD Coin", "USDC");

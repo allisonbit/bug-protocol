@@ -1,370 +1,302 @@
-"use client";
-
 import Link from "next/link";
-import { use, useState } from "react";
-import { useAccount } from "wagmi";
-import { bountyAbi } from "@/lib/contract";
-import { useProgram, useProtocolMeta, useSubmission, useBounty, useExplorer } from "@/lib/reads";
-import { assetInfo } from "@/lib/chains";
-import { useTx } from "@/lib/useTx";
-import { findBySubmissionId, importReceipt } from "@/lib/vault";
+import { notFound, redirect } from "next/navigation";
+import { getSubmission, getProgramSubmissions } from "@/lib/queries";
+import { currentUser } from "@/lib/supabase/server";
+import { readChainSubmission } from "@/lib/onchain";
 import {
-  fmtAmount,
+  money,
+  displayName,
+  initials,
   fmtDate,
-  severityName,
-  severityTone,
-  subStatusName,
-  subTone,
-  untilLabel,
-} from "@/lib/format";
-import { Badge, Button, Card, Copyable, Field, Input, Select, SectionTitle, Stat, Textarea } from "@/components/ui";
+  timeAgo,
+  severityMeta,
+  submissionStatusMeta,
+} from "@/lib/db";
+import { CHAIN_SUB_STATUS } from "@/lib/contract";
+import {
+  TriagePanel,
+  DisclosePanel,
+  ReportPanel,
+  WaiveEmbargoPanel,
+  SpamFinalizePanel,
+  type ChainFacts,
+} from "./triage";
+import { RevealPanel } from "./reveal-panel";
 
-export default function SubmissionDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const sid = BigInt(id);
-  const { address } = useAccount();
-  const { address: bounty, isDeployed, chainId } = useBounty();
-  const explorer = useExplorer();
-  const [key, setKey] = useState(0);
-  const refresh = () => setKey((k) => k + 1);
+export const dynamic = "force-dynamic";
 
-  const meta = useProtocolMeta();
-  const { submission } = useSubmission(sid, key);
-  const { program } = useProgram(submission ? submission.programId : undefined, key);
-  const tx = useTx(refresh);
+export const metadata = { title: "Finding | Swarmproof" };
 
-  if (!isDeployed) {
-    return (
-      <Shell id={id}>
-        <Card className="p-6">
-          <p className="text-sm text-warn">Protocol not deployed on this network yet.</p>
-          <p className="mt-2 text-sm text-mist">
-            Reveal, triage, escalate and arbiter actions are all wired against the live ABI. Switch
-            networks in the top bar to act on the chain this submission lives on.
-          </p>
-        </Card>
-      </Shell>
-    );
-  }
-  if (!submission) {
-    return (
-      <Shell id={id}>
-        <p className="text-sm text-mist">reading submission #{id}…</p>
-      </Shell>
-    );
-  }
+export default async function SubmissionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await currentUser();
+  if (!user) redirect(`/login?next=/submissions/${id}`);
 
-  const isHunter = !!address && submission.hunter.toLowerCase() === address.toLowerCase();
-  const isOwner = !!address && !!program && program.owner.toLowerCase() === address.toLowerCase();
-  const isArbiter = !!address && !!meta.arbiter && meta.arbiter.toLowerCase() === address.toLowerCase();
-  const status = subStatusName(submission.status);
-  const asset = program ? assetInfo(chainId, program.rewardToken) : { symbol: "", decimals: 18 };
+  const submission = await getSubmission(id);
+  // RLS returns nothing unless you're the hunter or the program owner.
+  if (!submission) notFound();
 
-  const triageDeadline = program ? Number(submission.submittedAt) + Number(program.triageDeadline) : 0;
-  const disclosureAt = program ? Number(submission.triagedAt) + Number(program.disclosureDelay) : 0;
+  const program = submission.program;
+  const isOwner = !!program && user.id === program.owner;
+  const st = submissionStatusMeta[submission.status];
+  const claimed = severityMeta[submission.severity];
+  const final = submission.assigned_severity ? severityMeta[submission.assigned_severity] : null;
+
+  const onchainId = submission.onchain_submission_id;
+  const chainId = submission.chain_id;
+  const isEscrowed = onchainId !== null && chainId !== null;
+
+  /**
+   * Read the chain once, server-side, and hand a plain snapshot to the panels.
+   *
+   * Two reasons this isn't left to the client: the owner's first paint should show
+   * the real verdict rather than flashing "pending" and correcting itself, and the
+   * values have to come from the contract anyway. Nothing the browser asserts
+   * about escrow is trusted anywhere in this app.
+   */
+  const chain = isEscrowed ? await readChainSubmission(chainId, BigInt(onchainId)) : null;
+
+  const facts: ChainFacts | null = chain
+    ? {
+        status: chain.status,
+        statusIndex: chain.statusIndex,
+        severityIndex: chain.severityIndex,
+        award: chain.award.toString(),
+        bond: chain.bond.toString(),
+        reportURI: chain.reportURI,
+        submittedAt: Number(chain.submittedAt),
+        triagedAt: Number(chain.triagedAt),
+        triageDeadline: Number(chain.triageDeadline),
+        escalatedFromPending: chain.escalatedFromPending,
+        embargoWaived: chain.embargoWaived,
+      }
+    : null;
+
+  // Candidates a duplicate verdict may point at: earlier, already-accepted
+  // on-chain findings on the same program. The contract enforces exactly this
+  // (BadDuplicateReference), so the picker only offers rows that would pass.
+  const dupeOptions =
+    isOwner && program && isEscrowed
+      ? (await getProgramSubmissions(program.id))
+          .filter(
+            (s) =>
+              s.onchain_submission_id !== null &&
+              s.onchain_submission_id < (onchainId ?? 0) &&
+              (s.status === "accepted" || s.status === "disclosed"),
+          )
+          .map((s) => ({ id: s.onchain_submission_id as number, title: s.title }))
+      : [];
+
+  const chainLabel = facts ? CHAIN_SUB_STATUS[facts.statusIndex] : null;
+  const hunterPanel =
+    !isOwner && isEscrowed && onchainId !== null && chainId !== null && program
+      ? { rowId: submission.id, chainId, onchainSubmissionId: onchainId }
+      : null;
 
   return (
-    <Shell id={id}>
-      <div className="flex flex-wrap items-center gap-3">
-        <Badge tone={subTone[status]}>{status}</Badge>
-        {submission.severity > 0 && (
-          <span className={`text-sm ${severityTone[severityName(submission.severity)]}`}>{severityName(submission.severity)}</span>
-        )}
-        {isHunter && <Badge tone="text-bug border-bug-dim">your submission</Badge>}
-        {isOwner && <Badge tone="text-bug border-bug-dim">you own this program</Badge>}
-        {isArbiter && <Badge tone="text-warn border-warn/50">arbiter</Badge>}
-        <Link href={`/programs/${submission.programId}`} className="ml-auto text-xs text-bug hover:underline">
-          program #{String(submission.programId)} →
+    <div className="mx-auto max-w-4xl px-6 py-10">
+      {program && (
+        <Link href={`/programs/${program.slug}`} className="text-xs text-mist transition-colors hover:text-chalk">
+          {program.name}
         </Link>
-      </div>
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Hunter" value={<a className="text-bug underline" href={explorer.address(submission.hunter)}>{submission.hunter.slice(0, 10)}…</a>} />
-        <Stat label="Submitted" value={<span className="text-sm">{fmtDate(submission.submittedAt)}</span>} />
-        <Stat label="Award" value={submission.award > 0n ? fmtAmount(submission.award, asset.decimals, asset.symbol) : "—"} />
-        <Stat label="Anti-spam bond" value={fmtAmount(submission.bond, 18, "$BUG")} />
-      </div>
-
-      <div className="mt-4 rounded border border-line bg-ink p-4 text-xs">
-        <span className="text-mist">commitHash </span>
-        <Copyable value={submission.commitHash} />
-        {submission.reportURI ? (
-          <p className="mt-2">
-            <span className="text-mist">revealed report </span>
-            <a className="text-bug underline underline-offset-4" href={submission.reportURI} target="_blank" rel="noreferrer">
-              {submission.reportURI}
-            </a>
-          </p>
-        ) : (
-          <p className="mt-2 text-mist">report not yet revealed — body remains private</p>
-        )}
-      </div>
-
-      {/* Owner triage */}
-      {isOwner && submission.status === 0 && (
-        <TriagePanel sid={sid} refresh={refresh} deadline={triageDeadline} program={submission.programId} />
       )}
 
-      {/* Owner waive embargo */}
-      {isOwner && (submission.status === 1 || submission.status === 6) && !submission.reportURI && (
-        <Card className="mt-4 p-5">
-          <SectionTitle>Disclosure</SectionTitle>
-          <p className="mt-2 text-xs text-mist">
-            Embargo lifts {disclosureAt ? untilLabel(disclosureAt).label : "—"}. Fixed already? Waive
-            it so the hunter can publish now.
-          </p>
-          <Button
-            className="mt-3"
-            variant="ghost"
-            disabled={tx.busy || !bounty}
-            onClick={() => tx.run({ address: bounty!, abi: bountyAbi, functionName: "waiveEmbargo", args: [sid] })}
-          >
-            waive embargo
-          </Button>
-        </Card>
-      )}
-
-      {/* Hunter reveal */}
-      {isHunter && !submission.reportURI && submission.status !== 0 && (
-        <RevealPanel sid={sid} refresh={refresh} disclosureAt={disclosureAt} />
-      )}
-
-      {/* Hunter escalate */}
-      {isHunter && [0, 2, 3, 4].includes(submission.status) && (
-        <Card className="mt-4 p-5">
-          <SectionTitle>Escalate to arbiter</SectionTitle>
-          <p className="mt-2 text-xs text-mist">
-            {submission.status === 0
-              ? `If triage lapses (${untilLabel(triageDeadline).label}) you can force review.`
-              : "Dispute this verdict within 7 days of triage. Losing in good faith never costs your bond."}
-          </p>
-          <Button
-            className="mt-3"
-            variant="ghost"
-            disabled={tx.busy || !bounty}
-            onClick={() => tx.run({ address: bounty!, abi: bountyAbi, functionName: "escalate", args: [sid] })}
-          >
-            escalate
-          </Button>
-        </Card>
-      )}
-
-      {/* Anyone: finalize spam slash after window */}
-      {submission.status === 4 && (
-        <Card className="mt-4 p-5">
-          <SectionTitle>Finalize spam slash</SectionTitle>
-          <p className="mt-2 text-xs text-mist">After the 7-day dispute window, the flagged bond is slashed to the protocol. Permissionless.</p>
-          <Button
-            className="mt-3"
-            variant="ghost"
-            disabled={tx.busy || !bounty}
-            onClick={() => tx.run({ address: bounty!, abi: bountyAbi, functionName: "finalizeSpamSlash", args: [sid] })}
-          >
-            finalize
-          </Button>
-        </Card>
-      )}
-
-      {/* Arbiter resolve */}
-      {isArbiter && submission.status === 5 && <ArbiterPanel sid={sid} refresh={refresh} />}
-
-      {(tx.error) && <p className="mt-4 text-xs text-red-400">{tx.error}</p>}
-      {tx.hash && (
-        <a className="mt-3 block text-xs text-bug underline" href={explorer.tx(tx.hash)}>
-          view transaction ↗
-        </a>
-      )}
-    </Shell>
-  );
-}
-
-function TriagePanel({ sid, refresh, deadline, program }: { sid: bigint; refresh: () => void; deadline: number; program: bigint }) {
-  const { address: bounty } = useBounty();
-  const tx = useTx(refresh);
-  const [verdict, setVerdict] = useState("1"); // Accepted
-  const [severity, setSeverity] = useState("3"); // High
-  const [dupeOf, setDupeOf] = useState("");
-  const d = untilLabel(deadline);
-
-  return (
-    <Card className="mt-4 border-warn/40 p-5">
-      <div className="flex items-center justify-between">
-        <SectionTitle>Triage</SectionTitle>
-        <span className={`text-xs ${d.lapsed ? "text-red-400" : "text-mist"}`}>{d.label}</span>
-      </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <Field label="Verdict">
-          <Select value={verdict} onChange={(e) => setVerdict(e.target.value)}>
-            <option value="1">Accept &amp; pay</option>
-            <option value="2">Reject (bond returned)</option>
-            <option value="3">Duplicate</option>
-            <option value="4">Spam (bond at risk)</option>
-          </Select>
-        </Field>
-        {verdict === "1" && (
-          <Field label="Severity">
-            <Select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="1">Low</option>
-              <option value="2">Medium</option>
-              <option value="3">High</option>
-              <option value="4">Critical</option>
-            </Select>
-          </Field>
-        )}
-        {verdict === "3" && (
-          <Field label="Duplicate of (submission #)" hint="Must be an earlier accepted report on this program.">
-            <Input value={dupeOf} onChange={(e) => setDupeOf(e.target.value)} placeholder="e.g. 4" />
-          </Field>
-        )}
-      </div>
-      <Button
-        className="mt-4"
-        variant="primary"
-        disabled={tx.busy || !bounty || (verdict === "3" && !dupeOf)}
-        onClick={() =>
-          tx.run({
-            address: bounty!,
-            abi: bountyAbi,
-            functionName: "triage",
-            args: [sid, Number(verdict), verdict === "1" ? Number(severity) : 0, verdict === "3" ? BigInt(dupeOf || 0) : 0n],
-          })
-        }
-      >
-        {tx.busy ? "submitting…" : "record verdict"}
-      </Button>
-      <p className="mt-3 text-[11px] text-mist">
-        Accepting moves the award out of escrow into the hunter&apos;s claim in this same transaction — program #{String(program)}.
-      </p>
-    </Card>
-  );
-}
-
-function RevealPanel({ sid, refresh, disclosureAt }: { sid: bigint; refresh: () => void; disclosureAt: number }) {
-  const { address } = useAccount();
-  const { address: bounty } = useBounty();
-  const tx = useTx(refresh);
-  const stored = findBySubmissionId(String(sid), address ?? undefined);
-  const [reportURI, setReportURI] = useState(stored?.reportURI ?? "");
-  const [salt, setSalt] = useState(stored?.salt ?? "");
-  const [receipt, setReceipt] = useState("");
-  const d = disclosureAt ? untilLabel(disclosureAt) : { label: "—", lapsed: true };
-
-  return (
-    <Card className="mt-4 p-5">
-      <div className="flex items-center justify-between">
-        <SectionTitle>Reveal your report</SectionTitle>
-        <span className={`text-xs ${d.lapsed ? "text-bug" : "text-warn"}`}>
-          {d.lapsed ? "embargo lifted" : `embargo: ${d.label}`}
-        </span>
-      </div>
-      {stored ? (
-        <p className="mt-2 text-xs text-bug">✓ found your saved receipt for this submission</p>
-      ) : (
-        <div className="mt-3">
-          <Field label="Import receipt JSON" hint="Paste the receipt you downloaded at submit time to auto-fill.">
-            <Textarea
-              rows={3}
-              value={receipt}
-              onChange={(e) => {
-                setReceipt(e.target.value);
-                const imported = importReceipt(e.target.value);
-                if (imported) {
-                  setReportURI(imported.reportURI);
-                  setSalt(imported.salt);
-                }
-              }}
-              placeholder='{"salt":"0x…","reportURI":"…"}'
-            />
-          </Field>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-semibold tracking-tight">{submission.title}</h1>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-mist">
+            <span className={`rounded border px-2 py-0.5 text-[11px] ${st.tone}`}>{st.label}</span>
+            {chainLabel && (
+              <span className="rounded border border-line px-2 py-0.5 text-[11px] text-mist">
+                chain: {chainLabel}
+              </span>
+            )}
+            
+            <span className="flex items-center gap-1.5">
+              <span className={`size-2 rounded-full ${claimed.dot}`} />
+              claimed {claimed.label}
+            </span>
+            {final && submission.status !== "pending" && (
+              <>
+                
+                <span className="flex items-center gap-1.5">
+                  <span className={`size-2 rounded-full ${final.dot}`} />
+                  final {final.label}
+                </span>
+              </>
+            )}
+            
+            <span>{timeAgo(submission.created_at)}</span>
+          </div>
         </div>
-      )}
-      <div className="mt-4 grid gap-3">
-        <Field label="Report URI">
-          <Input value={reportURI} onChange={(e) => setReportURI(e.target.value)} />
-        </Field>
-        <Field label="Salt">
-          <Input value={salt} onChange={(e) => setSalt(e.target.value)} placeholder="0x…" />
-        </Field>
-      </div>
-      <Button
-        className="mt-4"
-        variant="primary"
-        disabled={tx.busy || !bounty || !reportURI.trim() || !salt}
-        onClick={() =>
-          tx.run({
-            address: bounty!,
-            abi: bountyAbi,
-            functionName: "reveal",
-            args: [sid, reportURI.trim(), salt as `0x${string}`],
-          })
-        }
-      >
-        {tx.busy ? "revealing…" : "reveal"}
-      </Button>
-    </Card>
-  );
-}
-
-function ArbiterPanel({ sid, refresh }: { sid: bigint; refresh: () => void }) {
-  const { address: bounty } = useBounty();
-  const tx = useTx(refresh);
-  const [valid, setValid] = useState("true");
-  const [severity, setSeverity] = useState("3");
-  const [slash, setSlash] = useState(false);
-  return (
-    <Card className="mt-4 border-warn/40 p-5">
-      <SectionTitle>Arbiter ruling</SectionTitle>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <Field label="Finding is valid?">
-          <Select value={valid} onChange={(e) => setValid(e.target.value)}>
-            <option value="true">Valid — pay</option>
-            <option value="false">Invalid</option>
-          </Select>
-        </Field>
-        {valid === "true" && (
-          <Field label="Severity">
-            <Select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="1">Low</option>
-              <option value="2">Medium</option>
-              <option value="3">High</option>
-              <option value="4">Critical</option>
-            </Select>
-          </Field>
+        {(submission.status === "accepted" || submission.status === "disclosed") && submission.reward > 0 && (
+          <div className="rounded-lg border border-bug-dim/40 bg-bug-dim/[0.06] px-4 py-2 text-right">
+            <div className="text-[11px] uppercase tracking-wide text-mist">Awarded</div>
+            <div className="text-xl font-semibold text-bug">
+              {money(submission.reward, program?.currency ?? "USDC")}
+            </div>
+          </div>
         )}
-        <Field label="Slash hunter bond?" hint="Only for bad faith.">
-          <Select value={slash ? "1" : "0"} onChange={(e) => setSlash(e.target.value === "1")}>
-            <option value="0">No</option>
-            <option value="1">Yes — bad faith</option>
-          </Select>
-        </Field>
       </div>
-      <Button
-        className="mt-4"
-        variant="primary"
-        disabled={tx.busy || !bounty}
-        onClick={() =>
-          tx.run({
-            address: bounty!,
-            abi: bountyAbi,
-            functionName: "resolveEscalation",
-            args: [sid, valid === "true", valid === "true" ? Number(severity) : 0, slash],
-          })
-        }
-      >
-        {tx.busy ? "resolving…" : "resolve escalation"}
-      </Button>
-    </Card>
-  );
-}
 
-function Shell({ id, children }: { id: string; children: React.ReactNode }) {
-  return (
-    <section className="mx-auto max-w-5xl px-6 py-12">
-      <Link href="/dashboard" className="text-xs text-mist hover:text-chalk">
-        ← dashboard
-      </Link>
-      <h1 className="mt-3 text-2xl font-semibold tracking-tight">Submission #{id}</h1>
-      <div className="mt-6">{children}</div>
-    </section>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+        <div className="space-y-6">
+          {submission.target && (
+            <div className="text-sm">
+              <span className="text-mist">Target: </span>
+              <span className="font-mono text-mist-bright">{submission.target}</span>
+            </div>
+          )}
+
+          {submission.report_uri && (
+            <div className="text-sm">
+              <span className="text-mist">Committed report: </span>
+              <span className="font-mono text-xs break-all text-mist-bright">{submission.report_uri}</span>
+            </div>
+          )}
+
+          {/* The owner decrypts in the browser; the hunter already knows their own
+              report, so they just see it back. */}
+          <ReportPanel report={submission.report} encrypted={submission.encrypted} />
+
+          {submission.triage_note && (
+            <section>
+              <h2 className="text-sm font-medium text-chalk">Note from the owner</h2>
+              <div className="mt-3 whitespace-pre-wrap rounded-xl border border-line bg-panel p-4 text-sm leading-relaxed text-mist-bright">
+                {submission.triage_note}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <div className="space-y-5">
+          {isOwner && program ? (
+            <>
+              {submission.status !== "disclosed" && (
+                <TriagePanel
+                  submission={{
+                    id: submission.id,
+                    title: submission.title,
+                    severity: submission.severity,
+                    assigned_severity: submission.assigned_severity,
+                    status: submission.status,
+                    reward: submission.reward,
+                    triage_note: submission.triage_note,
+                    encrypted: submission.encrypted,
+                  }}
+                  program={program}
+                  facts={facts}
+                  dupeOptions={dupeOptions}
+                  rewardToken={program.reward_token}
+                  onchainProgramId={program.onchain_program_id}
+                />
+              )}
+
+              {isEscrowed && onchainId !== null && facts && facts.triagedAt > 0 && (
+                <WaiveEmbargoPanel onchainSubmissionId={onchainId} waived={facts.embargoWaived} />
+              )}
+              {isEscrowed && onchainId !== null && facts && facts.statusIndex === 4 && (
+                <SpamFinalizePanel onchainSubmissionId={onchainId} triagedAt={facts.triagedAt} />
+              )}
+
+              {(submission.status === "accepted" || submission.status === "disclosed") && (
+                <DisclosePanel
+                  id={submission.id}
+                  disclosed={submission.status === "disclosed"}
+                  slug={program.slug}
+                  handle={submission.hunter_profile?.handle ?? ""}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {hunterPanel && program ? (
+                <RevealPanel
+                  rowId={hunterPanel.rowId}
+                  chainId={hunterPanel.chainId}
+                  onchainSubmissionId={hunterPanel.onchainSubmissionId}
+                  commitHash={submission.commit_hash}
+                  status={submission.status}
+                  revealedAt={submission.revealed_at}
+                  rewardToken={program.reward_token}
+                />
+              ) : (
+                <div className="rounded-xl border border-line bg-ink-soft p-5">
+                  <h2 className="text-sm font-medium text-chalk">Status</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-mist">
+                    {submission.status === "pending"
+                      ? "Waiting on the program owner to triage. You'll see the decision and any payout here."
+                      : submission.status === "accepted"
+                        ? "Accepted. Nice work. The reward is recorded above."
+                        : submission.status === "escalated"
+                          ? "Escalated to the arbiter. Their ruling decides the outcome."
+                          : submission.status === "disclosed"
+                            ? "Accepted and publicly disclosed. It's part of your public track record now."
+                            : `Marked ${st.label.toLowerCase()} by the owner.`}
+                  </p>
+                  {submission.status === "disclosed" && submission.hunter_profile?.handle && (
+                    <Link
+                      href={`/u/${submission.hunter_profile.handle}`}
+                      className="mt-3 inline-block text-xs text-bug transition-colors hover:text-bug-dim"
+                    >
+                      View it on your profile
+                    </Link>
+                  )}
+                  {submission.triaged_at && (
+                    <p className="mt-3 text-xs text-mist">Triaged {fmtDate(submission.triaged_at)}</p>
+                  )}
+                </div>
+              )}
+
+              {/* A hunter's own off-chain finding still gets its authorship proof
+                  and its commit hash. The receipt is what makes it defensible. */}
+              {!isEscrowed && submission.commit_hash && (
+                <div className="rounded-xl border border-line bg-ink-soft p-5">
+                  <h2 className="text-sm font-medium text-chalk">Your commit</h2>
+                  <p className="mt-2 text-[11px] leading-relaxed text-mist">
+                    This program holds no escrow, so the reward is the owner&apos;s to honour. But the commit below,
+                    combined with the receipt in your browser, still dates and binds this finding to you.
+                  </p>
+                  <p className="mt-2 font-mono text-[11px] break-all text-mist-bright">{submission.commit_hash}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="rounded-xl border border-line bg-ink-soft p-5">
+            <h2 className="text-sm font-medium text-chalk">Reported by</h2>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-full border border-bug-dim/60 bg-bug-dim/15 text-xs font-semibold text-bug">
+                {initials(displayName(submission.hunter_profile))}
+              </span>
+              <div className="min-w-0">
+                {submission.hunter_profile?.handle ? (
+                  <Link href={`/u/${submission.hunter_profile.handle}`} className="block min-w-0">
+                    <div className="truncate text-sm text-chalk transition-colors hover:text-bug">
+                      {displayName(submission.hunter_profile)}
+                    </div>
+                    <div className="truncate text-xs text-mist">@{submission.hunter_profile.handle}</div>
+                  </Link>
+                ) : (
+                  <div className="truncate text-sm text-chalk">{displayName(submission.hunter_profile)}</div>
+                )}
+              </div>
+            </div>
+            {submission.revealed_at && (
+              <p className="mt-3 text-[11px] text-mist">
+                Report revealed {fmtDate(submission.revealed_at)}. The committed document is now public.
+              </p>
+            )}
+            {submission.dispute_deadline && isOwner && (
+              <p className="mt-1 text-[11px] text-mist">
+                Dispute window closes {fmtDate(submission.dispute_deadline)}.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

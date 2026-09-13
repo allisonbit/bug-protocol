@@ -1,7 +1,7 @@
 import { formatEther, formatUnits } from "viem";
 import { ProgramStatus, SubStatus, Severity } from "./abi.js";
 
-export const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
+export const short = (a?: string) => (a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "");
 
 export function fmtAmount(v: bigint, decimals = 18, symbol = ""): string {
   const s = decimals === 18 ? formatEther(v) : formatUnits(v, decimals);
@@ -27,7 +27,7 @@ export function humanDuration(seconds: number | bigint): string {
 
 export const fmtDate = (unixSeconds: number | bigint) => {
   const n = Number(unixSeconds);
-  if (!n) return "—";
+  if (!n) return "n/a";
   return new Date(n * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 };
 

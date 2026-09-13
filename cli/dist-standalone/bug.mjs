@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * bug.mjs — single-file $BUG protocol helper for instant download.
+ * bug.mjs: single-file $BUG protocol helper for instant download.
  * -----------------------------------------------------------------------------
  * No build step, no install of this package. It has ONE dependency, viem:
  *
@@ -145,11 +145,11 @@ function client(flags) {
 }
 function bounty(flags) {
   const a = flags.bounty ?? process.env.BUG_BOUNTY_ADDRESS;
-  if (!a || !/^0x[0-9a-fA-F]{40}$/.test(a)) throw new Error("pass --bounty 0x… or set BUG_BOUNTY_ADDRESS");
+  if (!a || !/^0x[0-9a-fA-F]{40}$/.test(a)) throw new Error("pass --bounty 0x... or set BUG_BOUNTY_ADDRESS");
   return a;
 }
 
-const HELP = `bug.mjs — $BUG protocol single-file helper (read + crypto)
+const HELP = `bug.mjs: $BUG protocol single-file helper (read + crypto)
 
   node bug.mjs programs            --chain base --bounty 0x..
   node bug.mjs program <id>        --chain base --bounty 0x..
@@ -177,7 +177,7 @@ async function main() {
         pc.readContract({ address: addr, abi, functionName: "topTier", args: [i] }),
       ]);
       const a = assetInfo(meta, p.rewardToken);
-      console.log(`#${i}  ${STATUS[p.status]}  owner ${p.owner.slice(0, 8)}…  escrow ${fmt(p.pool, a.decimals, a.symbol)}  top ${fmt(top, a.decimals, a.symbol)}`);
+      console.log(`#${i}  ${STATUS[p.status]}  owner ${p.owner.slice(0, 8)}..  escrow ${fmt(p.pool, a.decimals, a.symbol)}  top ${fmt(top, a.decimals, a.symbol)}`);
     }
     return;
   }
@@ -196,11 +196,11 @@ async function main() {
       pc.readContract({ address: addr, abi, functionName: "payoutOf", args: [id, 4] }),
     ]);
     console.log(`Program #${id} on ${meta.chain.name}`);
-    console.log(`  status ${STATUS[p.status]} · owner ${p.owner}`);
-    console.log(`  reward ${a.symbol} · escrow ${fmt(p.pool, a.decimals, a.symbol)} · locked ${fmt(p.locked, a.decimals, a.symbol)}`);
-    console.log(`  client bond ${fmt(p.bond, 18, "$BUG")} · open reports ${pending}`);
+    console.log(`  status ${STATUS[p.status]}  owner ${p.owner}`);
+    console.log(`  reward ${a.symbol}  escrow ${fmt(p.pool, a.decimals, a.symbol)}  locked ${fmt(p.locked, a.decimals, a.symbol)}`);
+    console.log(`  client bond ${fmt(p.bond, 18, "$BUG")}  open reports ${pending}`);
     console.log(`  tiers Low ${fmt(tiers[0], a.decimals)} / Med ${fmt(tiers[1], a.decimals)} / High ${fmt(tiers[2], a.decimals)} / Critical ${fmt(tiers[3], a.decimals)} ${a.symbol}`);
-    console.log(`  scope ${p.scopeURI || "—"}  (hash ${p.scopeHash})`);
+    console.log(`  scope ${p.scopeURI || "n/a"}  (hash ${p.scopeHash})`);
     return;
   }
 
@@ -212,11 +212,11 @@ async function main() {
     const p = await pc.readContract({ address: addr, abi, functionName: "getProgram", args: [s.programId] });
     const a = assetInfo(meta, p.rewardToken);
     console.log(`Submission #${id} on ${meta.chain.name}`);
-    console.log(`  program #${s.programId} · ${SUBSTATUS[s.status]} · ${SEV[s.severity]}`);
+    console.log(`  program #${s.programId}  ${SUBSTATUS[s.status]}  ${SEV[s.severity]}`);
     console.log(`  hunter ${s.hunter}`);
     console.log(`  commit ${s.commitHash}`);
     console.log(`  report ${s.reportURI || "(not revealed)"}`);
-    console.log(`  award ${s.award > 0n ? fmt(s.award, a.decimals, a.symbol) : "—"} · bond ${fmt(s.bond, 18, "$BUG")}`);
+    console.log(`  award ${s.award > 0n ? fmt(s.award, a.decimals, a.symbol) : "n/a"}  bond ${fmt(s.bond, 18, "$BUG")}`);
     return;
   }
 
@@ -258,4 +258,4 @@ async function main() {
   process.exitCode = 1;
 }
 
-main().catch((e) => { console.error("✗ " + (e?.shortMessage ?? e?.message ?? String(e))); process.exitCode = 1; });
+main().catch((e) => { console.error("error: " + (e?.shortMessage ?? e?.message ?? String(e))); process.exitCode = 1; });

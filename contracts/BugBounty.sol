@@ -454,7 +454,7 @@ contract BugBounty is Ownable2Step, ReentrancyGuard {
 
     /**
      * @notice Triages a pending submission. Accepting credits the award out of
-     * escrow in this same call — there is no separate payment step for a client
+     * escrow in this same call. There is no separate payment step for a client
      * to default on.
      * @param verdict One of Accepted, Rejected, Duplicate, Spam.
      * @param severity Required for Accepted; must map to a non-zero tier.
@@ -570,8 +570,8 @@ contract BugBounty is Ownable2Step, ReentrancyGuard {
      * @param severity Tier to pay when `valid`.
      * @param slashHunterBond Set only for bad-faith submissions. Losing an
      * appeal in good faith must not cost the hunter their bond.
-     * @dev When escrow cannot cover a valid award — because the verdict was
-     * disputed after the program's reserve was released — the client's $BUG
+ * @dev When escrow cannot cover a valid award. Because the verdict was
+ * disputed after the program's reserve was released. The client's $BUG
      * good-faith bond is forfeited to the hunter, pro rata to the unpaid share
      * of the award. That is a penalty, not a make-whole: the bond and the reward
      * are different assets and this contract prices neither.
@@ -607,9 +607,8 @@ contract BugBounty is Ownable2Step, ReentrancyGuard {
             } else {
                 // The bond is $BUG and the award is the program's reward token.
                 // There is no sound exchange rate between them and this contract
-                // deliberately has no oracle, so the bond is forfeited in
-                // proportion to how much of the award went unpaid — a
-                // dimensionless ratio — rather than pretending one wei of reward
+                // deliberately has no oracle, so the bond is forfeited in  // proportion to how much of the award went unpaid (a
+  // dimensionless ratio) rather than pretending one wei of reward
                 // equals one wei of $BUG. A total default forfeits the lot.
                 uint256 paid = p.pool;
                 if (paid != 0) _credit(p, s.hunter, paid);
@@ -641,7 +640,7 @@ contract BugBounty is Ownable2Step, ReentrancyGuard {
     /**
      * @notice Publishes the report, proving it is the one committed to at
      * submission time. Only the hunter may reveal, and only once the program's
-     * `disclosureDelay` has run from triage — the embargo exists so a fix can
+     * `disclosureDelay` has run from triage. The embargo exists so a fix can
      * ship before the finding becomes public.
      * @dev The program owner can waive the embargo with `waiveEmbargo`.
      */
@@ -796,7 +795,7 @@ contract BugBounty is Ownable2Step, ReentrancyGuard {
         return _topTier(programId);
     }
 
-    /// @notice Escrow not reserved for open submissions — what the owner could
+    /// @notice Escrow not reserved for open submissions: what the owner could
     /// withdraw right now.
     function freePool(uint256 programId) external view returns (uint256) {
         Program storage p = _programs[programId];

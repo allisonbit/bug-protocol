@@ -6,7 +6,7 @@ const S = require("./shared");
 const { ETH, Sev, Status, PStatus, DAY, TRIAGE, DISPUTE, SUB_BOND } = H;
 const { live, commit, SALT, REPORT, CRIT } = S;
 
-describe("BugBounty — triage: reject, duplicate, spam", function () {
+describe("BugBounty: triage reject, duplicate, spam", function () {
   it("an honest rejection costs the hunter nothing", async function () {
     const { bounty, client, hunter } = await loadFixture(H.fixture);
     const id = await live(bounty, client);
@@ -64,7 +64,7 @@ describe("BugBounty — triage: reject, duplicate, spam", function () {
       .to.emit(bounty, "SubmissionFlaggedSpam")
       .withArgs(subId, SUB_BOND);
 
-    // Not credited yet — the hunter still has time to dispute.
+    // Not credited yet; the hunter still has time to dispute.
     expect(await bounty.bondCredit(fees.address)).to.equal(0n);
     await expect(bounty.finalizeSpamSlash(subId)).to.be.revertedWithCustomError(bounty, "TriageWindowOpen");
 

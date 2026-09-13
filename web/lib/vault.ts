@@ -59,6 +59,30 @@ export function findBySubmissionId(submissionId: string, hunter?: Address): Vaul
   );
 }
 
+/**
+ * Find the secret for a row by the commit it produced.
+ *
+ * This is the join that actually matters: a submission is indexed by its row id
+ * on this site and by its commit hash on chain, and the vault is written before
+ * either exists (the receipt has to be saved before anything is signed, or a
+ * failed transaction would strand the salt). Matching on the commit hash is what
+ * lets a hunter open a finding they committed in a different browser, from the
+ * CLI, or from the tools page.
+ */
+export function findByCommitHash(commitHash: string, hunter?: Address): VaultEntry | undefined {
+  const want = commitHash.toLowerCase();
+  return readAll().find(
+    (e) =>
+      e.commitHash.toLowerCase() === want &&
+      (!hunter || e.hunter.toLowerCase() === hunter.toLowerCase()),
+  );
+}
+
+/** Every secret this browser holds for a given hunter address. */
+export function allForHunter(hunter?: Address): VaultEntry[] {
+  return entriesForHunter(hunter);
+}
+
 export function importReceipt(json: string): VaultEntry | null {
   try {
     const r = JSON.parse(json);

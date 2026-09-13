@@ -1,4 +1,4 @@
-# $BUG — bug bounty protocol
+# $BUG: bug bounty protocol
 
 Clients fund a program. Hunters commit to findings on chain and deliver the
 plaintext off-chain. Accepted findings pay out of escrow the client cannot
@@ -14,7 +14,7 @@ A public report is a live exploit handed to everyone. Hunters submit
 encrypted to the program owner. Reveal happens only after remediation.
 
 The hunter's address is bound into the commitment. That is what stops a mempool
-watcher from copying the hash and claiming priority — they cannot produce a
+watcher from copying the hash and claiming priority, since they cannot produce a
 preimage that opens to their own address without knowing the report. There's a
 test for exactly this (`07-disclosure`).
 
@@ -51,13 +51,13 @@ more.
 An honest `Rejected` costs the hunter **nothing**. Charging for good-faith
 misses is how a bounty platform loses its hunters.
 
-A `Spam` verdict does not credit the slash immediately — the bond is held for
+A `Spam` verdict does not credit the slash immediately. The bond is held for
 `DISPUTE_WINDOW` (7 days) so a wrong call is reversible. `finalizeSpamSlash` is
 permissionless once that passes.
 
 The client bond is `$BUG` and awards are in the program's reward token. There is
 no exchange rate between them and **no oracle anywhere in this system**, so a
-default forfeits the bond *pro rata to the unpaid share of the award* — a
+default forfeits the bond *pro rata to the unpaid share of the award*, a
 dimensionless ratio. It is a penalty, not a make-whole.
 
 ## Duplicate handling
@@ -91,7 +91,7 @@ the arbiter rules. Escrow stays reserved throughout.
 Phase 1 complete: core contract, 37 passing tests, 16,485 bytes deployed
 (8 KB under the EIP-170 limit).
 
-Not yet built: `BugArbiter` (staked dispute resolution — `setArbiter` is
+Not yet built: `BugArbiter` (staked dispute resolution; `setArbiter` is
 deliberately one-shot and stays unset until it exists), the encrypted report
 pipeline, and the web app.
 
@@ -107,7 +107,7 @@ BUG_TOKEN=0x... BUG_FEE_RECIPIENT=0x... BUG_CONFIRM_DEPLOY=yes \
 ```
 
 Deploying anywhere but local requires `BUG_CONFIRM_DEPLOY=yes`. The arbiter slot
-is one-shot — a live protocol must not have its dispute venue swapped out from
+is one-shot, because a live protocol must not have its dispute venue swapped from
 under open escalations.
 
 ## Note on tooling

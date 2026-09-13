@@ -2,7 +2,7 @@ import { defineChain, type Address, type Chain } from "viem";
 import { base, baseSepolia, arbitrum, optimism } from "viem/chains";
 
 /**
- * Chain registry — mirrors web/lib/chains.ts. USDC addresses are the canonical
+ * Chain registry: mirrors web/lib/chains.ts. USDC addresses are the canonical
  * Circle deployments so USDC-denominated bounties work with no extra config.
  * The active chain is chosen by the CHAIN env var (id or short slug); default
  * is Robinhood Chain (4663), the home chain $BUG launches on.

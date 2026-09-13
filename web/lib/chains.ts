@@ -2,7 +2,7 @@ import { defineChain, type Address, type Chain } from "viem";
 import { base, baseSepolia, arbitrum, optimism } from "viem/chains";
 
 /**
- * Robinhood Chain — the Arbitrum Orbit L2 $BUG launches on.
+ * Robinhood Chain, the Arbitrum Orbit L2 that $BUG launches on.
  * chainId 4663, ~101 ms blocks, native asset ETH.
  */
 export const robinhoodChain = defineChain({
@@ -22,7 +22,7 @@ const addr = (v: string | undefined): Address | null =>
  * Per-chain metadata. `bounty`/`bugToken` come from env so the same build serves
  * every deployment; `usdc` is the canonical Circle address so USDC-denominated
  * escrow works the moment the contract is deployed on that chain. The protocol
- * needs neither $BUG nor a Robinhood deployment to function — any chain here can
+ * needs neither $BUG nor a Robinhood deployment to function; any chain here can
  * run pure-ETH or USDC bounties (req: "even without our contract it can work").
  */
 export type ChainMeta = {
@@ -92,14 +92,18 @@ export const CHAINS: Record<number, ChainMeta> = {
   },
 };
 
-/** Order shown in the switcher; Robinhood first (home chain), testnet last. */
-export const SUPPORTED_CHAINS = [
-  robinhoodChain,
-  base,
-  arbitrum,
-  optimism,
-  baseSepolia,
-] as const;
+/**
+ * Order shown in the switcher; Robinhood first (home chain), testnet last.
+ *
+ * There is deliberately no separate "local" chain. This repo's Hardhat node runs
+ * at chainId 4663, the same as Robinhood Chain (see hardhat.config.js), so local
+ * testing is a pointer change and not a code change: set
+ * `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8545`, `NEXT_PUBLIC_BOUNTY_4663` and
+ * `NEXT_PUBLIC_BUG_TOKEN_4663` to a local deployment and the whole hunter loop
+ * runs here with no application edits. `scripts/e2e-local.js` exercises the same
+ * loop from the command line.
+ */
+export const SUPPORTED_CHAINS = [robinhoodChain, base, arbitrum, optimism, baseSepolia] as const;
 
 export const DEFAULT_CHAIN_ID = robinhoodChain.id;
 

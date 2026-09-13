@@ -4,7 +4,7 @@ import { encodeAbiParameters, keccak256, parseAbiParameters, type Address } from
  * The exact preimage the contract's `reveal` verifies:
  *   keccak256(abi.encode(reportURI, salt, hunter))
  * Computed locally so a hunter can generate a commit without a chain round-trip
- * and — critically — keep the salt off any server. Losing the salt means the
+ * and, critically, keep the salt off any server. Losing the salt means the
  * report can never be revealed, so the UI forces a receipt download.
  */
 export function commitmentFor(reportURI: string, salt: `0x${string}`, hunter: Address): `0x${string}` {

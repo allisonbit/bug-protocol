@@ -1,7 +1,7 @@
 {
   "name": "@bug-protocol/cli",
   "version": "0.1.0",
-  "description": "bug-cli — command-line tool for the $BUG bug-bounty protocol. Drive the full hunt/triage loop from a terminal on any EVM chain (ETH or USDC, no $BUG token required).",
+  "description": "bug-cli: command-line tool for the $BUG bug-bounty protocol. Drive the full hunt/triage loop from a terminal on any EVM chain (ETH or USDC, no $BUG token required).",
   "type": "module",
   "bin": {
     "bug": "dist/index.js"

@@ -7,7 +7,7 @@ import type { Address } from "viem";
  * re-exports everything, so existing `@/lib/toolRegistry` imports keep working.
  */
 
-// Enum label arrays — index-aligned with ToolRegistry.sol.
+// Enum label arrays, index-aligned with ToolRegistry.sol.
 export const Platform = [
   "Unspecified",
   "Android",

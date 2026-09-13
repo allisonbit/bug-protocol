@@ -14,8 +14,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.4.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.0",
     "@tanstack/react-query": "^5.102.8",
+    "ai": "^7.0.98",
+    "geist": "^1.7.2",
     "next": "^16.3.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

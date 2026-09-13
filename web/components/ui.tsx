@@ -120,7 +120,7 @@ export function Copyable({ value, display }: { value: string; display?: string }
       title="copy"
     >
       <span className="break-all">{display ?? value}</span>
-      <span className="text-bug-dim">{copied ? "✓" : "⧉"}</span>
+      <span className="text-bug-dim">{copied ? "copied" : "copy"}</span>
     </button>
   );
 }

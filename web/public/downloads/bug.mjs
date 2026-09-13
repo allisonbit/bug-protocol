@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// $BUG offline toolkit — zero dependencies, Node 20+.
+// $BUG offline toolkit: zero dependencies, Node 20+.
 //
-//   bug checksum <file>              sha256 of a file, as 0x… (the exact value
+//   bug checksum <file>              sha256 of a file, as 0x... (the exact value
 //                                    a tool publisher commits on chain)
 //   bug verify   <file> <0xhash>     recompute + compare (verify a download)
 //   bug salt                         random 32-byte hex (commit salt)
-//   bug encrypt  <file> [--pass p]   AES-GCM/PBKDF2 envelope (→ file.enc.json)
+//   bug encrypt  <file> [--pass p]   AES-GCM/PBKDF2 envelope (writes file.enc.json)
 //   bug decrypt  <file.enc.json>     decrypt an envelope (--pass p / BUG_PASS)
 //   bug mcp-config [--bounty x] [--chain c] [--rpc r]
 //
 // The encrypt/decrypt envelope and the checksum are byte-for-byte identical to
 // the in-browser tools at /tools, so files move freely between them. Chain
-// actions (submit, publish, triage, claim) live in the full CLI — `npm i -g
-// @bug-protocol/cli` — and the MCP server, which need a signer.
+// actions (submit, publish, triage, claim) live in the full CLI (`npm i -g
+// @bug-protocol/cli`) and the MCP server, which need a signer.
 
 import { createHash, pbkdf2Sync, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -101,7 +101,7 @@ switch (cmd) {
     const out = opt("out") || `${file}.enc.json`;
     const env = encrypt(readFileSync(file, "utf8"), needPass());
     writeFileSync(out, JSON.stringify(env, null, 2));
-    console.log(`encrypted → ${out}`);
+    console.log(`encrypted to ${out}`);
     break;
   }
   case "decrypt": {
@@ -111,12 +111,12 @@ switch (cmd) {
     try {
       plain = decrypt(env, needPass());
     } catch {
-      die("decryption failed — wrong passphrase or corrupt envelope");
+      die("decryption failed: wrong passphrase or corrupt envelope");
     }
     const out = opt("out");
     if (out) {
       writeFileSync(out, plain);
-      console.log(`decrypted → ${out}`);
+      console.log(`decrypted to ${out}`);
     } else {
       process.stdout.write(plain + "\n");
     }
@@ -143,12 +143,12 @@ switch (cmd) {
   default:
     console.log(
       [
-        "$BUG offline toolkit — zero dependencies, Node 20+.",
+        "$BUG offline toolkit: zero dependencies, Node 20+.",
         "",
-        "  bug checksum <file>            sha256 as 0x… (publish/verify a tool)",
+        "  bug checksum <file>            sha256 as 0x... (publish/verify a tool)",
         "  bug verify   <file> <0xhash>   recompute + compare a download",
         "  bug salt                       random 32-byte commit salt",
-        "  bug encrypt  <file> [--pass p] AES-GCM report envelope → file.enc.json",
+        "  bug encrypt  <file> [--pass p] AES-GCM report envelope, writes file.enc.json",
         "  bug decrypt  <file.enc.json>   decrypt (--pass p or BUG_PASS)",
         "  bug mcp-config [--bounty x] [--chain c] [--rpc r]",
         "",

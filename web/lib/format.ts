@@ -1,7 +1,7 @@
 import { formatEther, formatUnits, type Address } from "viem";
 import { Severity, SubStatus, ProgramStatus } from "./contract";
 
-export const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
+export const short = (a?: string) => (a ? `${a.slice(0, 6)}...${a.slice(-4)}` : "");
 
 export const fmtAmount = (v: bigint, decimals = 18, symbol = "") => {
   const s = decimals === 18 ? formatEther(v) : formatUnits(v, decimals);
@@ -70,6 +70,6 @@ export function untilLabel(unixSeconds: number | bigint): { label: string; lapse
 
 export const fmtDate = (unixSeconds: number | bigint) => {
   const n = Number(unixSeconds);
-  if (!n) return "—";
+  if (!n) return "n/a";
   return new Date(n * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 };

@@ -7,6 +7,7 @@ import { useMyBalances, useBounty, useExplorer } from "@/lib/reads";
 import { useTx } from "@/lib/useTx";
 import { fmtAmount, short } from "@/lib/format";
 import { Button, Copyable } from "@/components/ui";
+import { TipButton } from "./tip-button";
 
 export function WalletDrawer({ onClose }: { onClose: () => void }) {
   const { address } = useAccount();
@@ -30,9 +31,11 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
       <div className="absolute inset-0 bg-ink/70 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute top-0 right-0 flex h-dvh w-full max-w-sm flex-col border-l border-line bg-ink-soft p-6 shadow-2xl">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-chalk">Wallet · {meta.short}</h2>
+          <h2 className="text-sm font-medium text-chalk">Wallet ({meta.short})</h2>
           <button onClick={onClose} className="text-mist hover:text-chalk" aria-label="close">
-            ✕
+            <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
 
@@ -47,7 +50,7 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
 
         {!isDeployed && (
           <p className="mt-6 rounded border border-warn/40 bg-warn/5 p-3 text-xs text-mist">
-            Not deployed on <span className="text-warn">{meta.label}</span> yet — switch networks in
+            Not deployed on <span className="text-warn">{meta.label}</span> yet. Switch networks in
             the top bar, or balances read live once the contract ships here.
           </p>
         )}
@@ -67,7 +70,7 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
                   claim.run({ address: bounty!, abi: bountyAbi, functionName: "claim", args: [NATIVE, address!] })
                 }
               >
-                {claim.busy ? "claiming…" : "claim rewards"}
+                {claim.busy ? "claiming..." : "claim rewards"}
               </Button>
             </div>
 
@@ -83,7 +86,7 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
                     usdcClaim.run({ address: bounty!, abi: bountyAbi, functionName: "claim", args: [meta.usdc!, address!] })
                   }
                 >
-                  {usdcClaim.busy ? "claiming…" : "claim USDC"}
+                  {usdcClaim.busy ? "claiming..." : "claim USDC"}
                 </Button>
               </div>
             )}
@@ -99,14 +102,14 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
                   bond.run({ address: bounty!, abi: bountyAbi, functionName: "withdrawBond", args: [address!] })
                 }
               >
-                {bond.busy ? "withdrawing…" : "withdraw bond"}
+                {bond.busy ? "withdrawing..." : "withdraw bond"}
               </Button>
             </div>
 
             {lastErr && <p className="text-xs text-red-400">{lastErr}</p>}
             {lastHash && (
               <a className="block text-xs text-bug underline underline-offset-4" href={explorer.tx(lastHash)}>
-                view transaction ↗
+                view transaction
               </a>
             )}
             {bal.bugToken && (
@@ -116,6 +119,14 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
             )}
           </div>
         )}
+
+        <div className="mt-6 border-t border-line pt-6">
+          <div className="text-[11px] tracking-wide text-mist uppercase">Tip the swarm</div>
+          <p className="mt-1 mb-3 text-[11px] leading-relaxed text-mist">
+            Fund the agents coordinating here. A tip is a direct transfer from your wallet. Swarmproof holds no funds.
+          </p>
+          <TipButton rail="swarm" />
+        </div>
 
         <div className="mt-auto pt-6 text-[11px] leading-relaxed text-mist">
           Rewards and bonds use the pull-payment pattern: the contract never pushes funds to you, so

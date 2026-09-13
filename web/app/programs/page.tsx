@@ -1,133 +1,115 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo } from "react";
-import { useReadContracts } from "wagmi";
-import { bountyAbi, type ProgramView } from "@/lib/contract";
-import { useProtocolMeta, useBounty, useExplorer } from "@/lib/reads";
-import { assetInfo } from "@/lib/chains";
-import { fmtAmount, statusName, statusTone } from "@/lib/format";
-import { Badge, Card, Empty, LinkButton } from "@/components/ui";
+import { getLivePrograms } from "@/lib/queries";
+import { SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { money, topTier, displayName, programStatusMeta } from "@/lib/db";
 
-export default function Programs() {
-  const { address: bounty, isDeployed, chainId, meta: chain } = useBounty();
-  const explorer = useExplorer();
-  const base = { address: bounty ?? undefined, abi: bountyAbi } as const;
-  const meta = useProtocolMeta();
-  const ids = useMemo(
-    () => Array.from({ length: Math.max(0, Number(meta.nextProgramId ?? 1n) - 1) }, (_, i) => i + 1),
-    [meta.nextProgramId],
-  );
+export const dynamic = "force-dynamic";
 
-  const q = useReadContracts({
-    contracts: ids.flatMap((id) => [
-      { ...base, functionName: "getProgram", args: [BigInt(id)] },
-      { ...base, functionName: "topTier", args: [BigInt(id)] },
-      { ...base, functionName: "pendingCount", args: [BigInt(id)] },
-    ]),
-    query: { enabled: !!bounty && ids.length > 0, refetchInterval: 20_000 },
-  });
+export const metadata = {
+  title: "Programs | Swarmproof",
+  description: "Live bug bounty programs. Pick a target, find bugs, get paid from escrow.",
+};
 
-  const rows = ids
-    .map((id, i) => {
-      const p = q.data?.[i * 3];
-      const top = q.data?.[i * 3 + 1];
-      const pending = q.data?.[i * 3 + 2];
-      if (p?.status !== "success") return null;
-      return {
-        id,
-        p: p.result as ProgramView,
-        top: top?.status === "success" ? (top.result as bigint) : 0n,
-        pending: pending?.status === "success" ? (pending.result as bigint) : 0n,
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+export default async function ProgramsPage() {
+  const programs = await getLivePrograms();
+  const totalPool = programs.reduce((s, p) => s + Number(p.pool || 0), 0);
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Programs</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mist">
-            Every row is read live from <span className="text-chalk">{chain.label}</span>. Escrow shown
-            is real money locked in the contract — a program can&apos;t go Live without it.
-          </p>
+    <div className="aurora">
+      <div className="relative z-10 mx-auto max-w-6xl px-6 py-12">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Live programs</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-mist">
+              Every program below is backed by real escrow. Find a valid bug, submit a report, and get
+              paid the moment it&apos;s accepted. No committee, no ghosting.
+            </p>
+          </div>
+          <Link
+            href="/programs/new"
+            className="glow rounded-md bg-lime px-4 py-2 text-sm font-medium text-graphite transition-transform hover:scale-[1.02]"
+          >
+            Start a program
+          </Link>
         </div>
-        <LinkButton href="/programs/new" variant="primary">
-          + create program
-        </LinkButton>
+
+        {programs.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-6 text-sm">
+            <span className="text-mist">
+              <span className="font-semibold text-chalk">{programs.length}</span> program
+              {programs.length === 1 ? "" : "s"}
+            </span>
+            <span className="text-mist">
+              <span className="font-semibold text-bug">{money(totalPool, "USDC")}</span> in open escrow
+            </span>
+          </div>
+        )}
+
+        {programs.length === 0 ? (
+          <EmptyState configured={SUPABASE_CONFIGURED} />
+        ) : (
+          <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {programs.map((p) => {
+              const meta = programStatusMeta[p.status];
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/programs/${p.slug}`}
+                    className="card-hover flex h-full flex-col rounded-xl border border-line bg-ink-soft p-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex size-11 items-center justify-center rounded-lg border border-line bg-panel text-base font-semibold text-bug">
+                        {p.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className={`rounded border px-2 py-0.5 text-[10px] ${meta.tone}`}>{meta.label}</span>
+                    </div>
+                    <h2 className="mt-3.5 font-medium text-chalk">{p.name}</h2>
+                    <p className="mt-1 line-clamp-2 flex-1 text-sm leading-relaxed text-mist">
+                      {p.summary || "Security program on Swarmproof."}
+                    </p>
+                    <div className="mt-4 flex items-end justify-between border-t border-line pt-3.5">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-wide text-mist">Top bounty</div>
+                        <div className="text-lg font-semibold text-bug">{money(topTier(p), p.currency)}</div>
+                      </div>
+                      <div className="text-right text-xs text-mist">
+                        by {displayName(p.owner_profile)}
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
+    </div>
+  );
+}
 
-      {!isDeployed && (
-        <Card className="mt-8 p-6">
-          <p className="text-sm text-warn">Protocol not deployed on {chain.label} yet.</p>
-          <p className="mt-2 max-w-xl text-sm text-mist">
-            No placeholder data here — an empty list is the honest answer. Switch networks in the top
-            bar, or the list fills from chain the moment the contract ships here.
-          </p>
-        </Card>
+function EmptyState({ configured }: { configured: boolean }) {
+  return (
+    <div className="mt-10 rounded-xl border border-dashed border-line bg-ink-soft/50 p-12 text-center">
+      <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-line bg-panel">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.svg" alt="" className="size-6" />
+      </div>
+      <h2 className="mt-4 text-lg font-medium text-chalk">
+        {configured ? "No live programs yet" : "Programs are almost ready"}
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-mist">
+        {configured
+          ? "Be the first to fund one. Set your escrow and severity tiers, and hunters can start submitting in minutes."
+          : "The backend is being connected. Once it's live, funded programs will show up here for the whole community to hunt."}
+      </p>
+      {configured && (
+        <Link
+          href="/programs/new"
+          className="mt-5 inline-block rounded-md border border-bug-dim bg-bug-dim/10 px-4 py-2 text-sm text-bug transition-colors hover:bg-bug-dim/20"
+        >
+          Start the first program
+        </Link>
       )}
-
-      {isDeployed && q.isLoading && <p className="mt-8 text-sm text-mist">reading chain…</p>}
-
-      {isDeployed && !q.isLoading && rows.length === 0 && (
-        <div className="mt-8">
-          <Empty>
-            No programs yet. The contract is live and waiting for its first client —{" "}
-            <Link href="/programs/new" className="text-bug hover:underline">
-              create one
-            </Link>
-            .
-          </Empty>
-        </div>
-      )}
-
-      {rows.length > 0 && (
-        <ul className="mt-8 grid gap-3 md:grid-cols-2">
-          {rows.map((r) => {
-            const a = assetInfo(chainId, r.p.rewardToken);
-            return (
-              <li key={r.id}>
-                <Link href={`/programs/${r.id}`}>
-                  <Card className="p-6 transition-colors hover:border-mist">
-                    <div className="flex items-center justify-between gap-3">
-                      <h2 className="text-base text-chalk">Program #{r.id}</h2>
-                      <Badge tone={statusTone[statusName(r.p.status)]}>{statusName(r.p.status)}</Badge>
-                    </div>
-                    <dl className="mt-5 grid grid-cols-3 gap-4 text-xs">
-                      <div>
-                        <dt className="text-mist">escrow</dt>
-                        <dd className="mt-1 text-chalk">{fmtAmount(r.p.pool, a.decimals, a.symbol)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-mist">top severity</dt>
-                        <dd className="mt-1 text-chalk">{fmtAmount(r.top, a.decimals, a.symbol)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-mist">open reports</dt>
-                        <dd className="mt-1 text-chalk">{String(r.pending)}</dd>
-                      </div>
-                    </dl>
-                    <div className="mt-4 flex items-center justify-between border-t border-line pt-4 text-xs">
-                      <span className="text-mist">
-                        client{" "}
-                        <a
-                          className="text-bug underline underline-offset-4"
-                          href={explorer.address(r.p.owner)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {r.p.owner.slice(0, 10)}…
-                        </a>
-                      </span>
-                      {r.p.scopeURI && <span className="truncate text-mist">scope ↗</span>}
-                    </div>
-                  </Card>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+    </div>
   );
 }

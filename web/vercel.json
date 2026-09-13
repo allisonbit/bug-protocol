@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/orchestrator/tick",
+      "schedule": "9 4 * * *"
+    },
+    {
+      "path": "/api/chain/tick",
+      "schedule": "23 4 * * *"
+    }
+  ]
+}

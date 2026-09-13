@@ -14,7 +14,7 @@ async function accepted(bounty, client, hunter) {
   return { id, subId };
 }
 
-describe("BugBounty — disclosure", function () {
+describe("BugBounty: disclosure", function () {
   it("keeps the report embargoed until a fix can ship", async function () {
     const { bounty, client, hunter } = await loadFixture(H.fixture);
     const { subId } = await accepted(bounty, client, hunter);

@@ -1,6 +1,6 @@
 /**
  * Pure, framework-free generators for the /tools "connect & download" panel.
- * No "use client" — these are just string/JSON builders the client imports.
+ * No "use client". These are just string/JSON builders the client imports.
  * Everything here is content a hunter or AI agent copies or downloads to wire
  * the protocol into their own stack: an MCP config, CLI usage, and a runnable
  * recon + live-triage kit.
@@ -10,7 +10,7 @@ export const MCP_PACKAGE = "@bug-protocol/mcp";
 export const CLI_PACKAGE = "@bug-protocol/cli";
 export const REPO_URL = "https://github.com/allisonbit/bug-protocol";
 
-/** The MCP server config block — drop into Claude Desktop / any MCP client. */
+/** The MCP server config block, to drop into Claude Desktop or any MCP client. */
 export function mcpConfig(opts: { bounty?: string; chain?: string; rpc?: string }) {
   const bounty = opts.bounty?.trim() || "0xYourDeployedBugBountyContract";
   const chain = opts.chain?.trim() || "robinhood";
@@ -52,7 +52,7 @@ export const MCP_TOOLS: { name: string; write: boolean; desc: string }[] = [
 /**
  * One self-contained bash installer that writes a runnable recon + live-triage
  * kit into ./bug-recon-kit/. It wires the standard ProjectDiscovery pipeline
- * (subfinder → httpx → nuclei), port sweep (naabu), URL harvest (gau) and
+ * (subfinder, httpx, nuclei), port sweep (naabu), URL harvest (gau) and
  * content fuzzing (ffuf) behind Docker so there's nothing to install but Docker.
  * `target` is sanitised into a bare hostname before interpolation.
  */
@@ -83,7 +83,7 @@ ENTRYPOINT ["/usr/local/bin/recon"]
 
   const reconSh = `#!/bin/sh
 # $BUG recon + live-triage pipeline. Only run against targets you are
-# authorised to test — a live $BUG program's scope is your safe harbour.
+# authorised to test: a live $BUG program's scope is your safe harbour.
 set -eu
 TARGET="\${1:-\${TARGET:-${target}}}"
 OUT="\${OUT:-/work/out}"
@@ -107,7 +107,7 @@ gau --threads 5 "$TARGET" 2>/dev/null | sort -u > "$OUT/urls.txt" || true
 echo "[5/5] vuln templates (nuclei)"
 nuclei -silent -l "$OUT/live.txt" -severity low,medium,high,critical -json-export "$OUT/nuclei.json" || true
 
-echo "[done] artifacts in $OUT — feed nuclei.json into a \$BUG report."
+echo "[done] artifacts in $OUT. Feed nuclei.json into a \$BUG report."
 `;
 
   const compose = `# docker compose run --rm recon ${target}
@@ -121,7 +121,7 @@ services:
       - ./out:/work/out
 `;
 
-  const readme = `# $BUG recon + live-triage kit — ${target}
+  const readme = `# $BUG recon + live-triage kit: ${target}
 
 A zero-install ProjectDiscovery pipeline. You only need Docker.
 
@@ -132,12 +132,12 @@ A zero-install ProjectDiscovery pipeline. You only need Docker.
     docker compose run --rm recon sub.${target}
 
 Artifacts land in ./out/:
-- subs.txt     — discovered subdomains
-- live.txt     — responsive hosts
-- httpx.json   — titles, status, detected tech
-- ports.txt    — open ports (top 1000)
-- urls.txt     — historical URLs (wayback/gau)
-- nuclei.json  — template matches, low→critical
+- subs.txt: discovered subdomains
+- live.txt: responsive hosts
+- httpx.json: titles, status, detected tech
+- ports.txt: open ports (top 1000)
+- urls.txt: historical URLs (wayback/gau)
+- nuclei.json: template matches, low to critical
 
 ## Authorisation
 Run this **only** against assets a live $BUG program lists in scope. The
@@ -151,7 +151,7 @@ outside it is not covered. When you find something, encrypt the report on the
     `mkdir -p bug-recon-kit && cat > "bug-recon-kit/${name}" <<'BUGEOF'\n${body}BUGEOF\n`;
 
   return `#!/bin/sh
-# $BUG recon kit installer — writes ./bug-recon-kit/ then prints next steps.
+# $BUG recon kit installer: writes ./bug-recon-kit/ then prints next steps.
 set -eu
 ${heredoc("Dockerfile", dockerfile)}${heredoc("recon.sh", reconSh)}${heredoc("docker-compose.yml", compose)}${heredoc("README.md", readme)}chmod +x bug-recon-kit/recon.sh 2>/dev/null || true
 echo "[\\$BUG] wrote ./bug-recon-kit/ (Dockerfile, recon.sh, docker-compose.yml, README.md)"

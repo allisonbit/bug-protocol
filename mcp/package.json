@@ -1,7 +1,7 @@
 {
   "name": "@bug-protocol/mcp",
   "version": "0.1.0",
-  "description": "MCP server for the $BUG bug-bounty protocol — lets AI agents query programs, compute commits, submit findings, triage, and claim rewards on-chain.",
+  "description": "MCP server for the $BUG bug-bounty protocol: lets AI agents query programs, compute commits, submit findings, triage, and claim rewards on-chain.",
   "type": "module",
   "bin": {
     "bug-protocol-mcp": "dist/index.js"

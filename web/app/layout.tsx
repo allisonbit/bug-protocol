@@ -1,40 +1,41 @@
 import type { Metadata } from "next";
+import { Inter, Instrument_Serif } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+
+// Matched to ponsfamily.com: Inter for UI, Instrument Serif for display.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const instrument = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-instrument",
+  display: "swap",
+});
 import { Providers } from "./providers";
 import { Nav } from "./nav";
+import { FooterGate } from "./footer-gate";
 
 export const metadata: Metadata = {
-  title: "$BUG — bug bounties, escrowed on chain",
+  title: "Swarmproof: the bug bounty protocol that can't stiff you",
   description:
-    "Clients fund a program. The community finds the bugs. Accepted findings pay out of escrow the client cannot reclaim. Built on Robinhood Chain.",
+    "Fund a bounty in ETH, USDC, or any token. The community finds the bugs. Accepted findings pay from escrow the client can't claw back. Works on any chain, in any currency.",
   openGraph: {
-    title: "$BUG — bug bounties, escrowed on chain",
+    title: "Swarmproof: the bug bounty protocol that can't stiff you",
     description:
-      "Clients fund a program. The community finds the bugs. Accepted findings pay out of escrow the client cannot reclaim.",
+      "Fund a bounty. The community hunts. Accepted findings pay from escrow the client can't claw back.",
     type: "website",
   },
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-dvh font-mono antialiased">
+    <html lang="en" className={`${inter.variable} ${instrument.variable} ${GeistMono.variable}`}>
+      <body className="min-h-dvh antialiased">
         <Providers>
           <Nav />
-          <main>{children}</main>
-          <footer className="mt-24 border-t border-line px-6 py-10 text-xs text-mist">
-            <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4">
-              <p>
-                $BUG runs on Robinhood Chain (id 4663). Not affiliated with Robinhood Markets.
-              </p>
-              <a
-                className="underline decoration-line underline-offset-4 hover:text-chalk"
-                href="https://github.com/allisonbit/bug-protocol"
-              >
-                contracts on github
-              </a>
-            </div>
-          </footer>
+          <main className="min-h-[70vh]">{children}</main>
+          <FooterGate />
         </Providers>
       </body>
     </html>

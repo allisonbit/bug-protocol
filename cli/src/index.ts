@@ -26,7 +26,7 @@ const program = new Command();
 
 program
   .name("bug")
-  .description("🐛 bug-cli — the $BUG bug-bounty protocol from your terminal. Works on any EVM chain, ETH or USDC, no $BUG token required.")
+  .description("bug-cli: the $BUG bug-bounty protocol from your terminal. Works on any EVM chain, ETH or USDC, no $BUG token required.")
   .version("0.1.0")
   .option("--chain <id|name>", "chain id or name: robinhood, base, arbitrum, optimism, base-sepolia (env BUG_CHAIN)")
   .option("--rpc <url>", "RPC URL override (env BUG_RPC_URL)")
@@ -45,14 +45,14 @@ function action<A extends unknown[]>(fn: (...a: A) => Promise<void>) {
       await fn(...a);
     } catch (e) {
       const err = e as { shortMessage?: string; message?: string };
-      console.error("✗ " + (err.shortMessage ?? err.message ?? String(e)));
+      console.error("error: " + (err.shortMessage ?? err.message ?? String(e)));
       process.exitCode = 1;
     }
   };
 }
 
 function printTx(ctx: Ctx, label: string, hash: string) {
-  console.log(`✓ ${label}`);
+  console.log(`ok: ${label}`);
   console.log(`  tx:  ${hash}`);
   console.log(`  see: ${txUrlOn(ctx.meta.chain.id, hash)}`);
 }
@@ -81,7 +81,7 @@ program
           String(p.pending),
         ];
       });
-      console.log(`${ctx.meta.label} · ${programs.length} program(s)\n`);
+      console.log(`${ctx.meta.label}, ${programs.length} program(s)\n`);
       console.log(table(["#", "status", "owner", "escrow", "top tier", "open"], rows));
     }),
   );
@@ -95,7 +95,7 @@ program
       const [meta, full] = await Promise.all([protocolMeta(ctx), getProgramFull(ctx, BigInt(id))]);
       const p = full.program;
       const a = assetInfo(ctx.meta.chain.id, p.rewardToken, meta.bugToken);
-      console.log(`Program #${id} — ${ctx.meta.label}`);
+      console.log(`Program #${id} (${ctx.meta.label})`);
       console.log(`  status:        ${statusName(p.status)}`);
       console.log(`  owner:         ${p.owner}`);
       console.log(`  reward asset:  ${a.symbol} (${p.rewardToken === NATIVE ? "native" : p.rewardToken})`);
@@ -107,8 +107,8 @@ program
       console.log(`  triage SLA:    ${humanDuration(p.triageDeadline)}`);
       console.log(`  disclosure:    ${humanDuration(p.disclosureDelay)} after triage`);
       console.log(`  scope hash:    ${p.scopeHash}`);
-      console.log(`  scope URI:     ${p.scopeURI || "—"}`);
-      console.log(`  tiers:         Low ${fmtAmount(full.tiers[1], a.decimals)} · Med ${fmtAmount(full.tiers[2], a.decimals)} · High ${fmtAmount(full.tiers[3], a.decimals)} · Critical ${fmtAmount(full.tiers[4], a.decimals)} ${a.symbol}`);
+      console.log(`  scope URI:     ${p.scopeURI || "n/a"}`);
+      console.log(`  tiers:         Low ${fmtAmount(full.tiers[1], a.decimals)}, Med ${fmtAmount(full.tiers[2], a.decimals)}, High ${fmtAmount(full.tiers[3], a.decimals)}, Critical ${fmtAmount(full.tiers[4], a.decimals)} ${a.symbol}`);
     }),
   );
 
@@ -121,16 +121,16 @@ program
       const s = await getSubmission(ctx, BigInt(id));
       const [meta, prog] = await Promise.all([protocolMeta(ctx), getProgram(ctx, s.programId)]);
       const a = assetInfo(ctx.meta.chain.id, prog.rewardToken, meta.bugToken);
-      console.log(`Submission #${id} — ${ctx.meta.label}`);
+      console.log(`Submission #${id} (${ctx.meta.label})`);
       console.log(`  program:       #${s.programId}`);
       console.log(`  status:        ${subStatusName(s.status)}`);
       console.log(`  severity:      ${severityName(s.severity)}`);
       console.log(`  hunter:        ${s.hunter}`);
       console.log(`  submitted:     ${fmtDate(s.submittedAt)}`);
-      console.log(`  triaged:       ${s.triagedAt > 0n ? fmtDate(s.triagedAt) : "—"}`);
+      console.log(`  triaged:       ${s.triagedAt > 0n ? fmtDate(s.triagedAt) : "n/a"}`);
       console.log(`  commit hash:   ${s.commitHash}`);
-      console.log(`  report URI:    ${s.reportURI || "(not revealed — body still private)"}`);
-      console.log(`  award:         ${s.award > 0n ? fmtAmount(s.award, a.decimals, a.symbol) : "—"}`);
+      console.log(`  report URI:    ${s.reportURI || "(not revealed; body still private)"}`);
+      console.log(`  award:         ${s.award > 0n ? fmtAmount(s.award, a.decimals, a.symbol) : "n/a"}`);
       console.log(`  anti-spam bond:${" "}${fmtAmount(s.bond, 18, "$BUG")}`);
       if (s.dupeOf > 0n) console.log(`  duplicate of:  #${s.dupeOf}`);
     }),
@@ -175,7 +175,7 @@ program
       writeFileSync(file, JSON.stringify(receipt, null, 2));
       console.log(`salt:        ${salt}`);
       console.log(`commit hash: ${receipt.commitHash}`);
-      console.log(`receipt:     ${file}  (keep it secret — the salt cannot be recovered)`);
+      console.log(`receipt:     ${file}  (keep it secret: the salt cannot be recovered)`);
     }),
   );
 
@@ -318,7 +318,7 @@ program
     action(async (opts: { interval: string }, cmd: Command) => {
       const ctx = ctxFrom(cmd);
       const everyMs = Math.max(2, Number(opts.interval) || 10) * 1000;
-      console.log(`watching ${ctx.meta.label} every ${everyMs / 1000}s — Ctrl-C to stop\n`);
+      console.log(`watching ${ctx.meta.label} every ${everyMs / 1000}s. Press Ctrl-C to stop\n`);
 
       let lastProg = 0n;
       let lastSub = 0n;
@@ -334,7 +334,7 @@ program
           }
           lastProg = meta.nextProgramId;
         }
-        // New submissions — record their status for transition tracking
+        // New submissions: record their status for transition tracking
         if (meta.nextSubmissionId > lastSub) {
           for (let i = lastSub; i < meta.nextSubmissionId; i++) {
             const s = await getSubmission(ctx, i);
@@ -348,11 +348,11 @@ program
           const s = await getSubmission(ctx, BigInt(idStr));
           if (s.status !== prev) {
             statuses.set(idStr, s.status);
-            console.log(`[${new Date().toISOString().slice(11, 19)}] ~ submission #${idStr}: ${subStatusName(prev)} → ${subStatusName(s.status)}${s.award > 0n ? ` (award set)` : ""}`);
+            console.log(`[${new Date().toISOString().slice(11, 19)}] ~ submission #${idStr}: ${subStatusName(prev)} to ${subStatusName(s.status)}${s.award > 0n ? ` (award set)` : ""}`);
           }
         }
         if (first) {
-          console.log(`baseline: ${lastProg} program(s), ${lastSub} submission(s). waiting for changes…`);
+          console.log(`baseline: ${lastProg} program(s), ${lastSub} submission(s). waiting for changes...`);
           first = false;
         }
       };

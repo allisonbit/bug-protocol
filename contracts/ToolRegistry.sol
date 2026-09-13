@@ -8,8 +8,8 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
 
 /**
  * @title ToolRegistry
- * @notice A permissionless marketplace of security tools — Android, desktop,
- * terminal, browser, MCP — published by anyone, hunted with by everyone. The
+ * @notice A permissionless marketplace of security tools: Android, desktop,
+ * terminal, browser, MCP, published by anyone, hunted with by everyone. The
  * artifact bytes live off chain (Supabase Storage); what lives here is the part
  * that has to be tamper-evident: who published it, the sha256 of the exact bytes
  * they published, where its metadata is, and a $BUG stake they lose if the tool
@@ -34,7 +34,7 @@ import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step
  *
  * The registry is the source of truth for integrity and attribution; a Supabase
  * mirror indexes the same rows for fast search, filtering and moderation. The
- * mirror can lie or lag — this contract cannot — so clients verify checksum and
+ * mirror can lie or lag, this contract cannot, so clients verify checksum and
  * publisher against chain before trusting a download.
  */
 contract ToolRegistry is Ownable2Step, ReentrancyGuard {
@@ -108,7 +108,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
     uint256 private constant BASIS_POINTS = 10_000;
 
     /// @dev A voluntarily delisted tool's stake is withdrawable only after this
-    /// window, so a rug — publish malware, farm downloads, pull the stake — is
+    /// window, so a rug (publish malware, farm downloads, pull the stake) is
     /// impossible: the challenge window always outlasts the download.
     uint64 public constant UNSTAKE_DELAY = 7 days;
 
@@ -144,7 +144,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
     /// flag reward if the arbiter agrees the tool was malicious.
     mapping(uint256 toolId => address) public flaggedBy;
 
-    /// @notice Pull-payment ledger of $BUG owed — slashed proceeds and flag
+    /// @notice Pull-payment ledger of $BUG owed: slashed proceeds and flag
     /// rewards. Withdrawn with `withdrawCredit`.
     mapping(address account => uint256) public bondCredit;
 
@@ -254,7 +254,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
      * @param category Coarse capability tag; `Unspecified` is rejected.
      * @param metadataURI Where the tool's metadata JSON is published.
      * @param checksum sha256 of the artifact bytes. The download's integrity
-     * proof — non-zero and immutable per version.
+     * proof, non-zero and immutable per version.
      * @param semver Publisher-declared version string.
      * @param stakeAmount $BUG to stake, >= minStake. Pulled from the caller.
      * @dev The caller must have approved `stakeAmount` of $BUG to this contract.
@@ -332,7 +332,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
     /**
      * @notice Attests a download on chain. Permissionless and cheap; the mirror
      * keeps the fast counter, this keeps a tamper-evident floor nobody can pad
-     * without paying gas. Not payable — the marketplace never charges to hunt.
+     * without paying gas. Not payable: the marketplace never charges to hunt.
      */
     function recordDownload(uint256 toolId) external {
         Tool storage t = _tools[toolId];
@@ -344,7 +344,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
     }
 
     /**
-     * @notice Flags a tool for the arbiter to review — malware, a stolen tool, a
+     * @notice Flags a tool for the arbiter to review: malware, a stolen tool, a
      * lying checksum. Permissionless, one open flag at a time. Flagging freezes
      * the stake and moves the tool out of `Active` so the mirror can hide it
      * while it's under review.
@@ -369,7 +369,7 @@ contract ToolRegistry is Ownable2Step, ReentrancyGuard {
      * the current stake. Lets the arbiter scale the penalty to the offence.
      * @dev A correct flagger is paid `flagRewardBps` of the slashed amount; the
      * rest accrues to `feeRecipient`. Clearing a flag restores the tool to
-     * `Active` with its stake intact — a bad-faith flag costs the tool nothing.
+     * `Active` with its stake intact. A bad-faith flag costs the tool nothing.
      */
     function resolveFlag(uint256 toolId, bool malicious, uint256 slashBps)
         external

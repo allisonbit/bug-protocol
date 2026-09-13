@@ -8,7 +8,7 @@ const { live, commit, SALT, REPORT, CRIT } = S;
 
 const FEE_BPS = 500n;
 
-describe("BugBounty — escalation on SLA lapse", function () {
+describe("BugBounty: escalation on SLA lapse", function () {
   it("cannot be escalated while the client still has time", async function () {
     const { bounty, client, hunter } = await loadFixture(H.fixture);
     const id = await live(bounty, client);

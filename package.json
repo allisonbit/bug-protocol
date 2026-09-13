@@ -1,7 +1,7 @@
 {
   "name": "bug-protocol",
   "version": "1.0.0",
-  "description": "$BUG — escrowed crowdsourced vulnerability disclosure on Robinhood Chain",
+  "description": "$BUG: escrowed crowdsourced vulnerability disclosure on Robinhood Chain",
   "main": "index.js",
   "directories": {
     "test": "test"
@@ -9,7 +9,9 @@
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js"
+    "deploy": "hardhat run scripts/deploy.js",
+    "e2e": "hardhat run scripts/e2e-local.js",
+    "e2e:node": "hardhat run scripts/e2e-local.js --network localhost"
   },
   "keywords": [],
   "author": "",

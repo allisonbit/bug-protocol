@@ -42,7 +42,7 @@ export function InstantTools() {
   );
 }
 
-/** sha256 a file, in-browser — the value a publisher commits and a downloader verifies. */
+/** sha256 a file, in-browser. The value a publisher commits and a downloader verifies. */
 function ChecksumTool() {
   const [name, setName] = useState<string | null>(null);
   const [hash, setHash] = useState<string | null>(null);
@@ -66,14 +66,14 @@ function ChecksumTool() {
   return (
     <ToolCard
       title="File checksum (sha256)"
-      blurb="Hash any artifact locally. This is the exact 0x… value a tool author commits on chain — and what you re-check after downloading someone else's tool. Nothing is uploaded."
+      blurb="Hash any artifact locally. This is the exact 0x... value a tool author commits on chain, and what you re-check after downloading someone else's tool. Nothing is uploaded."
     >
       <input
         type="file"
         onChange={(e) => onFile(e.target.files?.[0])}
         className="block w-full text-xs text-mist file:mr-3 file:rounded file:border file:border-line file:bg-ink file:px-3 file:py-1.5 file:text-xs file:text-chalk hover:file:border-mist"
       />
-      {busy && <p className="text-[11px] text-mist">hashing…</p>}
+      {busy && <p className="text-[11px] text-mist">hashing...</p>}
       {hash && (
         <div className="rounded border border-line bg-ink p-3 text-xs">
           <div className="text-mist">{name}</div>
@@ -82,19 +82,19 @@ function ChecksumTool() {
           </div>
         </div>
       )}
-      <Field label="Verify against expected checksum" hint="Paste a published 0x… to confirm a download is authentic.">
-        <Input value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="0x…" />
+      <Field label="Verify against expected checksum" hint="Paste a published 0x... to confirm a download is authentic.">
+        <Input value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="0x..." />
       </Field>
       {match !== null && (
         <p className={`text-xs ${match ? "text-bug" : "text-red-400"}`}>
-          {match ? "✓ matches — the bytes are authentic" : "✗ mismatch — do not trust this file"}
+          {match ? "Matches. The bytes are authentic" : "Mismatch. Do not trust this file"}
         </p>
       )}
     </ToolCard>
   );
 }
 
-/** keccak256 of a scope document — the value a program commits on chain. */
+/** keccak256 of a scope document. The value a program commits on chain. */
 function ScopeHasher() {
   const [text, setText] = useState("");
   const hash = useMemo(() => (text.trim() ? keccak256(new TextEncoder().encode(text)) : null), [text]);
@@ -103,7 +103,7 @@ function ScopeHasher() {
       title="Scope hasher (keccak256)"
       blurb="Hash a scope + safe-harbour document the way createProgram does. Publish the text at a URL and the hash on chain; hunters check they agree."
     >
-      <Textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="In scope: *.example.com …" />
+      <Textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="In scope: *.example.com ..." />
       {hash && (
         <div className="rounded border border-line bg-ink p-3 text-xs">
           <Copyable value={hash} />
@@ -135,20 +135,19 @@ function CommitBuilder() {
   return (
     <ToolCard
       title="Commit builder"
-      blurb="Bind a reportURI + salt + your address into the exact keccak256 the contract's reveal checks. Download the receipt — the salt can't be recovered if lost."
+      blurb="Bind a reportURI + salt + your address into the exact keccak256 the contract's reveal checks. Download the receipt, because the salt can't be recovered if lost."
     >
       <Field label="Report URI">
-        <Input value={reportURI} onChange={(e) => setReportURI(e.target.value)} placeholder="ipfs://… or https://…" />
+        <Input value={reportURI} onChange={(e) => setReportURI(e.target.value)} placeholder="ipfs://... or https://..." />
       </Field>
       <Field label="Hunter address">
-        <Input value={hunter} onChange={(e) => setHunter(e.target.value)} placeholder="0x… (defaults to connected wallet)" />
+        <Input value={hunter} onChange={(e) => setHunter(e.target.value)} placeholder="0x... (defaults to connected wallet)" />
         {hunter && !isAddress(hunter) && <span className="mt-1 block text-[11px] text-red-400">not a valid address</span>}
       </Field>
       <div className="flex items-center gap-2 text-xs">
         <span className="text-mist">salt</span>
-        {salt ? <Copyable value={salt} display={`${salt.slice(0, 10)}…`} /> : "…"}
-        <button className="text-bug-dim hover:text-bug" onClick={() => setSalt(randomSalt())}>
-          ↻ regen
+        {salt ? <Copyable value={salt} display={`${salt.slice(0, 10)}...`} /> : "..."}
+        <button className="text-bug-dim hover:text-bug" onClick={() => setSalt(randomSalt())}>                regenerate
         </button>
       </div>
       {commit && (
@@ -163,13 +162,13 @@ function CommitBuilder() {
           disabled={!commit || !who || !salt}
           onClick={() => {
             if (!commit || !who || !salt) return;
-            downloadJson(`bug-commit-receipt.json`, buildReceipt("—", who, reportURI.trim(), salt));
+            downloadJson(`bug-commit-receipt.json`, buildReceipt("n/a", who, reportURI.trim(), salt));
             setSaved(true);
           }}
         >
           download receipt
         </Button>
-        {saved && <span className="text-[11px] text-bug">✓ saved</span>}
+        {saved && <span className="text-[11px] text-bug">saved</span>}
       </div>
     </ToolCard>
   );
@@ -180,15 +179,14 @@ function SaltGen() {
   useEffect(() => setSalt(randomSalt()), []);
   return (
     <ToolCard title="Salt generator" blurb="A fresh cryptographically-random 32-byte salt for any commit you build by hand.">
-      <div className="rounded border border-line bg-ink p-3 text-xs">{salt ? <Copyable value={salt} /> : "…"}</div>
-      <Button variant="ghost" onClick={() => setSalt(randomSalt())}>
-        ↻ new salt
+      <div className="rounded border border-line bg-ink p-3 text-xs">{salt ? <Copyable value={salt} /> : "..."}</div>
+      <Button variant="ghost" onClick={() => setSalt(randomSalt())}>                new salt
       </Button>
     </ToolCard>
   );
 }
 
-/** Encrypt/decrypt a report body in-browser — AES-GCM, matches the CLI + MCP. */
+/** Encrypt/decrypt a report body in-browser. AES-GCM, matches the CLI + MCP. */
 function ReportCrypto() {
   const [mode, setMode] = useState<"encrypt" | "decrypt">("encrypt");
   const [body, setBody] = useState("");
@@ -212,7 +210,7 @@ function ReportCrypto() {
         setOut(await decryptReport(await file.text(), pass));
       }
     } catch {
-      setErr(mode === "decrypt" ? "decryption failed — wrong passphrase or corrupt file" : "encryption failed");
+      setErr(mode === "decrypt" ? "decryption failed. Wrong passphrase or corrupt file" : "encryption failed");
     }
   }
 
@@ -237,7 +235,7 @@ function ReportCrypto() {
         ))}
       </div>
       {mode === "encrypt" ? (
-        <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Steps to reproduce, impact, PoC…" />
+        <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Steps to reproduce, impact, PoC..." />
       ) : (
         <input
           ref={fileRef}
@@ -256,7 +254,7 @@ function ReportCrypto() {
       {out && mode === "decrypt" && (
         <pre className="max-h-48 overflow-auto rounded border border-line bg-ink p-3 text-[11px] whitespace-pre-wrap text-chalk">{out}</pre>
       )}
-      {out && mode === "encrypt" && <p className="text-xs text-bug">✓ {out}</p>}
+      {out && mode === "encrypt" && <p className="text-xs text-bug">{out}</p>}
     </ToolCard>
   );
 }

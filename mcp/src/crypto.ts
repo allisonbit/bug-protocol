@@ -9,7 +9,7 @@ import { encodeAbiParameters, keccak256, parseAbiParameters, type Address } from
  */
 const subtle = webcrypto.subtle;
 
-/** keccak256(abi.encode(reportURI, salt, hunter)) — the preimage `reveal` checks. */
+/** keccak256(abi.encode(reportURI, salt, hunter)), the preimage `reveal` checks. */
 export function commitmentFor(reportURI: string, salt: `0x${string}`, hunter: Address): `0x${string}` {
   return keccak256(
     encodeAbiParameters(parseAbiParameters("string, bytes32, address"), [reportURI, salt, hunter]),

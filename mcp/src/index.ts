@@ -261,7 +261,7 @@ tool(
 
 tool(
   "compute_commit",
-  "Compute a commit hash from a report URI + hunter address (+ optional salt). Pure/off-chain. If no salt is given, a random 32-byte salt is generated — SAVE IT, it is required to reveal later and cannot be recovered.",
+  "Compute a commit hash from a report URI + hunter address (+ optional salt). Pure/off-chain. If no salt is given, a random 32-byte salt is generated. SAVE IT, it is required to reveal later and cannot be recovered.",
   {
     reportURI: z.string().describe("Public URI where the (ideally encrypted) report will live."),
     hunter: z.string().describe("The hunter's address; bound into the commit so it can't be front-run."),
@@ -387,7 +387,7 @@ tool(
 
 tool(
   "escalate",
-  "Escalate a submission to the arbiter — for a lapsed triage deadline, or to dispute a reject/duplicate/spam verdict within the dispute window. Requires PRIVATE_KEY.",
+  "Escalate a submission to the arbiter, whether for a lapsed triage deadline or to dispute a reject/duplicate/spam verdict within the dispute window. Requires PRIVATE_KEY.",
   { submissionId: z.string() },
   async ({ submissionId }) => {
     const id = bigintFrom("submissionId", submissionId);
@@ -398,7 +398,7 @@ tool(
 
 tool(
   "resolve_escalation",
-  "Arbiter action: rule on an escalated submission — valid pays out at the given severity; slashHunterBond only for bad faith. Requires PRIVATE_KEY (must be the arbiter).",
+  "Arbiter action: rule on an escalated submission. A valid ruling pays out at the given severity; slashHunterBond only for bad faith. Requires PRIVATE_KEY (must be the arbiter).",
   {
     submissionId: z.string(),
     valid: z.boolean(),
@@ -450,7 +450,7 @@ tool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  // Never write to stdout — it is the MCP transport. Diagnostics go to stderr.
+  // Never write to stdout: it is the MCP transport. Diagnostics go to stderr.
   console.error(`bug-protocol MCP server ready (chain ${meta().label}, contract ${process.env.BOUNTY_ADDRESS ?? "unset"})`);
 }
 

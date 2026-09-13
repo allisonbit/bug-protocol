@@ -102,6 +102,16 @@ export const bountyAbi = [
   { type: "function", name: "pendingCount", inputs: [{ name: "programId", type: "uint256" }], outputs: [{ type: "uint256" }], stateMutability: "view" },
   { type: "function", name: "triageDeadlineOf", inputs: [{ name: "submissionId", type: "uint256" }], outputs: [{ type: "uint64" }], stateMutability: "view" },
   { type: "function", name: "embargoWaived", inputs: [{ name: "submissionId", type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "view" },
+  // True when a submission reached Escalated straight from Pending. The arbiter
+  // console needs it: only then is the escalation's escrow cover still counted in
+  // `pendingCount`, which is what makes the ruling payable from the pool.
+  { type: "function", name: "escalatedFromPending", inputs: [{ name: "submissionId", type: "uint256" }], outputs: [{ type: "bool" }], stateMutability: "view" },
+  // The protocol's own bounds. The owner provisioning UI clamps to these rather
+  // than letting the user sign a transaction that is certain to revert.
+  { type: "function", name: "MIN_TRIAGE_DEADLINE", inputs: [], outputs: [{ type: "uint64" }], stateMutability: "view" },
+  { type: "function", name: "MAX_TRIAGE_DEADLINE", inputs: [], outputs: [{ type: "uint64" }], stateMutability: "view" },
+  { type: "function", name: "MAX_DISCLOSURE_DELAY", inputs: [], outputs: [{ type: "uint64" }], stateMutability: "view" },
+  { type: "function", name: "DISPUTE_WINDOW", inputs: [], outputs: [{ type: "uint64" }], stateMutability: "view" },
   {
     type: "function",
     name: "claimable",
@@ -276,6 +286,63 @@ export const bountyAbi = [
   },
 ] as const;
 
+/**
+ * The events we decode from receipts. Reading `nextProgramId` before a write and
+ * assuming it incremented by one is a race: two creators in the same block both
+ * think they own the new id, so the flows that need the id read it out of the
+ * log the contract actually emitted.
+ */
+export const bountyEventsAbi = [
+  {
+    type: "event",
+    name: "ProgramCreated",
+    inputs: [
+      { indexed: true, name: "programId", type: "uint256" },
+      { indexed: true, name: "owner", type: "address" },
+      { indexed: false, name: "rewardToken", type: "address" },
+      { indexed: false, name: "scopeHash", type: "bytes32" },
+      { indexed: false, name: "scopeURI", type: "string" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SubmissionCreated",
+    inputs: [
+      { indexed: true, name: "submissionId", type: "uint256" },
+      { indexed: true, name: "programId", type: "uint256" },
+      { indexed: true, name: "hunter", type: "address" },
+      { indexed: false, name: "commitHash", type: "bytes32" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SubmissionRevealed",
+    inputs: [
+      { indexed: true, name: "submissionId", type: "uint256" },
+      { indexed: false, name: "reportURI", type: "string" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SubmissionEscalated",
+    inputs: [
+      { indexed: true, name: "submissionId", type: "uint256" },
+      { indexed: true, name: "by", type: "address" },
+      { indexed: false, name: "slaLapsed", type: "bool" },
+    ],
+  },
+  {
+    type: "event",
+    name: "EscalationResolved",
+    inputs: [
+      { indexed: true, name: "submissionId", type: "uint256" },
+      { indexed: false, name: "valid", type: "bool" },
+      { indexed: false, name: "severity", type: "uint8" },
+      { indexed: false, name: "award", type: "uint256" },
+    ],
+  },
+] as const;
+
 /** Shapes returned by getProgram / getSubmission, after viem decoding. */
 export type ProgramView = {
   owner: Address;
@@ -303,3 +370,64 @@ export type SubmissionView = {
   dupeOf: bigint;
   reportURI: string;
 };
+
+/**
+ * The contract's SubStatus enum, by index. Kept beside the ABI so the UI maps a
+ * chain verdict to a row status in one place instead of sprinkling magic numbers.
+ */
+export const CHAIN_SUB_STATUS = [
+  "pending",
+  "accepted",
+  "rejected",
+  "duplicate",
+  "spam",
+  "escalated",
+  "resolved",
+] as const;
+
+export type ChainSubStatus = (typeof CHAIN_SUB_STATUS)[number];
+
+/** Verdict index the contract expects for each triage outcome. */
+export const VERDICT_INDEX: Record<"accepted" | "rejected" | "duplicate" | "spam", number> = {
+  accepted: 1,
+  rejected: 2,
+  duplicate: 3,
+  spam: 4,
+};
+
+/** Severity index the contract expects (None is deliberately unpayable). */
+export const SEVERITY_INDEX: Record<"low" | "medium" | "high" | "critical", number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
+
+/** Inverse of SEVERITY_INDEX, for rendering a chain severity as a row value. */
+export const INDEX_SEVERITY = ["none", "low", "medium", "high", "critical"] as const;
+
+/**
+ * The contract index for any row severity, including `none`.
+ *
+ * Rows carry `none` before a verdict assigns a real severity, and passing that
+ * straight into `SEVERITY_INDEX` is a type error, which is the compiler doing its
+ * job, because `Severity.None` is index 0 and the contract deliberately treats it
+ * as unpayable. Mapping it explicitly, rather than casting it away, is what keeps
+ * "no severity yet" from ever being mistaken for "low".
+ */
+export function severityIndexOf(s: "none" | "low" | "medium" | "high" | "critical"): number {
+  return s === "none" ? 0 : SEVERITY_INDEX[s];
+}
+
+/**
+ * Fallbacks for the protocol constants, used only until the chain answers. They
+ * mirror the contract's declared values exactly (3d, 30d, 180d, 7d) so a read
+ * that hasn't resolved yet can never show a hunter a window the chain would
+ * refuse.
+ */
+export const PROTOCOL_FALLBACK = {
+  minTriageDeadline: 3n * 86_400n,
+  maxTriageDeadline: 30n * 86_400n,
+  maxDisclosureDelay: 180n * 86_400n,
+  disputeWindow: 7n * 86_400n,
+} as const;

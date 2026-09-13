@@ -8,7 +8,7 @@
  *
  * Optional env:
  *   BUG_FEE_BPS       Protocol fee in basis points, default 500 (5%), max 1000.
- *   BUG_ARBITER       Arbiter address. Wired immediately if set — it is one-shot,
+ *   BUG_ARBITER       Arbiter address. Wired immediately if set; it is one-shot,
  *                     so leaving it unset is the safe default until the
  *                     arbitration contract exists.
  *   BUG_SUBMISSION_BOND / BUG_PROGRAM_BOND   Bond terms, in whole $BUG.
@@ -69,7 +69,7 @@ async function main() {
     await tx.wait();
     console.log(`arbiter      ${process.env.BUG_ARBITER} (one-shot, now locked)`);
   } else {
-    console.log(`arbiter      UNSET — escalations cannot be resolved until setArbiter is called`);
+    console.log(`arbiter      UNSET: escalations cannot be resolved until setArbiter is called`);
   }
 }
 

@@ -62,7 +62,7 @@ export function resolveCtx(opts: GlobalOpts): Ctx {
 export function requireBounty(ctx: Ctx): Address {
   if (!ctx.bounty) {
     throw new Error(
-      `no bounty contract address for ${ctx.meta.label}. Pass --bounty 0x… or set BUG_BOUNTY_ADDRESS (or BUG_BOUNTY_${ctx.meta.chain.id}).`,
+      `no bounty contract address for ${ctx.meta.label}. Pass --bounty 0x... or set BUG_BOUNTY_ADDRESS (or BUG_BOUNTY_${ctx.meta.chain.id}).`,
     );
   }
   return ctx.bounty;
@@ -70,7 +70,7 @@ export function requireBounty(ctx: Ctx): Address {
 
 export function requireSigner(ctx: Ctx): { account: PrivateKeyAccount; walletClient: WalletClient } {
   if (!ctx.account || !ctx.walletClient) {
-    throw new Error("no signer configured. Pass --key 0x… or set BUG_PRIVATE_KEY to send transactions.");
+    throw new Error("no signer configured. Pass --key 0x... or set BUG_PRIVATE_KEY to send transactions.");
   }
   return { account: ctx.account, walletClient: ctx.walletClient };
 }

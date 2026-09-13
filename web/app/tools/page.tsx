@@ -20,8 +20,8 @@ export default function ToolsPage() {
     <section className="mx-auto max-w-6xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Tools</h1>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mist">
-        The exploit toolkit. Publish and download community tools — Android, desktop, terminal, browser, MCP —
-        each bonded by a slashable $BUG stake and verifiable by checksum. Run the in-browser crypto instantly,
+        The exploit toolkit. Publish and download community tools: Android, desktop, terminal, browser, MCP,
+        verifiable by checksum. Run the in-browser crypto instantly,
         or wire the protocol into your agents and terminal.
       </p>
 

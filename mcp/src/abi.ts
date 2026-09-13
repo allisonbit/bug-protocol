@@ -1,5 +1,5 @@
 /**
- * BugBounty ABI — copied verbatim from web/lib/contract.ts so the MCP server and
+ * BugBounty ABI, copied verbatim from web/lib/contract.ts so the MCP server and
  * the web app speak to the same contract surface. Do not edit one without the
  * other. Plus the minimal ERC-20 slice needed to post the $BUG submission bond.
  */

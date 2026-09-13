@@ -111,7 +111,7 @@ export function Marketplace() {
         <div className="flex flex-1 flex-wrap items-end gap-3">
           <div className="min-w-48 flex-1">
             <Field label="Search">
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name or description…" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name or description..." />
             </Field>
           </div>
           <Field label="Platform">
@@ -171,9 +171,9 @@ export function Marketplace() {
       {flagTx.error && <p className="text-xs text-red-400">{flagTx.error}</p>}
 
       {loading ? (
-        <p className="text-xs text-mist">loading…</p>
+        <p className="text-xs text-mist">loading...</p>
       ) : listings.length === 0 ? (
-        <Empty>No tools yet. Be the first to publish one — Android, desktop, terminal, browser, or MCP.</Empty>
+        <Empty>No tools yet. Be the first to publish one: Android, desktop, terminal, browser, or MCP.</Empty>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {listings.map((t) => (
@@ -197,7 +197,7 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
             <Badge>{Category[t.category] ?? "?"}</Badge>
             <Badge>{cm.short}</Badge>
             {t.semver && <Badge>v{t.semver}</Badge>}
-            {t.flagged && <Badge tone="text-warn border-warn/50">⚑ flagged</Badge>}
+            {t.flagged && <Badge tone="text-warn border-warn/50">flagged</Badge>}
           </div>
         </div>
         <div className="text-right text-[11px] text-mist">
@@ -212,12 +212,12 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
         <div className="flex items-center gap-1.5">
           <span className="text-mist">by</span>
           <a className="font-mono text-mist hover:text-chalk" href={addressUrlOn(t.chain_id, t.publisher)} target="_blank" rel="noreferrer">
-            {short(t.publisher)} ↗
+            {short(t.publisher)}
           </a>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-mist">sha256</span>
-          <Copyable value={t.checksum} display={`${t.checksum.slice(0, 12)}…`} />
+          <Copyable value={t.checksum} display={`${t.checksum.slice(0, 12)}...`} />
         </div>
       </div>
 
@@ -226,20 +226,17 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
           href={`/api/tools/download?chainId=${t.chain_id}&toolId=${t.tool_id}`}
           className="rounded border border-bug-dim bg-bug-dim/10 px-3 py-1.5 text-xs text-bug hover:bg-bug-dim/20"
         >
-          ↓ {t.artifact_name}
+          {t.artifact_name}
         </a>
         {t.source_url && (
-          <a className="text-[11px] text-mist underline hover:text-chalk" href={t.source_url} target="_blank" rel="noreferrer">
-            source ↗
+          <a className="text-[11px] text-mist underline hover:text-chalk" href={t.source_url} target="_blank" rel="noreferrer">                        source
           </a>
         )}
         {t.tx_hash && (
-          <a className="text-[11px] text-mist underline hover:text-chalk" href={txUrlOn(t.chain_id, t.tx_hash)} target="_blank" rel="noreferrer">
-            on-chain ↗
+          <a className="text-[11px] text-mist underline hover:text-chalk" href={txUrlOn(t.chain_id, t.tx_hash)} target="_blank" rel="noreferrer">                        on-chain
           </a>
         )}
-        <button onClick={onFlag} className="ml-auto text-[11px] text-mist hover:text-warn" title="flag as malicious/broken">
-          ⚑ flag
+        <button onClick={onFlag} className="ml-auto text-[11px] text-mist hover:text-warn" title="flag as malicious/broken">                        flag
         </button>
       </div>
     </Card>
@@ -306,7 +303,7 @@ function PublishForm({
     setErr(null);
     if (!file || !registry || !publisher || stakeWei === null) return;
     try {
-      // 1 — stage: server hashes the bytes and returns the authoritative checksum.
+      // 1. Stage: server hashes the bytes and returns the authoritative checksum.
       setPhase("staging");
       const fd = new FormData();
       fd.append("file", file);
@@ -317,7 +314,7 @@ function PublishForm({
       const staged = await fetch("/api/tools/stage", { method: "POST", body: fd }).then((r) => r.json());
       if (!staged?.checksum) throw new Error(staged?.error || "staging failed");
 
-      // 2 — approve the $BUG stake if one is required.
+      // 2. Approve the $BUG stake if one is required.
       if (stakeWei > 0n) {
         if (!bugToken) throw new Error("could not resolve the $BUG token address from the registry");
         setPhase("approving");
@@ -328,7 +325,7 @@ function PublishForm({
         }
       }
 
-      // 3 — publish on chain. metadataURI points at the staged metadata.json.
+      // 3. Publish on chain. metadataURI points at the staged metadata.json.
       setPhase("publishing");
       const hash = await tx.run({
         address: registry,
@@ -341,7 +338,7 @@ function PublishForm({
         return;
       }
 
-      // 4 — recover the assigned toolId from the ToolPublished event.
+      // 4. Recover the assigned toolId from the ToolPublished event.
       let toolId: bigint | undefined;
       const receipt = await publicClient?.getTransactionReceipt({ hash });
       for (const log of receipt?.logs ?? []) {
@@ -356,9 +353,9 @@ function PublishForm({
           /* not our event */
         }
       }
-      if (toolId === undefined) throw new Error("published on chain, but couldn't read the tool id — refresh to see it");
+      if (toolId === undefined) throw new Error("published on chain, but couldn't read the tool id. Refresh to see it");
 
-      // 5 — confirm the mirror (server re-verifies checksum against chain).
+      // 5. Confirm the mirror (server re-verifies checksum against chain).
       setPhase("confirming");
       const confirm = await fetch("/api/tools", {
         method: "POST",
@@ -388,7 +385,8 @@ function PublishForm({
   if (phase === "done" && publishedId) {
     return (
       <Card className="border-bug-dim/50 bg-bug-dim/5 p-6 text-center">
-        <div className="text-3xl">🐛</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icon.svg" alt="" className="mx-auto size-8" />
         <h3 className="mt-2 text-sm font-semibold text-chalk">Tool #{publishedId} published</h3>
         <p className="mt-2 text-xs text-mist">
           It&apos;s live on chain with your stake bonded and indexed for search. Anyone can download it and
@@ -405,13 +403,13 @@ function PublishForm({
 
   const busyLabel =
     phase === "staging"
-      ? "uploading…"
+      ? "uploading..."
       : phase === "approving" || approve.state === "approving"
-        ? "approving $BUG…"
+        ? "approving $BUG..."
         : phase === "publishing"
-          ? "publishing…"
+          ? "publishing..."
           : phase === "confirming"
-            ? "indexing…"
+            ? "indexing..."
             : "publish tool";
 
   return (
@@ -419,12 +417,12 @@ function PublishForm({
       <h3 className="text-sm font-semibold text-chalk">Publish a tool</h3>
       <p className="mt-1 text-xs leading-relaxed text-mist">
         Permissionless. Anyone can ship an Android, desktop, terminal, browser, or MCP tool. The artifact goes
-        to storage, its sha256 + your address + a slashable $BUG stake go on chain. No review, no gatekeeper —
+        to storage, its sha256 + your address + a slashable $BUG stake go on chain. No review, no gatekeeper:
         attribution and a bond you lose if it&apos;s malicious.
       </p>
 
       {!isDeployed && (
-        <p className="mt-3 text-xs text-warn">Registry isn&apos;t deployed on {chainMeta(chainId).label} yet — switch networks to publish.</p>
+        <p className="mt-3 text-xs text-warn">Registry isn&apos;t deployed on {chainMeta(chainId).label} yet. Switch networks to publish.</p>
       )}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -462,16 +460,16 @@ function PublishForm({
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label="Source URL (optional)" hint="Link to the repo so others can read the code.">
-          <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://github.com/…" />
+          <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://github.com/..." />
         </Field>
         <Field label={`Stake (${minStake !== undefined ? `min ${fmtAmount(minStake, 18, "$BUG")}` : "$BUG"})`} hint="Slashable if the tool is judged malicious. More stake = more trust.">
           <Input value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="0.0" />
-          {!stakeOk && stakeInput && <span className="mt-1 block text-[11px] text-red-400">must be ≥ the minimum stake</span>}
+          {!stakeOk && stakeInput && <span className="mt-1 block text-[11px] text-red-400">must be at least the minimum stake</span>}
         </Field>
       </div>
 
       <div className="mt-4">
-        <Field label="Artifact" hint="The file people download — an APK, binary, .zip, script, or MCP bundle. Hashed locally on the server; the checksum is what goes on chain.">
+        <Field label="Artifact" hint="The file people download: an APK, binary, .zip, script, or MCP bundle. Hashed locally on the server; the checksum is what goes on chain.">
           <input
             type="file"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}

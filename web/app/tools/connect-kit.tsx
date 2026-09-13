@@ -19,7 +19,7 @@ function CodeBlock({ text, label }: { text: string; label?: string }) {
         onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true))}
         className="absolute top-2 right-2 rounded border border-line bg-ink-soft px-2 py-1 text-[10px] text-mist hover:text-chalk"
       >
-        {copied ? "✓ copied" : "copy"}
+        {copied ? "copied" : "copy"}
       </button>
     </div>
   );
@@ -69,7 +69,7 @@ function McpPanel() {
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Field label="BOUNTY_ADDRESS">
-          <Input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={isDeployed ? (bounty as string) : "0x…"} />
+          <Input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={isDeployed ? (bounty as string) : "0x..."} />
         </Field>
         <Field label="CHAIN">
           <Input value={chain} onChange={(e) => setChain(e.target.value)} placeholder={`${meta.chain.id} / ${meta.label.toLowerCase()}`} />
@@ -106,7 +106,7 @@ function CliPanel() {
   return (
     <Panel title="Terminal / CLI">
       <p className="text-xs leading-relaxed text-mist">
-        <span className="text-chalk">Instant, zero-install:</span> a single Node file for the offline crypto —
+        <span className="text-chalk">Instant, zero-install:</span> a single Node file for the offline crypto:
         checksums, commit salts, report encryption. No dependencies, works today.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -115,27 +115,27 @@ function CliPanel() {
           download
           className="inline-block rounded border border-bug-dim bg-bug-dim/10 px-4 py-2 text-sm text-bug transition-colors hover:bg-bug-dim/20"
         >
-          ↓ download bug.mjs
+          download bug.mjs
         </a>
       </div>
       <div className="mt-3">
         <CodeBlock
           text={[
-            "node bug.mjs checksum ./mytool.zip      # 0x… to publish/verify",
-            "node bug.mjs verify ./mytool.zip 0x…    # confirm a download",
-            "node bug.mjs encrypt report.md --pass s # → report.md.enc.json",
+            "node bug.mjs checksum ./mytool.zip      # 0x... to publish/verify",
+            "node bug.mjs verify ./mytool.zip 0x...  # confirm a download",
+            "node bug.mjs encrypt report.md --pass s # writes report.md.enc.json",
             "node bug.mjs salt                       # random commit salt",
           ].join("\n")}
         />
       </div>
       <p className="mt-5 text-xs leading-relaxed text-mist">
-        <span className="text-chalk">Full CLI</span> (signs transactions — submit, reveal, triage, claim on any
-        chain, ETH or USDC, no $BUG required):
+        <span className="text-chalk">Full CLI</span> (signs transactions: submit, reveal, triage, claim on any
+        chain, ETH or USDC):
       </p>
       <div className="mt-3 space-y-2">
         <CodeBlock text={`npm i -g ${CLI_PACKAGE}`} />
         <CodeBlock
-          text={["export BUG_BOUNTY_ADDRESS=0xYourContract", "export BUG_CHAIN=robinhood", "export BUG_PRIVATE_KEY=0x…   # write actions only", "bug --help"].join("\n")}
+          text={["export BUG_BOUNTY_ADDRESS=0xYourContract", "export BUG_CHAIN=robinhood", "export BUG_PRIVATE_KEY=0x...   # write actions only", "bug --help"].join("\n")}
         />
       </div>
     </Panel>
@@ -149,8 +149,8 @@ function ReconPanel() {
   return (
     <Panel title="Recon + live-triage kit">
       <p className="text-xs leading-relaxed text-mist">
-        A one-file installer that stands up the ProjectDiscovery pipeline in Docker —
-        subfinder → httpx → nuclei, plus naabu, gau and ffuf. Point it at a host a
+        A one-file installer that stands up the ProjectDiscovery pipeline in Docker:
+        subfinder, httpx and nuclei, plus naabu, gau and ffuf. Point it at a host a
         live program lists in scope; feed the nuclei output into a report.
       </p>
       <div className="mt-4">
@@ -160,10 +160,10 @@ function ReconPanel() {
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="ghost" onClick={() => downloadText("bug-recon-kit.sh", script, "text/x-shellscript")}>
-          ↓ download kit installer
+          download kit installer
         </Button>
         <a className="text-[11px] text-bug underline" href={REPO_URL} target="_blank" rel="noreferrer">
-          full protocol repo ↗
+          full protocol repo
         </a>
       </div>
       <details className="mt-4">

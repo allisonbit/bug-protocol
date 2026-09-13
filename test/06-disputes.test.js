@@ -6,7 +6,7 @@ const S = require("./shared");
 const { ETH, Sev, Status, PStatus, DAY, TRIAGE, DISPUTE, SUB_BOND, PROG_BOND } = H;
 const { live, commit, SALT, REPORT, CRIT } = S;
 
-describe("BugBounty — disputing a verdict", function () {
+describe("BugBounty: disputing a verdict", function () {
   it("a wrongly-flagged hunter gets their bond back", async function () {
     const { bounty, client, hunter, arbiter, fees } = await loadFixture(H.fixture);
     const id = await live(bounty, client);

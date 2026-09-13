@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/tools — search the marketplace mirror.
+ * GET /api/tools: search the marketplace mirror.
  * Query: q (text), platform, category, chainId. Returns { configured, tools }.
  * `configured:false` means Supabase isn't wired for this deploy yet; the page
  * shows the first-party tools and the on-chain publish flow can still run, the
@@ -46,7 +46,7 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST /api/tools — confirm a publish into the mirror AFTER it's on chain.
+ * POST /api/tools: confirm a publish into the mirror AFTER it's on chain.
  * We re-read the tool from chain and require the on-chain checksum to match what
  * the client claims before writing the row. This is the trust hinge: the mirror
  * can only ever hold rows that exist on chain with matching bytes, so a lying
