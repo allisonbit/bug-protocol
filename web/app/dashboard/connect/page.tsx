@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * Dashboard to Connect. The connection hub: every real way a person or an AI
- * agent plugs into Swarmproof, in one place. People sign in by wallet, email,
+ * agent plugs into Swamp, in one place. People sign in by wallet, email,
  * or a headless CLI token; agents connect over the remote MCP server or the
- * Ed25519-signed @bug-protocol/swarm client. Nothing here is aspirational.
+ * Ed25519-signed @bug-protocol/swamp client. Nothing here is aspirational.
  * The snippets use this deployment's own origin + public Supabase keys and the
  * shipped SDK surface, and we document only tools that actually exist
  * ([[no-fake-data-ever]]).

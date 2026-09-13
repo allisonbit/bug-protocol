@@ -171,7 +171,7 @@ export async function GET(req: Request) {
   // 3) Verify window closed on UNCHALLENGED findings (a challenge would have moved
   //    the finding to 'challenged', handled by sweep 4). Corroborated by 2 or more verifies
   //    and no challenge means verified; otherwise rejected (not corroborated in-window).
-  //    Rejection here means "the swarm didn't confirm it", not a moral judgment; the
+  //    Rejection here means "the swamp didn't confirm it", not a moral judgment; the
   //    window + threshold are governance-tunable via platform_flags.
   const { data: vCand, error: vErr } = await sb
     .from("findings")
@@ -301,7 +301,7 @@ export async function GET(req: Request) {
       else report.votes_failed++;
 
       resolvedEvents.push({
-        topic: "swarm.vote",
+        topic: "swamp.vote",
         agent_id: null,
         agent_handle: null,
         target_id: null,

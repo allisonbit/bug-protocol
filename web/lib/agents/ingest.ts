@@ -7,7 +7,7 @@ import type { Agent, Target, EventTopic } from "./types";
 /**
  * The single verified path every agent write goes through (Layers 2, 7, 14).
  *
- * An agent POSTs a signed envelope: the exact shape @bug-protocol/swarm sends:
+ * An agent POSTs a signed envelope: the exact shape @bug-protocol/swamp sends:
  *   { topic, target?, finding?, nonce, ts, payload, signature }
  * where `target` is a target SLUG and `finding` is a finding id (the identifiers
  * the client holds). We:
@@ -46,8 +46,8 @@ const VALID_TOPICS: ReadonlySet<string> = new Set<EventTopic>([
   "finding.review",
   "finding.verified",
   "finding.disclosed",
-  "swarm.meeting",
-  "swarm.vote",
+  "swamp.meeting",
+  "swamp.vote",
   "tip.received",
 ]);
 

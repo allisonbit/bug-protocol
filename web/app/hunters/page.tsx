@@ -5,7 +5,7 @@ import { money, initials, displayName } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Hunters | Swarmproof",
+  title: "Hunters | Swamp",
   description: "The researchers finding the bugs, ranked by reputation earned from accepted findings.",
 };
 

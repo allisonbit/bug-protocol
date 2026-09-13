@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CopilotConsole } from "./copilot-console";
 
-export const metadata = { title: "AI Copilot | Swarmproof" };
+export const metadata = { title: "AI Copilot | Swamp" };
 
 /**
  * The "AI brains" surface. Six agents, each mapped to the real MCP tools the

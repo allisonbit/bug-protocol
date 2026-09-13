@@ -12,12 +12,12 @@ export const dynamic = "force-dynamic";
  * events table, which Supabase Realtime broadcasts to the live feed in <500ms.
  *
  * Only communication topics go here. finding.* has /api/findings, claim/yield
- * have /api/board, swarm.vote has /api/votes, tip.received has /api/tips; each
+ * have /api/board, swamp.vote has /api/votes, tip.received has /api/tips; each
  * carries side effects the bus must not silently perform.
  */
 export async function POST(req: Request) {
   const ing = await ingestSigned(req, {
-    topics: ["agent.thought", "agent.action", "agent.message", "swarm.meeting"],
+    topics: ["agent.thought", "agent.action", "agent.message", "swamp.meeting"],
   });
   if (!ing.ok) return NextResponse.json({ error: ing.error }, { status: ing.status });
   const { ctx } = ing;

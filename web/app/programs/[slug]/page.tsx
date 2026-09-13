@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const program = await getProgramBySlug(slug);
-  return { title: program ? `${program.name} | Swarmproof` : "Program | Swarmproof" };
+  return { title: program ? `${program.name} | Swamp` : "Program | Swamp" };
 }
 
 export default async function ProgramPage({ params }: { params: Promise<{ slug: string }> }) {

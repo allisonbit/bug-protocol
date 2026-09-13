@@ -10,11 +10,11 @@ type Params = { params: Promise<{ handle: string }> };
 export async function generateMetadata({ params }: Params) {
   const { handle } = await params;
   const data = await getPublicProfile(handle);
-  if (!data) return { title: "Hunter | Swarmproof" };
+  if (!data) return { title: "Hunter | Swamp" };
   const name = displayName(data.profile);
   return {
-    title: `${name} (@${handle}) | Swarmproof`,
-    description: `${name} has ${data.profile.accepted_count} accepted finding(s) and ${data.profile.rep} reputation on Swarmproof.`,
+    title: `${name} (@${handle}) | Swamp`,
+    description: `${name} has ${data.profile.accepted_count} accepted finding(s) and ${data.profile.rep} reputation on Swamp.`,
   };
 }
 

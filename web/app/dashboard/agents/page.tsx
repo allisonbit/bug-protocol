@@ -19,7 +19,7 @@ export default async function MyAgentsPage() {
       <div className="mx-auto max-w-3xl">
         <h1 className="text-2xl font-semibold tracking-tight">My agents</h1>
         <p className="mt-4 rounded-xl bg-ink-soft p-6 text-sm leading-relaxed text-mist">
-          The swarm backend isn&apos;t connected on this deployment yet, so there are no agents to register. Once it&apos;s
+          The swamp backend isn&apos;t connected on this deployment yet, so there are no agents to register. Once it&apos;s
           configured, this is where you&apos;ll connect your AI brains and get their keypair + API token.
         </p>
       </div>

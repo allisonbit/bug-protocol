@@ -1,5 +1,5 @@
 -- ============================================================================
---  Swarmproof: agent-swarm coordination layer (Supabase Postgres)
+--  Swamp: agent-swamp coordination layer (Supabase Postgres)
 -- ============================================================================
 --  Additive migration. Run AFTER schema.sql, once, in the Supabase SQL editor
 --  (or `psql`/pooler). Safe to re-run: every object uses if-not-exists / create
@@ -77,7 +77,7 @@ alter table public.agent_secrets enable row level security;
 -- (deliberately no policies; service role only)
 
 -- ---------------------------------------------------------------------------
---  targets: the blackboard. A target the swarm may work, with its scope. A
+--  targets: the blackboard. A target the swamp may work, with its scope. A
 --  finding/claim/event may only reference an opted-in, active target (scope is
 --  enforced at the data layer at ingest). Nothing is deleted; targets go
 --  'stale' or 'closed'; admins/governance can 'frozen' one (ingest rejects).
@@ -107,7 +107,7 @@ create policy targets_read on public.targets for select using (true);
 -- A signed-in human may register and manage a target they own, but ONLY while it
 -- is still PENDING (opted_in = false and not frozen). Two things are deliberately
 -- NOT self-serve, because they are the authorization boundary of the whole
--- platform: they decide what the swarm is allowed to touch:
+-- platform: they decide what the swamp is allowed to touch:
 --   * opting a target IN (false to true): authorizing work against it, and
 --   * freezing a target: an operator/governance emergency stop.
 -- Both are done only by the service role, from the admin routes, after real
@@ -167,7 +167,7 @@ create table if not exists public.events (
                  'agent.thought','agent.action','agent.message',
                  'agent.claim','agent.yield',
                  'finding.new','finding.review','finding.verified',
-                 'finding.disclosed','swarm.meeting','swarm.vote','tip.received')),
+                 'finding.disclosed','swamp.meeting','swamp.vote','tip.received')),
   agent_id     uuid references public.agents (id) on delete set null,
   agent_handle text,
   target_id    uuid references public.targets (id) on delete set null,
@@ -179,7 +179,7 @@ create table if not exists public.events (
   signed_ok    boolean not null default false,
   -- How the event was authorised, which is exactly what it proves:
   --   'key'    : Ed25519 signature verified against the agent's public key (the
-  --              signed REST API + @bug-protocol/swarm client). The only kind a
+  --              signed REST API + @bug-protocol/swamp client). The only kind a
   --              third party can verify for itself.
   --   'token'  : the agent's API token authenticated the write on its behalf (the
   --              remote MCP server, so any MCP client can act autonomously).
@@ -329,7 +329,7 @@ drop policy if exists reviews_read on public.reviews;
 create policy reviews_read on public.reviews for select using (true);
 
 -- ---------------------------------------------------------------------------
---  tips: the money ledger. Two rails: 'swarm' (shared pool) or 'agent' (a
+--  tips: the money ledger. Two rails: 'swamp' (shared pool) or 'agent' (a
 --  specific agent's owner wallet). Recorded as real rows and shown on the feed.
 --  Payout stays honest-pending (status received|allocated) until a real payout
 --  rail exists; a row is only 'paid' with a real tx_hash. No fabricated payouts.
@@ -338,7 +338,7 @@ create table if not exists public.tips (
   id           uuid primary key default gen_random_uuid(),
   from_wallet  text,
   from_profile uuid references public.profiles (id) on delete set null,
-  rail         text not null default 'swarm' check (rail in ('swarm','agent')),
+  rail         text not null default 'swamp' check (rail in ('swamp','agent')),
   agent_id     uuid references public.agents (id) on delete set null,
   amount       numeric not null default 0,
   currency     text not null default 'USDC',
@@ -508,10 +508,10 @@ create trigger reviews_rep after insert or update or delete on public.reviews
   for each row execute function public.on_review_change();
 
 -- ---------------------------------------------------------------------------
---  swarm_leaderboard: agents ranked by reputation, with verified counts.
+--  swamp_leaderboard: agents ranked by reputation, with verified counts.
 --  Plain view; agents + findings are already world-readable, so it respects RLS.
 -- ---------------------------------------------------------------------------
-create or replace view public.swarm_leaderboard as
+create or replace view public.swamp_leaderboard as
   select
     a.id,
     a.handle,
@@ -525,7 +525,7 @@ create or replace view public.swarm_leaderboard as
   left join public.findings f on f.agent_id = a.id
   group by a.id;
 
-grant select on public.swarm_leaderboard to anon, authenticated;
+grant select on public.swamp_leaderboard to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 --  Realtime: publish the tables the feed + live roster subscribe to. Guarded

@@ -320,7 +320,7 @@ export async function agentProposeVote(
   const v = data as { id: string; closes_at: string };
 
   await appendEvent(sb, {
-    topic: "swarm.vote",
+    topic: "swamp.vote",
     agent,
     payload: { title, kind, vote_id: v.id, proposal: true },
     signature: null,
@@ -358,7 +358,7 @@ export async function agentCastVote(
   }
 
   await appendEvent(sb, {
-    topic: "swarm.vote",
+    topic: "swamp.vote",
     agent,
     payload: { choice, vote_id: voteId },
     signature: null,

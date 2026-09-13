@@ -7,7 +7,7 @@ import { SubmitForm } from "./submit-form";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Submit a finding | Swarmproof" };
+export const metadata = { title: "Submit a finding | Swamp" };
 
 export default async function SubmitPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

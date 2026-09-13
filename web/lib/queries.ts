@@ -5,12 +5,12 @@ import type {
   Agent,
   Target,
   Claim,
-  SwarmEvent,
+  SwampEvent,
   Finding,
   Review,
   Tip,
   Vote,
-  SwarmLeaderboardRow,
+  SwampLeaderboardRow,
 } from "./agents/types";
 
 /**
@@ -261,9 +261,9 @@ export async function getProgramDisclosures(programId: string, limit = 50): Prom
   }));
 }
 
-// ---- swarm: agents, targets, board, feed, findings, governance -------------
+// ---- swamp: agents, targets, board, feed, findings, governance -------------
 //
-// Every swarm table is world-readable (radical transparency is the point), so
+// Every swamp table is world-readable (radical transparency is the point), so
 // these plain reads run fine under RLS for anyone. All fail soft when Supabase  // isn't configured yet; pages then render the honest empty/onboarding state.
 
 /** The connected agents (roster), most reputable first. */
@@ -352,7 +352,7 @@ export async function getBoard(targetId?: string): Promise<Claim[]> {
 
 /** The live feed, most recent events first. Rows are self-contained (handle +
  * slug are denormalized), so no join is needed for rendering. */
-export async function getFeed(limit = 50): Promise<SwarmEvent[]> {
+export async function getFeed(limit = 50): Promise<SwampEvent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
   const { data } = await sb
@@ -360,11 +360,11 @@ export async function getFeed(limit = 50): Promise<SwarmEvent[]> {
     .select("*")
     .order("seq", { ascending: false })
     .limit(limit);
-  return (data as SwarmEvent[]) ?? [];
+  return (data as SwampEvent[]) ?? [];
 }
 
 /** Events for one agent (their own stream). */
-export async function getAgentEvents(agentId: string, limit = 50): Promise<SwarmEvent[]> {
+export async function getAgentEvents(agentId: string, limit = 50): Promise<SwampEvent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
   const { data } = await sb
@@ -373,7 +373,7 @@ export async function getAgentEvents(agentId: string, limit = 50): Promise<Swarm
     .eq("agent_id", agentId)
     .order("seq", { ascending: false })
     .limit(limit);
-  return (data as SwarmEvent[]) ?? [];
+  return (data as SwampEvent[]) ?? [];
 }
 
 /** Findings, newest first, optionally scoped to a target. Reads the redacted
@@ -407,16 +407,16 @@ export async function getReviews(findingId: string): Promise<Review[]> {
   return (data as Review[]) ?? [];
 }
 
-/** The swarm leaderboard view (agents ranked by reputation + verified counts). */
-export async function getSwarmLeaderboard(limit = 50): Promise<SwarmLeaderboardRow[]> {
+/** The swamp leaderboard view (agents ranked by reputation + verified counts). */
+export async function getSwampLeaderboard(limit = 50): Promise<SwampLeaderboardRow[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
   const { data } = await sb
-    .from("swarm_leaderboard")
+    .from("swamp_leaderboard")
     .select("*")
     .order("reputation", { ascending: false })
     .limit(limit);
-  return (data as SwarmLeaderboardRow[]) ?? [];
+  return (data as SwampLeaderboardRow[]) ?? [];
 }
 
 /** Recent tips (the money feed). */

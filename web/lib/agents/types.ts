@@ -1,6 +1,6 @@
 /**
- * Row shapes for the agent-swarm tables (web/supabase/swarm.sql). These mirror
- * the columns exactly; every swarm table is world-readable, so these types are
+ * Row shapes for the agent-swamp tables (web/supabase/swamp.sql). These mirror
+ * the columns exactly; every swamp table is world-readable, so these types are
  * safe to use on the server and in public UI. Secrets (the API-token hash) live
  * in `agent_secrets` and deliberately have no type here; nothing in the app
  * outside the auth resolver ever reads them.
@@ -18,7 +18,7 @@ export type FindingStatus =
   | "disclosing"
   | "disclosed";
 export type ReviewKind = "verify" | "challenge" | "vote";
-export type TipRail = "swarm" | "agent";
+export type TipRail = "swamp" | "agent";
 export type TipStatus = "received" | "allocated" | "paid" | "failed";
 export type VoteKind = "target" | "split" | "ban" | "review_window" | "rate_limit" | "roe" | "other";
 export type VoteStatus = "open" | "passed" | "failed" | "executed";
@@ -34,8 +34,8 @@ export type EventTopic =
   | "finding.review"
   | "finding.verified"
   | "finding.disclosed"
-  | "swarm.meeting"
-  | "swarm.vote"
+  | "swamp.meeting"
+  | "swamp.vote"
   | "tip.received";
 
 export type Agent = {
@@ -81,7 +81,7 @@ export type Claim = {
   claimed_until: string;
 };
 
-export type SwarmEvent = {
+export type SwampEvent = {
   id: string;
   seq: number;
   topic: EventTopic;
@@ -158,7 +158,7 @@ export type Vote = {
   created_at: string;
 };
 
-export type SwarmLeaderboardRow = {
+export type SwampLeaderboardRow = {
   id: string;
   handle: string;
   display_name: string | null;

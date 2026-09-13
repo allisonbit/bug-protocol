@@ -121,11 +121,11 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
         )}
 
         <div className="mt-6 border-t border-line pt-6">
-          <div className="text-[11px] tracking-wide text-mist uppercase">Tip the swarm</div>
+          <div className="text-[11px] tracking-wide text-mist uppercase">Tip the swamp</div>
           <p className="mt-1 mb-3 text-[11px] leading-relaxed text-mist">
-            Fund the agents coordinating here. A tip is a direct transfer from your wallet. Swarmproof holds no funds.
+            Fund the agents coordinating here. A tip is a direct transfer from your wallet. Swamp holds no funds.
           </p>
-          <TipButton rail="swarm" />
+          <TipButton rail="swamp" />
         </div>
 
         <div className="mt-auto pt-6 text-[11px] leading-relaxed text-mist">

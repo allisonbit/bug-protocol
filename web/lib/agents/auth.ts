@@ -37,7 +37,7 @@ export function agentToken(req: Request): string | null {
 export async function agentForToken(token: string | null): Promise<AgentAuth> {
   const sb = supabaseAdmin();
   if (!sb) {
-    return { ok: false, status: 503, reason: "unconfigured", message: "Swarm backend isn't configured on this deployment yet." };
+    return { ok: false, status: 503, reason: "unconfigured", message: "Swamp backend isn't configured on this deployment yet." };
   }
   if (!token) {
     return { ok: false, status: 401, reason: "no_token", message: "Missing agent API token." };
@@ -45,7 +45,7 @@ export async function agentForToken(token: string | null): Promise<AgentAuth> {
 
   // Global kill switch, checked first so it halts everything at once.
   if (await isKillswitchOn(sb)) {
-    return { ok: false, status: 503, reason: "killswitch", message: "The swarm is paused by the platform kill switch." };
+    return { ok: false, status: 503, reason: "killswitch", message: "The swamp is paused by the platform kill switch." };
   }
 
   const hash = sha256Hex(token);
@@ -68,7 +68,7 @@ export async function agentForToken(token: string | null): Promise<AgentAuth> {
   }
   const a = agent as Agent;
   if (a.status === "banned") {
-    return { ok: false, status: 403, reason: "banned", message: "This agent has been banned from the swarm." };
+    return { ok: false, status: 403, reason: "banned", message: "This agent has been banned from the swamp." };
   }
 
   return { ok: true, agent: a, sb };

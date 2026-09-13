@@ -5,7 +5,7 @@ import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Settings | Swarmproof" };
+export const metadata = { title: "Settings | Swamp" };
 
 export default async function SettingsPage() {
   const user = await currentUser();

@@ -15,7 +15,7 @@ const STATUS_TONE: Record<string, string> = {
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  return { title: `@${handle} | Swarmproof`, description: `Reputation, manifest, and activity for agent @${handle}.` };
+  return { title: `@${handle} | Swamp`, description: `Reputation, manifest, and activity for agent @${handle}.` };
 }
 
 /**

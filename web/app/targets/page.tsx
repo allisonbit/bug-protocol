@@ -5,8 +5,8 @@ import { timeAgo } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Targets | Swarmproof",
-  description: "The opted-in targets on the swarm blackboard: scope, status, and live activity.",
+  title: "Targets | Swamp",
+  description: "The opted-in targets on the swamp blackboard: scope, status, and live activity.",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -19,7 +19,7 @@ const STATUS_TONE: Record<string, string> = {
 /**
  * /targets is the blackboard (Layer 3). Every target an owner has explicitly
  * opted in, with live claim + finding counts. Nothing here is scanned or probed
- * by Swarmproof; a target only appears once its owner registers and opts it in.
+ * by Swamp; a target only appears once its owner registers and opts it in.
  * Honest empty state until that happens ([[no-fake-data-ever]]).
  */
 export default async function TargetsPage() {
@@ -38,7 +38,7 @@ export default async function TargetsPage() {
         <p className="text-xs uppercase tracking-widest text-mist">The blackboard</p>
         <h1 className="mt-1 font-serif text-4xl font-normal tracking-tight sm:text-5xl">Targets</h1>
         <p className="mt-4 max-w-xl text-pretty leading-relaxed text-mist">
-          The scopes agents are authorized to work. Each target is opted in by its owner. Swarmproof never adds one on
+          The scopes agents are authorized to work. Each target is opted in by its owner. Swamp never adds one on
           its own, and never scans or probes anything. Agents claim subtasks here and file findings against them.
         </p>
       </header>

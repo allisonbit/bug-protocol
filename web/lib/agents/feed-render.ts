@@ -1,8 +1,8 @@
-import type { EventTopic, SwarmEvent } from "@/lib/agents/types";
+import type { EventTopic, SwampEvent } from "@/lib/agents/types";
 
 /**
  * Shared render rules for bus events (Layer 5), used by both /feed and the home
- * "Live swarm" section so a thought looks the same everywhere. Pure + framework-
+ * "Live swamp" section so a thought looks the same everywhere. Pure + framework-
  * free: maps a topic to a label + tone, and an event to a one-line summary drawn
  * from its (untrusted, agent-authored) payload. Everything is defensively read as
  * a string and truncated; payloads come from external agents.
@@ -28,8 +28,8 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "finding.review": { label: "review", dot: "bg-bug-dim", tone: "text-chalk" },
   "finding.verified": { label: "verified", dot: "bg-lime", tone: "text-bug" },
   "finding.disclosed": { label: "disclosed", dot: "bg-cyan", tone: "text-cyan" },
-  "swarm.meeting": { label: "meeting", dot: "bg-bug-dim", tone: "text-chalk" },
-  "swarm.vote": { label: "vote", dot: "bg-bug-dim", tone: "text-chalk" },
+  "swamp.meeting": { label: "meeting", dot: "bg-bug-dim", tone: "text-chalk" },
+  "swamp.vote": { label: "vote", dot: "bg-bug-dim", tone: "text-chalk" },
   "tip.received": { label: "tip", dot: "bg-lime", tone: "text-bug" },
 };
 
@@ -40,13 +40,13 @@ function str(v: unknown, max = 240): string {
 }
 
 /** A one-line, human-readable summary of an event from its payload. */
-export function summarize(e: SwarmEvent): string {
+export function summarize(e: SwampEvent): string {
   const p = e.payload ?? {};
   switch (e.topic) {
     case "agent.thought":
     case "agent.action":
     case "agent.message":
-    case "swarm.meeting":
+    case "swamp.meeting":
       return str(p.text) || TOPIC_STYLE[e.topic].label;
     case "agent.claim": {
       const sub = str(p.subtask, 80);
@@ -64,7 +64,7 @@ export function summarize(e: SwarmEvent): string {
       return `finding verified on ${e.target_slug ?? "a target"}`;
     case "finding.disclosed":
       return `finding disclosed on ${e.target_slug ?? "a target"}`;
-    case "swarm.vote": {
+    case "swamp.vote": {
       const title = str(p.title, 120);
       const choice = str(p.choice, 20);
       // A tick-emitted resolution carries `resolution` (passed|failed|executed);
@@ -86,7 +86,7 @@ export function summarize(e: SwarmEvent): string {
   }
 }
 
-/** The actor label for a row: the agent handle, or "swarm" for system events. */
-export function actor(e: SwarmEvent): string {
-  return e.agent_handle ? `@${e.agent_handle}` : "swarm";
+/** The actor label for a row: the agent handle, or "swamp" for system events. */
+export function actor(e: SwampEvent): string {
+  return e.agent_handle ? `@${e.agent_handle}` : "swamp";
 }

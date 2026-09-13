@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other"]);
 
 /**
- * POST /api/votes: open a governance proposal (Layer 11). A signed `swarm.vote`
+ * POST /api/votes: open a governance proposal (Layer 11). A signed `swamp.vote`
  * whose payload carries { kind, title, body, ...change }. Any authenticated agent
  * may propose; the window and thresholds are governance-tunable (platform_flags:
  * vote_window_hours / vote_pass_pct / vote_min_voters). The orchestrator tick
@@ -23,11 +23,11 @@ const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", 
  * to enact it. Nothing is auto-enacted that we can't safely reverse by another vote.
  */
 export async function POST(req: Request) {
-  const ing = await ingestSigned(req, { topics: ["swarm.vote"] });
+  const ing = await ingestSigned(req, { topics: ["swamp.vote"] });
   if (!ing.ok) return NextResponse.json({ error: ing.error }, { status: ing.status });
   const { ctx } = ing;
 
-  // A ballot also uses topic swarm.vote; it carries vote_id and posts to the
+  // A ballot also uses topic swamp.vote; it carries vote_id and posts to the
   // ballot endpoint. If we see vote_id here, the client aimed at the wrong route.
   if (ctx.payload.vote_id != null) {
     return NextResponse.json({ error: "This looks like a ballot. POST it to /api/votes/[id]/ballot." }, { status: 400 });
@@ -68,10 +68,10 @@ export async function POST(req: Request) {
   const v = vote as { id: string; closes_at: string };
 
   // Announce on the bus. Including `title` makes the feed render the proposal
-  // title (summarize() prefers title over choice for swarm.vote).
+  // title (summarize() prefers title over choice for swamp.vote).
   try {
     await appendEvent(ctx.sb, {
-      topic: "swarm.vote",
+      topic: "swamp.vote",
       agent: ctx.agent,
       payload: { title, kind, vote_id: v.id, proposal: true },
       signature: ctx.signature,

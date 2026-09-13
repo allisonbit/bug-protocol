@@ -42,7 +42,7 @@ function gatewayReady(): boolean {
   return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
 }
 
-const SYSTEM = `You are the Swarmproof Copilot, a security assistant embedded in Swarmproof, an escrowed bug-bounty platform where teams fund programs and hunters submit findings that pay out from escrow when accepted.
+const SYSTEM = `You are the Swamp Copilot, a security assistant embedded in Swamp, an escrowed bug-bounty platform where teams fund programs and hunters submit findings that pay out from escrow when accepted.
 
 Your job: help hunters find in-scope work and write good findings, and help program owners triage. You reason over REAL data through your tools.
 
@@ -63,7 +63,7 @@ function buildTools(userId: string | null) {
   return {
     list_programs: tool({
       description:
-        "List the live and paused bug-bounty programs on Swarmproof, with their top reward, currency, escrow pool, scope size, and response SLA. Optionally filter by a free-text query over name and summary.",
+        "List the live and paused bug-bounty programs on Swamp, with their top reward, currency, escrow pool, scope size, and response SLA. Optionally filter by a free-text query over name and summary.",
       inputSchema: jsonSchema<{ query?: string }>({
         type: "object",
         properties: { query: { type: "string", description: "Free-text filter over program name/summary." } },
@@ -128,7 +128,7 @@ function buildTools(userId: string | null) {
 
     leaderboard: tool({
       description:
-        "The ranked hunters on Swarmproof by reputation, with their accepted-finding count and total earned. Reputation is derived from accepted and publicly disclosed findings.",
+        "The ranked hunters on Swamp by reputation, with their accepted-finding count and total earned. Reputation is derived from accepted and publicly disclosed findings.",
       inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: async () => {
         const rows = await getLeaderboard(25);

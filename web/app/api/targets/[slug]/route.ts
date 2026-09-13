@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/targets/[slug]: one target with its live board (active claims) and its
  * findings. Public read (Layer 3). Only opted-in, non-closed targets are exposed
- * here, so this API never reveals a target that hasn't joined the swarm.
+ * here, so this API never reveals a target that hasn't joined the swamp.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -53,13 +53,13 @@ const OWNER_STATUSES = new Set(["active", "stale", "closed"]);
 export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!SUPABASE_CONFIGURED) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in to edit a target." }, { status: 401 });
   const sb = await supabaseServer();
   if (!sb) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
 
   const body = await req.json().catch(() => null);

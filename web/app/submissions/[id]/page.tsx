@@ -25,7 +25,7 @@ import { RevealPanel } from "./reveal-panel";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Finding | Swarmproof" };
+export const metadata = { title: "Finding | Swamp" };
 
 export default async function SubmissionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

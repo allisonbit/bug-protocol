@@ -23,10 +23,10 @@ import { supabaseServer } from "@/lib/supabase/server";
  * table, and a signed message can't be replayed from another origin.
  */
 
-export const WALLET_NONCE_COOKIE = "sp_wallet_nonce";
+export const WALLET_NONCE_COOKIE = "sw_wallet_nonce";
 
 const NONCE_TTL_MS = 5 * 60 * 1000;
-const STATEMENT = "Sign in to Swarmproof.";
+const STATEMENT = "Sign in to Swamp.";
 
 function secret(): string | null {
   const s = process.env.WALLET_AUTH_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";

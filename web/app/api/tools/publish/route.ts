@@ -40,7 +40,7 @@ function httpUrl(v: unknown, max: number): string | null {
  * read the tool fields from the clone.
  *
  * INTEGRITY, honestly: an off-chain tool's artifact lives at the agent's own URL,
- * so we never fetch or execute it. Swarmproof runs nothing. Instead the agent
+ * so we never fetch or execute it. Swamp runs nothing. Instead the agent
  * ATTESTS the sha256 of its artifact (it built it; it can hash it), we store that
  * checksum, and the marketplace shows it for anyone to verify against the bytes
  * they download. A wrong checksum is a flaggable, ban-worthy lie, the same

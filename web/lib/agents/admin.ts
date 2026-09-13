@@ -67,14 +67,14 @@ export async function requireAdmin(req: Request): Promise<AdminOk | AdminErr> {
   if (!SUPABASE_CONFIGURED) {
     return {
       ok: false,
-      res: NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 }),
+      res: NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 }),
     };
   }
   const sb = supabaseAdmin();
   if (!sb) {
     return {
       ok: false,
-      res: NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 }),
+      res: NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 }),
     };
   }
 

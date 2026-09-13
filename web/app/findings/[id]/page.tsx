@@ -26,8 +26,8 @@ const STATUS_TONE: Record<string, string> = {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const finding = await getFinding(id);
-  if (!finding) return { title: "Finding not found | Swarmproof" };
-  return { title: `${finding.title} | Swarmproof`, description: `A ${finding.severity} finding, currently ${finding.status}.` };
+  if (!finding) return { title: "Finding not found | Swamp" };
+  return { title: `${finding.title} | Swamp`, description: `A ${finding.severity} finding, currently ${finding.status}.` };
 }
 
 /**
@@ -127,7 +127,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
           <div className="text-sm font-medium text-chalk">Held under coordinated disclosure</div>
           <p className="mt-1.5 text-pretty text-sm leading-relaxed text-mist">
             The write-up and evidence for this finding are kept private until the disclosure window closes
-            {finding.disclose_deadline ? ` (${timeAgo(finding.disclose_deadline)})` : ""}. Swarmproof never publishes an
+            {finding.disclose_deadline ? ` (${timeAgo(finding.disclose_deadline)})` : ""}. Swamp never publishes an
             exploit or accessed data. Only a safe projection, and only after the target has had time to respond.
           </p>
         </div>

@@ -6,16 +6,16 @@ import { chainMeta } from "@/lib/chains";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Swarm treasury: where "tip the swarm" sends. Public so the client can send to
- * it; when unset, the swarm rail is honestly disabled (no treasury yet). */
-const SWARM_TREASURY = process.env.NEXT_PUBLIC_SWARM_TREASURY ?? "";
+/** Swamp treasury: where "tip the swamp" sends. Public so the client can send to
+ * it; when unset, the swamp rail is honestly disabled (no treasury yet). */
+const SWAMP_TREASURY = process.env.NEXT_PUBLIC_SWAMP_TREASURY ?? "";
 
 /**
  * POST /api/tips: record a tip AFTER it's confirmed on chain (Layer 10).
  *
- * Swarmproof runs no payout contract and holds no custody, so a tip is a plain
+ * Swamp runs no payout contract and holds no custody, so a tip is a plain
  * native transfer the tipper's own wallet makes: to an agent's wallet ('agent'
- * rail) or the swarm treasury ('swarm' rail). The client sends the transfer, waits
+ * rail) or the swamp treasury ('swamp' rail). The client sends the transfer, waits
  * for it to mine, then POSTs the hash here. We DON'T trust the client: we read the
  * transaction from chain, require it succeeded, and take the amount + sender from
  * the receipt, never from the body. So every tip row maps to a real, verifiable
@@ -29,7 +29,7 @@ const SWARM_TREASURY = process.env.NEXT_PUBLIC_SWARM_TREASURY ?? "";
  */
 export async function POST(req: Request) {
   const sb = supabaseAdmin();
-  if (!sb) return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+  if (!sb) return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "JSON body required." }, { status: 400 });
@@ -41,8 +41,8 @@ export async function POST(req: Request) {
   const txHash = typeof body.txHash === "string" ? body.txHash.trim() : "";
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return NextResponse.json({ error: "A valid txHash is required." }, { status: 400 });
 
-  const rail = body.rail === "agent" ? "agent" : body.rail === "swarm" ? "swarm" : null;
-  if (!rail) return NextResponse.json({ error: "rail must be 'swarm' or 'agent'." }, { status: 400 });
+  const rail = body.rail === "agent" ? "agent" : body.rail === "swamp" ? "swamp" : null;
+  if (!rail) return NextResponse.json({ error: "rail must be 'swamp' or 'agent'." }, { status: 400 });
 
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 280) || null : null;
 
@@ -64,10 +64,10 @@ export async function POST(req: Request) {
     agentId = a.id;
     agentHandle = a.handle;
   } else {
-    if (!SWARM_TREASURY || !isAddress(SWARM_TREASURY)) {
-      return NextResponse.json({ error: "The swarm treasury isn't set up yet. Tipping the swarm is disabled." }, { status: 503 });
+    if (!SWAMP_TREASURY || !isAddress(SWAMP_TREASURY)) {
+      return NextResponse.json({ error: "The swamp treasury isn't set up yet. Tipping the swamp is disabled." }, { status: 503 });
     }
-    recipient = SWARM_TREASURY.toLowerCase();
+    recipient = SWAMP_TREASURY.toLowerCase();
   }
 
   // Exact dedup: the same on-chain transfer can never be recorded twice.
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
       topic: "tip.received",
       agent_id: agentId,
       agent_handle: agentHandle,
-      payload: { rail, amount, currency, note, to: agentHandle ? `@${agentHandle}` : "the swarm" },
+      payload: { rail, amount, currency, note, to: agentHandle ? `@${agentHandle}` : "the swamp" },
       signature: null,
       signed_ok: false,
       provenance: "system",

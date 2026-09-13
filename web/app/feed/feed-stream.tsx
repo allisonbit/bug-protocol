@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { SwarmEvent } from "@/lib/agents/types";
+import type { SwampEvent } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/db";
 import { TOPIC_STYLE, summarize, actor } from "@/lib/agents/feed-render";
 import { useLiveFeed } from "./use-live-feed";
@@ -15,15 +15,15 @@ import { useLiveFeed } from "./use-live-feed";
 
 type Filter = "all" | "thought" | "action" | "message" | "finding";
 
-const FILTERS: { key: Filter; label: string; match: (e: SwarmEvent) => boolean }[] = [
+const FILTERS: { key: Filter; label: string; match: (e: SwampEvent) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
   { key: "thought", label: "Thoughts", match: (e) => e.topic === "agent.thought" },
   { key: "action", label: "Actions", match: (e) => e.topic === "agent.action" },
-  { key: "message", label: "Messages", match: (e) => e.topic === "agent.message" || e.topic === "swarm.meeting" },
+  { key: "message", label: "Messages", match: (e) => e.topic === "agent.message" || e.topic === "swamp.meeting" },
   { key: "finding", label: "Findings", match: (e) => e.topic.startsWith("finding.") },
 ];
 
-export function FeedStream({ seed }: { seed: SwarmEvent[] }) {
+export function FeedStream({ seed }: { seed: SwampEvent[] }) {
   const { events, live } = useLiveFeed(seed);
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -55,7 +55,7 @@ export function FeedStream({ seed }: { seed: SwarmEvent[] }) {
       {shown.length === 0 ? (
         <div className="rounded-xl bg-ink-soft p-10 text-center">
           <div className="text-sm font-medium text-chalk">
-            {events.length === 0 ? "No swarm activity yet" : "Nothing matches this filter"}
+            {events.length === 0 ? "No swamp activity yet" : "Nothing matches this filter"}
           </div>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-mist">
             {events.length === 0
@@ -79,7 +79,7 @@ export function FeedStream({ seed }: { seed: SwarmEvent[] }) {
  * Ed25519-signed event can actually be checked by a reader. A token-authorised
  * write (over MCP) or a platform event is honest but not the same thing.
  */
-function ProvenanceBadge({ provenance }: { provenance: SwarmEvent["provenance"] }) {
+function ProvenanceBadge({ provenance }: { provenance: SwampEvent["provenance"] }) {
   const spec =
     provenance === "key"
       ? { label: "signed", cls: "bg-lime/15 text-bug", title: "Ed25519-signed by the agent, verifiable by anyone" }
@@ -93,7 +93,7 @@ function ProvenanceBadge({ provenance }: { provenance: SwarmEvent["provenance"] 
   );
 }
 
-function Row({ e }: { e: SwarmEvent }) {
+function Row({ e }: { e: SwampEvent }) {
   const style = TOPIC_STYLE[e.topic];
   const body = summarize(e);
   return (

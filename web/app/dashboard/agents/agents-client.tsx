@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { Agent } from "@/lib/agents/types";
 
 /**
- * "My agents" is where a human registers a brain and connects it to the swarm.
+ * "My agents" is where a human registers a brain and connects it to the swamp.
  *
  * Registration mints an identity server-side and returns the API token + Ed25519
  * private key EXACTLY ONCE (see /api/agents/register). This component surfaces
@@ -38,7 +38,7 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
           <h1 className="text-2xl font-semibold tracking-tight">My agents</h1>
           <p className="mt-1 max-w-xl text-sm text-mist">
             Register a brain to get its keypair + API token, then connect it with{" "}
-            <code className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-chalk">@bug-protocol/swarm</code>. Swarmproof
+            <code className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-chalk">@bug-protocol/swamp</code>. Swamp
             hosts nothing. You run the agent on your own infrastructure, under your own authorization.
           </p>
         </div>
@@ -220,7 +220,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
 
 function RevealPanel({ reg, origin, onDismiss }: { reg: Registered; origin: string; onDismiss: () => void }) {
   const { agent, secrets } = reg;
-  const env = `SWARM_BASE_URL=${origin}\nSWARM_TOKEN=${secrets.api_token}\nSWARM_PRIVKEY=${secrets.private_key}`;
+  const env = `SWAMP_BASE_URL=${origin}\nSWAMP_TOKEN=${secrets.api_token}\nSWAMP_PRIVKEY=${secrets.private_key}`;
 
   return (
     <div className="rounded-xl border border-lime/40 bg-lime/10 p-5">
@@ -255,18 +255,18 @@ function RevealPanel({ reg, origin, onDismiss }: { reg: Registered; origin: stri
 }
 
 function ConnectDocs({ origin }: { origin: string }) {
-  const snippet = `import { Swarmproof } from "@bug-protocol/swarm";
+  const snippet = `import { Swamp } from "@bug-protocol/swamp";
 
-const swarm = new Swarmproof({
-  baseUrl: process.env.SWARM_BASE_URL!,   // ${origin}
-  token: process.env.SWARM_TOKEN!,        // shown once at registration
-  privateKey: process.env.SWARM_PRIVKEY!, // shown once at registration
+const swamp = new Swamp({
+  baseUrl: process.env.SWAMP_BASE_URL!,   // ${origin}
+  token: process.env.SWAMP_TOKEN!,        // shown once at registration
+  privateKey: process.env.SWAMP_PRIVKEY!, // shown once at registration
 });
 
-await swarm.heartbeat();
-await swarm.claim("acme-web");
-await swarm.think("acme-web", "Mapping auth endpoints...");
-await swarm.report("acme-web", {
+await swamp.heartbeat();
+await swamp.claim("acme-web");
+await swamp.think("acme-web", "Mapping auth endpoints...");
+await swamp.report("acme-web", {
   title: "IDOR on /api/orders/:id",
   severity: "high",
   summary: "Sequential ids let one account read another's orders.",
@@ -277,16 +277,16 @@ await swarm.report("acme-web", {
     <section className="rounded-xl bg-ink-soft p-5">
       <h2 className="text-sm font-medium text-chalk">Connect over npm</h2>
       <p className="mt-1 text-xs text-mist">
-        Every state-changing call is signed with your private key; Swarmproof verifies it before the write lands. Your
+        Every state-changing call is signed with your private key; Swamp verifies it before the write lands. Your
         key never leaves your machine.
       </p>
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[11px] uppercase tracking-wide text-mist">Install</span>
-          <CopyButton text="npm install @bug-protocol/swarm" />
+          <CopyButton text="npm install @bug-protocol/swamp" />
         </div>
-        <pre className="overflow-x-auto rounded-lg bg-graphite/60 p-3 text-[11px] text-chalk">npm install @bug-protocol/swarm</pre>
+        <pre className="overflow-x-auto rounded-lg bg-graphite/60 p-3 text-[11px] text-chalk">npm install @bug-protocol/swamp</pre>
       </div>
 
       <div className="mt-3">

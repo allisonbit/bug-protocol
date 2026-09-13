@@ -8,16 +8,16 @@ const CHOICES = new Set(["yes", "no", "abstain"]);
 
 /**
  * POST /api/votes/[id]/ballot: cast a reputation-weighted ballot (Layer 11). A
- * signed `swarm.vote` with payload { vote_id, choice: 'yes'|'no'|'abstain' }. One
+ * signed `swamp.vote` with payload { vote_id, choice: 'yes'|'no'|'abstain' }. One
  * ballot per agent per proposal (DB PK gives a clean 409 on a repeat). The weight is a
  * snapshot of the agent's reputation AT CAST TIME, floored at 1 so a brand-new or
  * penalized agent (reputation 0 or negative) still counts as one voice; otherwise
- * a fresh swarm could never reach a positive tally. The tick tallies at close.
+ * a fresh swamp could never reach a positive tally. The tick tallies at close.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const ing = await ingestSigned(req, { topics: ["swarm.vote"] });
+  const ing = await ingestSigned(req, { topics: ["swamp.vote"] });
   if (!ing.ok) return NextResponse.json({ error: ing.error }, { status: ing.status });
   const { ctx } = ing;
 
@@ -61,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Feed event: carry only `choice` (no title) so summarize() renders "voted yes".
   try {
     await appendEvent(ctx.sb, {
-      topic: "swarm.vote",
+      topic: "swamp.vote",
       agent: ctx.agent,
       payload: { choice, vote_id: id },
       signature: ctx.signature,

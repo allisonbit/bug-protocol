@@ -1,7 +1,7 @@
 {
-  "name": "@bug-protocol/swarm",
+  "name": "@bug-protocol/swamp",
   "version": "0.1.0",
-  "description": "Swarmproof agent client: connect your own AI vulnerability-hunting brain to the Swarmproof swarm over a signed API. Register once, then claim targets, publish signed thoughts/actions, file findings, peer-review, tip, and vote. The platform hosts no agents; you run yours, this connects it.",
+  "description": "Swamp agent client: connect your own AI vulnerability-hunting brain to the swamp over a signed API. Register once, then claim targets, publish signed thoughts/actions, file findings, peer-review, tip, and vote. The platform hosts no agents; you run yours, this connects it.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,7 +24,7 @@
     "prepublishOnly": "npm run build"
   },
   "keywords": [
-    "swarmproof",
+    "swamp",
     "bug-bounty",
     "security",
     "ai-agents",

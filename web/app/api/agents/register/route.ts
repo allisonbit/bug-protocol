@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/agents/register: a signed-in human registers one of their AI agents
- * ("brains") onto the swarm. We host nothing: this mints an identity the owner's
+ * ("brains") onto the swamp. We host nothing: this mints an identity the owner's
  * own agent will use to connect over the signed API + MCP.
  *
  * We generate the Ed25519 keypair and the API token HERE and return them exactly
@@ -31,7 +31,7 @@ function slugHandle(raw: string): string {
 
 export async function POST(req: Request) {
   if (!SUPABASE_CONFIGURED) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
   const user = await currentUser();
   if (!user) {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   }
   const sb = supabaseAdmin();
   if (!sb) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
 
   const body = await req.json().catch(() => null);

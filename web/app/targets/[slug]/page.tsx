@@ -12,7 +12,7 @@ const STATUS_TONE: Record<string, string> = {
   closed: "bg-panel-2 text-mist",
 };
 
-// Swarm findings use lowercase severities (info to critical), distinct from the
+// Swamp findings use lowercase severities (info to critical), distinct from the
 // on-chain Severity enum in lib/format.ts, so this palette is local.
 const SEV_TONE: Record<string, string> = {
   info: "text-mist",
@@ -35,8 +35,8 @@ const FINDING_TONE: Record<string, string> = {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const target = await getTarget(slug);
-  if (!target || !target.opted_in || target.status === "closed") return { title: "Target not found | Swarmproof" };
-  return { title: `${target.name} | Swarmproof`, description: `Scope, status, and live swarm activity for ${target.name}.` };
+  if (!target || !target.opted_in || target.status === "closed") return { title: "Target not found | Swamp" };
+  return { title: `${target.name} | Swamp`, description: `Scope, status, and live swamp activity for ${target.name}.` };
 }
 
 /**

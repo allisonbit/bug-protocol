@@ -8,21 +8,21 @@ import { Button, Input } from "@/components/ui";
 import { humanizeError } from "@/lib/useTx";
 
 /** Public so the client can send to it; the tips API reads the SAME value and
- * verifies tx.to against it. When unset, the swarm rail is honestly disabled. */
-const TREASURY = process.env.NEXT_PUBLIC_SWARM_TREASURY ?? "";
+ * verifies tx.to against it. When unset, the swamp rail is honestly disabled. */
+const TREASURY = process.env.NEXT_PUBLIC_SWAMP_TREASURY ?? "";
 
-type Rail = "swarm" | "agent";
+type Rail = "swamp" | "agent";
 type Phase = "idle" | "signing" | "pending" | "recording" | "done" | "error";
 
 /**
- * Tip the swarm or a single agent (Layer 10). Swarmproof holds no custody and
+ * Tip the swamp or a single agent (Layer 10). Swamp holds no custody and
  * runs no payout contract, so a tip is a plain native transfer the tipper's own
- * wallet makes: a transfer to the swarm treasury or the agent's wallet. We send it, wait
+ * wallet makes: a transfer to the swamp treasury or the agent's wallet. We send it, wait
  * for it to mine, then POST the hash to /api/tips, which re-reads the transfer
  * from chain before recording it. Nothing is ever shown as sent that didn't
  * actually move on chain.
  *
- * Honest states, no dead buttons that lie: the swarm rail is disabled with a
+ * Honest states, no dead buttons that lie: the swamp rail is disabled with a
  * reason when no treasury is configured; the agent rail is disabled when the
  * agent hasn't published a wallet; and if the transfer confirms but recording
  * fails, we say so plainly (the money moved; the ledger row didn't) rather than
@@ -57,14 +57,14 @@ export function TipButton({
 
   // Why the rail can't be used right now. Shown instead of a button that lies.
   const disabledReason =
-    rail === "swarm" && (!TREASURY || !isAddress(TREASURY))
-      ? "Tipping the swarm isn't enabled on this deployment yet. No treasury address is set."
+    rail === "swamp" && (!TREASURY || !isAddress(TREASURY))
+      ? "Tipping the swamp isn't enabled on this deployment yet. No treasury address is set."
       : rail === "agent" && (!agentWallet || !isAddress(agentWallet))
         ? `${agentHandle ? `@${agentHandle}` : "This agent"} hasn't published a wallet, so it can't receive tips yet.`
         : null;
 
   const busy = phase === "signing" || phase === "pending" || phase === "recording";
-  const trigger = label ?? (rail === "swarm" ? "Tip the swarm" : `Tip @${agentHandle}`);
+  const trigger = label ?? (rail === "swamp" ? "Tip the swamp" : `Tip @${agentHandle}`);
 
   async function submit() {
     setError(null);
@@ -128,7 +128,7 @@ export function TipButton({
     return (
       <div>
         <Button
-          variant={rail === "swarm" ? "primary" : "ghost"}
+          variant={rail === "swamp" ? "primary" : "ghost"}
           className="w-full"
           disabled={!!disabledReason}
           onClick={() => setOpen(true)}
@@ -145,7 +145,7 @@ export function TipButton({
     return (
       <div className="rounded-lg border border-bug-dim/40 bg-bug-dim/5 p-4 text-sm">
         <div className="text-chalk">
-          Tip sent to {rail === "swarm" ? "the swarm" : `@${agentHandle}`}. Thank you.
+          Tip sent to {rail === "swamp" ? "the swamp" : `@${agentHandle}`}. Thank you.
         </div>
         {hash && (
           <a className="mt-1 block text-xs text-bug underline underline-offset-4" href={txUrlOn(chainId, hash)}>
@@ -212,7 +212,7 @@ export function TipButton({
           </Button>
           <p className="mt-2 text-[11px] leading-relaxed text-mist">
             Sends {sym} on {meta.label} to{" "}
-            {rail === "swarm" ? "the swarm treasury" : `@${agentHandle}`}. Verified on chain before it&apos;s recorded.
+            {rail === "swamp" ? "the swamp treasury" : `@${agentHandle}`}. Verified on chain before it&apos;s recorded.
           </p>
         </>
       )}

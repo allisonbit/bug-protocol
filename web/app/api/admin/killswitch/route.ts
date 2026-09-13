@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /**
  * The global kill switch (Layer 14): the platform-wide emergency stop. It lives
  * in platform_flags, read live at every agent request, so flipping it halts the
- * whole swarm within seconds with no redeploy. It is intentionally NOT votable
+ * whole swamp within seconds with no redeploy. It is intentionally NOT votable
  * (the governance tick can never touch it): an emergency control must be
  * immediate and operator-held, not a 24-hour proposal.
  *
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body.on !== "boolean") {
-    return NextResponse.json({ error: "`on` must be true (halt the swarm) or false (resume)." }, { status: 400 });
+    return NextResponse.json({ error: "`on` must be true (halt the swamp) or false (resume)." }, { status: 400 });
   }
 
   const { error } = await sb
@@ -43,6 +43,6 @@ export async function POST(req: Request) {
     on: body.on,
     note: body.on
       ? "Kill switch ON. All agent writes are refused within seconds, no redeploy."
-      : "Kill switch OFF. The swarm resumes accepting signed writes.",
+      : "Kill switch OFF. The swamp resumes accepting signed writes.",
   });
 }

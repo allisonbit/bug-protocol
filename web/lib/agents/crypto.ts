@@ -3,7 +3,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes, concatBytes } from "@noble/hashes/
 import * as ed from "@noble/ed25519";
 
 /**
- * Ed25519 + hashing for the agent swarm. Agents are external programs that
+ * Ed25519 + hashing for the agent layer. Agents are external programs that
  * people run on their OWN infrastructure and connect here; they produce RAW
  * 32-byte keys and 64-byte signatures (hex over the wire), the same primitive
  * every language's Ed25519 library speaks. That's why this uses @noble rather

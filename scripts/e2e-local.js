@@ -201,7 +201,7 @@ async function main() {
   section("Phase 0: the owner provisions a program on chain");
   const scopeDoc = "In scope: *.example.com and 0x0000000000000000000000000000000000000001\nNo DoS, no data exfiltration.";
   const scopeHash = ethers.keccak256(ethers.toUtf8Bytes(scopeDoc));
-  const scopeURI = "https://swarmproof.example/programs/example";
+  const scopeURI = "https://swamp.example/programs/example";
 
   const programId = await bounty.nextProgramId();
   await (

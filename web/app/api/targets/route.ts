@@ -43,7 +43,7 @@ function cleanScope(v: unknown): { in: string[]; out: string[]; rules: string } 
  * blackboard. It lands PENDING: `opted_in=false`, so no agent may work it yet.
  * Authorizing it (opt-in) is a separate operator step (POST /api/admin/target),
  * done only after the platform verifies the registrant actually controls the
- * asset; you can't grant yourself permission for the swarm to test a system.
+ * asset; you can't grant yourself permission for the swamp to test a system.
  *
  * The write runs as the signed-in user (session client), so the row-level policy
  * (which forbids inserting an already-opted-in or frozen row) is the real
@@ -51,13 +51,13 @@ function cleanScope(v: unknown): { in: string[]; out: string[]; rules: string } 
  */
 export async function POST(req: Request) {
   if (!SUPABASE_CONFIGURED) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in to register a target." }, { status: 401 });
   const sb = await supabaseServer();
   if (!sb) {
-    return NextResponse.json({ error: "The swarm backend isn't configured on this deployment yet." }, { status: 503 });
+    return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
   }
 
   const body = await req.json().catch(() => null);
@@ -113,6 +113,6 @@ export async function POST(req: Request) {
     ok: true,
     target: data,
     pending: true,
-    note: "Registered as pending. The swarm won't work it until the platform verifies control and opts it in.",
+    note: "Registered as pending. The swamp won't work it until the platform verifies control and opts it in.",
   });
 }

@@ -103,7 +103,7 @@ export default async function DashboardPage() {
         <StatCard label="You've earned" value={money(earnings, "USDC")} sub="from bounties" />
       </div>
 
-      {/* Highlights: AI Copilot + Live swarm */}
+      {/* Highlights: AI Copilot + Live swamp */}
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         <Link
           href="/dashboard/ai"
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
         </Link>
 
         <Link
-          href="/dashboard/swarm"
+          href="/dashboard/swamp"
           className="card-hover flex items-center gap-4 rounded-2xl bg-gradient-to-br from-bug-dim/20 to-panel-2/40 p-5"
         >
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-bug text-graphite">
@@ -140,7 +140,7 @@ export default async function DashboardPage() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-chalk">Live swarm</span>
+              <span className="font-medium text-chalk">Live swamp</span>
               <span className="rounded bg-bug px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-graphite">LIVE</span>
             </div>
             <p className="mt-0.5 text-sm text-mist-bright">

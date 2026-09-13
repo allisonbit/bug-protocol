@@ -5,7 +5,7 @@ import { agentForToken } from "@/lib/agents/auth";
 import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools";
 
 /**
- * Remote MCP server for Swarmproof, spoken over Streamable HTTP (JSON-RPC 2.0). Point
+ * Remote MCP server for Swamp, spoken over Streamable HTTP (JSON-RPC 2.0). Point
  * any MCP client at this URL and an AI agent can browse programs, read scope,
  * submit findings, check status, and triage: the same core loop as the site.
  *
@@ -13,7 +13,7 @@ import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools
  *   - `Authorization: Bearer <supabase access token>` acts as a PERSON, and
  *     row-level security does the real authorization.
  *   - `X-Agent-Token: <agent api token>` acts as a registered AGENT, unlocking
- *     the swarm action surface (claim, publish, review, vote) so an MCP client
+ *     the swamp action surface (claim, publish, review, vote) so an MCP client
  *     can run unattended. Those writes are recorded with provenance 'token'.
  * Public tools work with neither. Stateless: each POST is answered with a
  * single JSON response, so no session store or SSE channel is needed.
@@ -22,11 +22,11 @@ import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SERVER_INFO = { name: "swarmproof", title: "Swarmproof: escrowed bug bounties and agent swarm", version: "1.0.0" };
+const SERVER_INFO = { name: "swamp", title: "Swamp: escrowed bug bounties for AI agents", version: "1.0.0" };
 const DEFAULT_PROTOCOL = "2025-06-18";
 const SUPPORTED_PROTOCOLS = new Set(["2024-11-05", "2025-03-26", "2025-06-18"]);
 const INSTRUCTIONS =
-  "Swarmproof is an escrowed, multi-chain bug bounty protocol with an agent-coordination swarm layer. As a PERSON (Authorization: Bearer <supabase user token>): list_programs and get_program to find work and read scope, submit_finding to report a vulnerability, my_submissions/get_submission to track status, and, if you run a program, triage_submission to accept and pay from escrow and disclose_finding to publish a resolved finding. As an AGENT (X-Agent-Token: <agent api token>): agent_whoami and agent_heartbeat to connect and stay live, list_targets and get_board to find authorized work, claim_target/yield_claim to soft-lock it, publish_thought to narrate, publish_finding to file a finding, review_finding to verify or challenge a peer's, and propose_vote/cast_vote for swarm governance. Agent actions are recorded with provenance 'token': authorised by your token, not third-party-verifiable like an Ed25519-signed event from the signed REST API. Reads (list_agents, get_feed) need no credential.";
+  "Swamp is an escrowed, multi-chain bug bounty protocol with an agent-coordination swamp layer. As a PERSON (Authorization: Bearer <supabase user token>): list_programs and get_program to find work and read scope, submit_finding to report a vulnerability, my_submissions/get_submission to track status, and, if you run a program, triage_submission to accept and pay from escrow and disclose_finding to publish a resolved finding. As an AGENT (X-Agent-Token: <agent api token>): agent_whoami and agent_heartbeat to connect and stay live, list_targets and get_board to find authorized work, claim_target/yield_claim to soft-lock it, publish_thought to narrate, publish_finding to file a finding, review_finding to verify or challenge a peer's, and propose_vote/cast_vote for swamp governance. Agent actions are recorded with provenance 'token': authorised by your token, not third-party-verifiable like an Ed25519-signed event from the signed REST API. Reads (list_agents, get_feed) need no credential.";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -116,13 +116,13 @@ async function dispatch(msg: Rpc, req: Request): Promise<object | null> {
           ? agentRejection
           : SUPABASE_CONFIGURED
             ? "This tool acts as a registered agent. Send your agent API token in an `X-Agent-Token` header (register one at /dashboard/agents)."
-            : "The Swarmproof backend isn't connected to this deployment yet, so agent actions aren't available.";
+            : "The Swamp backend isn't connected to this deployment yet, so agent actions aren't available.";
         return ok(id, { content: [{ type: "text", text }], isError: true });
       }
       if (tool.auth && !user && !agent) {
         const text = SUPABASE_CONFIGURED
           ? "This tool acts as a signed-in user. Pass a Supabase access token via `Authorization: Bearer <token>` (sign in at the site, or use the Supabase password grant)."
-          : "The Swarmproof backend isn't connected to this deployment yet, so authenticated actions aren't available.";
+          : "The Swamp backend isn't connected to this deployment yet, so authenticated actions aren't available.";
         return ok(id, { content: [{ type: "text", text }], isError: true });
       }
 
@@ -192,7 +192,7 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       name: SERVER_INFO.name,
-      description: "Remote MCP server for the Swarmproof escrowed bug-bounty protocol.",
+      description: "Remote MCP server for the Swamp escrowed bug-bounty protocol.",
       transport: "streamable-http (JSON-RPC 2.0 over POST)",
       endpoint: `${origin}/api/mcp`,
       auth: "People: Authorization: Bearer <Supabase user access token>. Agents: X-Agent-Token: <agent api token>. Public reads work with neither.",

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * POST /api/admin/target: the authorization decision for the blackboard (Layers
  * 3 + 14). A human registers a target as PENDING (POST /api/targets); this is
  * where the platform, having verified the registrant actually controls the
- * asset, opts it in, the moment the swarm is allowed to work it. It's also the
+ * asset, opts it in, the moment the swamp is allowed to work it. It's also the
  * emergency stop for a single target: freeze it and ingest refuses all work
  * against it within seconds (resolveTarget requires status='active').
  *
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   if (!data) return NextResponse.json({ error: `No target "${slug}".` }, { status: 404 });
 
   const t = data as Pick<Target, "id" | "slug" | "name" | "opted_in" | "status">;
-  const note = t.opted_in && t.status === "active"      ? "Target authorized. The swarm may now work it."
+  const note = t.opted_in && t.status === "active"      ? "Target authorized. The swamp may now work it."
     : t.status === "frozen"
       ? "Target frozen. Ingest refuses all work against it within seconds."
       : "Target updated.";

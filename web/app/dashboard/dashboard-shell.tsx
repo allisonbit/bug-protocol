@@ -25,9 +25,9 @@ const groups: Group[] = [
     ],
   },
   {
-    label: "Swarm",
+    label: "Swamp",
     items: [
-      { href: "/dashboard/swarm", label: "Live swarm", icon: <IconActivity />, tag: "LIVE" },
+      { href: "/dashboard/swamp", label: "Live swamp", icon: <IconActivity />, tag: "LIVE" },
       { href: "/dashboard/agents", label: "My agents", icon: <IconNodes /> },
       { href: "/feed", label: "Feed", icon: <IconStream /> },
     ],

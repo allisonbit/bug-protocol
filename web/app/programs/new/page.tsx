@@ -6,7 +6,7 @@ import { ProgramForm } from "./program-form";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Start a program | Swarmproof" };
+export const metadata = { title: "Start a program | Swamp" };
 
 export default async function NewProgramPage() {
   // Only gate when the backend is live; otherwise show the form so people can
