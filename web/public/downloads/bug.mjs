@@ -7,16 +7,20 @@
 //   bug salt                         random 32-byte hex (commit salt)
 //   bug encrypt  <file> [--pass p]   AES-GCM/PBKDF2 envelope (writes file.enc.json)
 //   bug decrypt  <file.enc.json>     decrypt an envelope (--pass p / BUG_PASS)
-//   bug mcp-config [--bounty x] [--chain c] [--rpc r]
+//   bug mcp-config [--url u] [--token t]
 //
 // The encrypt/decrypt envelope and the checksum are byte-for-byte identical to
 // the in-browser tools at /tools, so files move freely between them. Chain
-// actions (submit, publish, triage, claim) live in the full CLI (`npm i -g
-// @bug-protocol/cli`) and the MCP server, which need a signer.
+// actions (submit, publish, triage, claim) need a signer and are not in this
+// file: agents reach them over the hosted MCP server instead.
 
 import { createHash, pbkdf2Sync, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
+
+/** This deployment. Override per-command with --url when pointing elsewhere. */
+const SITE = "https://web-opal-one-70.vercel.app";
+const REPO = "https://github.com/allisonbit/bug-protocol";
 
 const argv = process.argv.slice(2);
 const cmd = (argv[0] || "help").toLowerCase();
@@ -123,17 +127,17 @@ switch (cmd) {
     break;
   }
   case "mcp-config": {
+    // Swamp runs a hosted MCP server: a remote HTTP endpoint, not a local
+    // process, so there is no command or env block to emit. Override the host
+    // with --url if you are pointing at a different deployment.
+    const url = opt("url") || `${SITE}/api/mcp`;
+    const token = opt("token");
     const cfg = {
       mcpServers: {
-        "bug-protocol": {
-          command: "npx",
-          args: ["-y", "@bug-protocol/mcp"],
-          env: {
-            BOUNTY_ADDRESS: opt("bounty") || "0xYourDeployedBugBountyContract",
-            CHAIN: opt("chain") || "robinhood",
-            RPC_URL: opt("rpc") || "https://rpc.mainnet.chain.robinhood.com",
-            PRIVATE_KEY: "0xyour_hunter_key_for_write_actions",
-          },
+        swamp: {
+          type: "http",
+          url,
+          headers: token ? { "X-Agent-Token": token } : {},
         },
       },
     };
@@ -150,10 +154,12 @@ switch (cmd) {
         "  bug salt                       random 32-byte commit salt",
         "  bug encrypt  <file> [--pass p] AES-GCM report envelope, writes file.enc.json",
         "  bug decrypt  <file.enc.json>   decrypt (--pass p or BUG_PASS)",
-        "  bug mcp-config [--bounty x] [--chain c] [--rpc r]",
+        "  bug mcp-config [--url u] [--token t]",
         "",
-        "Chain actions (submit, publish, triage, claim): npm i -g @bug-protocol/cli",
-        "Docs: https://github.com/allisonbit/bug-protocol",
+        "Chain actions (submit, publish, triage, claim) are not in this file: they",
+        `need a signer. Agents connect over MCP at ${SITE}/api/mcp — see`,
+        `${SITE}/connect for the tool list and the signing model.`,
+        `Source: ${REPO}`,
       ].join("\n"),
     );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useBounty } from "@/lib/reads";
 import { downloadText } from "@/lib/commit";
+import { MCP_ENDPOINT } from "@/lib/site";
 import { Button, Card, Copyable, Field, Input, SectionTitle } from "@/components/ui";
-import { mcpConfig, MCP_TOOLS, MCP_PACKAGE, CLI_PACKAGE, REPO_URL, reconKitInstaller } from "./kit-templates";
+import { CLI_ENV, CLI_INSTALL, mcpConfig, REPO_URL, reconKitInstaller } from "./kit-templates";
 
 /** Multi-line code block with a copy button. */
 function CodeBlock({ text, label }: { text: string; label?: string }) {
@@ -48,58 +48,55 @@ export function ConnectKit() {
 
 /** Wire the protocol into any MCP client so AI agents can hunt + triage. */
 function McpPanel() {
-  const { address: bounty, meta, isDeployed } = useBounty();
-  const [addr, setAddr] = useState("");
-  const [chain, setChain] = useState("");
-  const [rpc, setRpc] = useState("");
-
-  const cfg = mcpConfig({
-    bounty: addr || (isDeployed ? (bounty as string) : ""),
-    chain: chain || String(meta.chain.id),
-    rpc,
-  });
-  const json = JSON.stringify(cfg, null, 2);
+  const [token, setToken] = useState("");
+  const json = JSON.stringify(mcpConfig({ agentToken: token }), null, 2);
 
   return (
     <Panel title="Connect an AI agent (MCP)">
       <p className="text-xs leading-relaxed text-mist">
-        The <span className="text-chalk">{MCP_PACKAGE}</span> server exposes the whole hunt/triage loop as MCP
-        tools. Paste this into Claude Desktop (or any MCP client). Read-only tools need no key; write tools
-        need a signer.
+        Swamp runs a hosted MCP server, so there is no local process to start and no key to configure
+        here. Paste this into an MCP client that supports a remote HTTP server. Reads need no
+        credential at all; agent tools need a token.
       </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Field label="BOUNTY_ADDRESS">
-          <Input value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={isDeployed ? (bounty as string) : "0x..."} />
-        </Field>
-        <Field label="CHAIN">
-          <Input value={chain} onChange={(e) => setChain(e.target.value)} placeholder={`${meta.chain.id} / ${meta.label.toLowerCase()}`} />
-        </Field>
-        <Field label="RPC_URL (optional)">
-          <Input value={rpc} onChange={(e) => setRpc(e.target.value)} placeholder="defaults to chain RPC" />
+      <div className="mt-4 rounded border border-line bg-ink px-3 py-2">
+        <Copyable value={MCP_ENDPOINT} />
+      </div>
+      <div className="mt-4">
+        <Field
+          label="Agent token (optional)"
+          hint="Only for the tools that act as an agent. Register one at /dashboard/agents; it is shown once."
+        >
+          <Input value={token} onChange={(e) => setToken(e.target.value)} placeholder="paste an agent token" />
         </Field>
       </div>
       <div className="mt-4">
         <CodeBlock text={json} />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Button variant="ghost" onClick={() => downloadText("bug-protocol.mcp.json", json, "application/json")}>
+        <Button variant="ghost" onClick={() => downloadText("swamp.mcp.json", json, "application/json")}>
           download config
         </Button>
-        <span className="text-[11px] text-mist">
-          or run directly: <span className="font-mono text-chalk">npx -y {MCP_PACKAGE}</span>
-        </span>
+        <a className="text-[11px] text-bug underline" href="/connect">
+          the {MCP_TOOL_COUNT} tools, and how signing works
+        </a>
       </div>
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {MCP_TOOLS.map((t) => (
-          <div key={t.name} className="rounded border border-line bg-ink px-2.5 py-1.5 text-[11px]">
-            <span className="font-mono text-chalk">{t.name}</span>
-            <span className={`ml-1.5 ${t.write ? "text-warn" : "text-bug-dim"}`}>{t.write ? "write" : "read"}</span>
-          </div>
-        ))}
-      </div>
+      <p className="mt-5 text-xs leading-relaxed text-mist">
+        Every tool the server exposes is listed on{" "}
+        <a className="text-bug underline" href="/connect">
+          /connect
+        </a>
+        , including which credential each one needs.
+      </p>
     </Panel>
   );
 }
+
+/**
+ * Verified against the live server. `/connect` renders the authoritative list
+ * straight from the tool registry; this is only a headline count, and the same
+ * `tools/list` call on that page is what proves it.
+ */
+const MCP_TOOL_COUNT = 22;
 
 /** The terminal path: an instant zero-dep script, or the full signing CLI. */
 function CliPanel() {
@@ -130,13 +127,12 @@ function CliPanel() {
       </div>
       <p className="mt-5 text-xs leading-relaxed text-mist">
         <span className="text-chalk">Full CLI</span> (signs transactions: submit, reveal, triage, claim on any
-        chain, ETH or USDC):
+        chain, ETH or USDC). <span className="text-warn">Not published to npm yet</span> — install it from
+        the repo:
       </p>
       <div className="mt-3 space-y-2">
-        <CodeBlock text={`npm i -g ${CLI_PACKAGE}`} />
-        <CodeBlock
-          text={["export BUG_BOUNTY_ADDRESS=0xYourContract", "export BUG_CHAIN=robinhood", "export BUG_PRIVATE_KEY=0x...   # write actions only", "bug --help"].join("\n")}
-        />
+        <CodeBlock text={CLI_INSTALL} />
+        <CodeBlock text={CLI_ENV} />
       </div>
     </Panel>
   );

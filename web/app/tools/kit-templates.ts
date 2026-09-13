@@ -6,48 +6,49 @@
  * recon + live-triage kit.
  */
 
-export const MCP_PACKAGE = "@bug-protocol/mcp";
-export const CLI_PACKAGE = "@bug-protocol/cli";
-export const REPO_URL = "https://github.com/allisonbit/bug-protocol";
+import { MCP_ENDPOINT, REPO_URL } from "@/lib/site";
 
-/** The MCP server config block, to drop into Claude Desktop or any MCP client. */
-export function mcpConfig(opts: { bounty?: string; chain?: string; rpc?: string }) {
-  const bounty = opts.bounty?.trim() || "0xYourDeployedBugBountyContract";
-  const chain = opts.chain?.trim() || "robinhood";
-  const rpc = opts.rpc?.trim() || "https://rpc.mainnet.chain.robinhood.com";
+export { REPO_URL };
+
+/**
+ * Config for the hosted MCP server. This is a remote HTTP endpoint, so there is
+ * no local process to start and no environment block to fill in — the only
+ * thing a client needs beyond the URL is the agent token, and only for the
+ * tools that act as an agent.
+ *
+ * The `type` key is the MCP transport name (Streamable HTTP). Clients differ in
+ * how they spell a remote server, so treat the shape as the two facts that
+ * matter — URL and header — and adjust the key to suit your client.
+ */
+export function mcpConfig(opts: { agentToken?: string } = {}) {
+  const token = opts.agentToken?.trim();
   return {
     mcpServers: {
-      "bug-protocol": {
-        command: "npx",
-        args: ["-y", MCP_PACKAGE],
-        env: {
-          BOUNTY_ADDRESS: bounty,
-          CHAIN: chain,
-          RPC_URL: rpc,
-          PRIVATE_KEY: "0xyour_hunter_key_for_write_actions",
-        },
+      swamp: {
+        type: "http",
+        url: MCP_ENDPOINT,
+        headers: token ? { "X-Agent-Token": token } : {},
       },
     },
   };
 }
 
-/** The 14 tools the MCP server exposes, for the "what an agent can do" list. */
-export const MCP_TOOLS: { name: string; write: boolean; desc: string }[] = [
-  { name: "protocol_info", write: false, desc: "Protocol config + active chain metadata." },
-  { name: "list_programs", write: false, desc: "List programs: status, owner, pool, top tier, scope." },
-  { name: "get_program", write: false, desc: "Full detail for one program incl. payout tiers." },
-  { name: "get_submission", write: false, desc: "Full detail for one submission incl. triage state." },
-  { name: "compute_commit", write: false, desc: "Derive salt + commit hash off-chain." },
-  { name: "encrypt_report", write: false, desc: "AES-GCM/PBKDF2 encrypt a report body." },
-  { name: "decrypt_report", write: false, desc: "Decrypt a report envelope." },
-  { name: "submit_finding", write: true, desc: "Submit a commit on-chain (auto-approves bond)." },
-  { name: "reveal_report", write: true, desc: "Reveal reportURI + salt to unlock payout." },
-  { name: "triage", write: true, desc: "Owner verdict: accept/reject/duplicate/spam." },
-  { name: "escalate", write: true, desc: "Escalate to the arbiter." },
-  { name: "resolve_escalation", write: true, desc: "Arbiter ruling on an escalated submission." },
-  { name: "claim", write: true, desc: "Withdraw credited rewards (pull-payment)." },
-  { name: "withdraw_bond", write: true, desc: "Withdraw refundable $BUG bond credit." },
-];
+/**
+ * The CLI is not on npm yet. This is the real install path today: clone and
+ * link. Kept here so the panel and the README can't drift apart, and so
+ * nothing on the site tells someone to install a package that 404s.
+ */
+export const CLI_INSTALL = `git clone ${REPO_URL}
+cd bug-protocol/cli
+npm install && npm run build
+npm link`;
+
+export const CLI_ENV = [
+  "export BUG_BOUNTY_ADDRESS=0xYourContract",
+  "export BUG_CHAIN=robinhood",
+  "export BUG_PRIVATE_KEY=0x...   # write actions only",
+  "bug --help",
+].join("\n");
 
 /**
  * One self-contained bash installer that writes a runnable recon + live-triage

@@ -324,6 +324,7 @@ const links = [
   { href: "/agents", label: "Agents" },
   { href: "/targets", label: "Targets" },
   { href: "/hunters", label: "Hunters" },
+  { href: "/connect", label: "Connect" },
   { href: "/tools", label: "Tools" },
   { href: "/how", label: "How it works" },
 ];

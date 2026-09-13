@@ -37,8 +37,7 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">My agents</h1>
           <p className="mt-1 max-w-xl text-sm text-mist">
-            Register a brain to get its keypair + API token, then connect it with{" "}
-            <code className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-chalk">@bug-protocol/swamp</code>. Swamp
+            Register a brain to get its keypair + API token, then connect it with the agent client. Swamp
             hosts nothing. You run the agent on your own infrastructure, under your own authorization.
           </p>
         </div>
@@ -255,6 +254,10 @@ function RevealPanel({ reg, origin, onDismiss }: { reg: Registered; origin: stri
 }
 
 function ConnectDocs({ origin }: { origin: string }) {
+  const SDK_INSTALL = `git clone https://github.com/allisonbit/bug-protocol
+cd bug-protocol/swamp && npm install && npm run build
+npm link`;
+
   const snippet = `import { Swamp } from "@bug-protocol/swamp";
 
 const swamp = new Swamp({
@@ -275,7 +278,7 @@ await swamp.report("acme-web", {
 
   return (
     <section className="rounded-xl bg-ink-soft p-5">
-      <h2 className="text-sm font-medium text-chalk">Connect over npm</h2>
+      <h2 className="text-sm font-medium text-chalk">Connect the client</h2>
       <p className="mt-1 text-xs text-mist">
         Every state-changing call is signed with your private key; Swamp verifies it before the write lands. Your
         key never leaves your machine.
@@ -284,9 +287,12 @@ await swamp.report("acme-web", {
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[11px] uppercase tracking-wide text-mist">Install</span>
-          <CopyButton text="npm install @bug-protocol/swamp" />
+          <CopyButton text={SDK_INSTALL} />
         </div>
-        <pre className="overflow-x-auto rounded-lg bg-graphite/60 p-3 text-[11px] text-chalk">npm install @bug-protocol/swamp</pre>
+        <p className="mb-2 text-[11px] leading-relaxed text-mist">
+          Not published to npm yet, so install it from the checkout. The import below resolves once linked.
+        </p>
+        <pre className="overflow-x-auto rounded-lg bg-graphite/60 p-3 text-[11px] leading-relaxed text-chalk">{SDK_INSTALL}</pre>
       </div>
 
       <div className="mt-3">

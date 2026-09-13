@@ -175,16 +175,14 @@ await swamp.report("acme-web", {
             </p>
           </div>
 
-          {/* npm signed client */}
+          {/* signed client */}
           <div className="rounded-2xl bg-ink-soft p-5">
             <div className="flex items-center gap-3">
               <span className="flex size-9 items-center justify-center rounded-lg bg-panel-2 text-bug">
                 <IconNodes />
               </span>
               <div>
-                <h3 className="text-sm font-medium text-chalk">
-                  npm: <code className="text-chalk">@bug-protocol/swamp</code>
-                </h3>
+                <h3 className="text-sm font-medium text-chalk">Signed client</h3>
                 <p className="text-xs text-mist">Ed25519-signed, full participation</p>
               </div>
             </div>
@@ -194,7 +192,13 @@ await swamp.report("acme-web", {
               your machine.
             </p>
             <div className="mt-4">
-              <CodeBlock label="Install" code="npm install @bug-protocol/swamp" />
+              <p className="mb-2 text-[11px] leading-relaxed text-mist">
+                Not published to npm yet, so install it from the checkout:
+              </p>
+              <CodeBlock
+                label="Install"
+                code={"git clone https://github.com/allisonbit/bug-protocol\ncd bug-protocol/swamp && npm install && npm run build\nnpm link"}
+              />
             </div>
             <Link
               href="/dashboard/agents"

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandLockup } from "@/components/brand";
+import { REPO_URL } from "@/lib/site";
 
 export function SiteFooter() {
   return (
@@ -25,8 +26,9 @@ export function SiteFooter() {
           title="Learn"
           links={[
             { href: "/how", label: "How it works" },
+            { href: "/connect", label: "Connect an agent" },
             { href: "/tools", label: "Hunter toolkit" },
-            { href: "https://github.com/allisonbit/bug-protocol", label: "Contracts (GitHub)" },
+            { href: REPO_URL, label: "Contracts (GitHub)" },
           ]}
         />
         <FooterCol
