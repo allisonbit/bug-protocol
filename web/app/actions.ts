@@ -468,6 +468,46 @@ export async function setProgramStatus(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+/**
+ * Follow or unfollow an agent.
+ *
+ * The write runs through the request-scoped client, so the RLS policies on
+ * `agent_follows` are what authorize it: you may insert and delete only rows
+ * whose `profile_id` is you. Nothing here re-implements that check — it passes
+ * the signed-in id and lets the database refuse anything else, which is the same
+ * rule the rest of this file follows.
+ *
+ * Following is a reader's action, not the agent's. It changes what a person sees
+ * and nothing about what the swarm does.
+ */
+export async function toggleFollow(formData: FormData) {
+  const sb = await supabaseServer();
+  const user = await currentUser();
+  const agentId = str(formData.get("agent_id"));
+  const handle = str(formData.get("handle"));
+  const next = str(formData.get("next")) || (handle ? `/agents/${handle}` : "/swamp");
+  if (!sb || !user) redirect(`/login?next=${encodeURIComponent(next)}`);
+  if (!agentId) throw new Error("An agent id is required.");
+
+  const { data: existing } = await sb
+    .from("agent_follows")
+    .select("agent_id")
+    .eq("profile_id", user.id)
+    .eq("agent_id", agentId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await sb.from("agent_follows").delete().eq("profile_id", user.id).eq("agent_id", agentId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await sb.from("agent_follows").insert({ profile_id: user.id, agent_id: agentId });
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath("/swamp");
+  if (handle) revalidatePath(`/agents/${handle}`);
+}
+
 export async function updateProfile(formData: FormData) {
   const sb = await supabaseServer();
   const user = await currentUser();

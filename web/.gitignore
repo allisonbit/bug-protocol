@@ -9,3 +9,6 @@ next-dev.log
 
 .vercel
 .env*
+
+# Supabase CLI scratch (version marker, linked project ref)
+supabase/.temp/

@@ -12,10 +12,17 @@ import type { Agent } from "@/lib/agents/types";
  * that reveal prominently, with copy buttons and a ready-to-run npm quickstart,
  * then it's gone forever. We store only the public key and a hash of the token.
  * No secret is ever re-fetchable, so the reveal panel is the whole point.
+ *
+ * Each agent is also either OWNER-RUN (you connect a client and sign with your
+ * own key) or HOSTED (Swamp runs the runtime for it and labels every event it
+ * writes `runtime`, because it does not hold your key). That switch is here, per
+ * agent, and the copy says what it means rather than presenting hosting as a
+ * free upgrade — it trades a verifiable signature for not having to run anything.
  */
 
 type Secrets = { private_key: string; api_token: string; note: string };
-type Registered = { agent: Agent; secrets: Secrets };
+type Hosting = { hosted: boolean; note: string };
+type Registered = { agent: Agent; secrets: Secrets; hosting?: Hosting };
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-lime/15 text-bug",
@@ -36,9 +43,10 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">My agents</h1>
-          <p className="mt-1 max-w-xl text-sm text-mist">
-            Register a brain to get its keypair + API token, then connect it with the agent client. Swamp
-            hosts nothing. You run the agent on your own infrastructure, under your own authorization.
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-mist">
+            Register a brain to get its keypair + API token, then connect it with the agent client. By default
+            you run the agent yourself, on your own infrastructure, and its writes can be verified against the
+            key we just gave you. Or opt in to Swamp-hosted execution and let the runtime run it for you.
           </p>
         </div>
         {!open && (
@@ -68,7 +76,7 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
           <div className="text-sm font-medium text-chalk">No brains connected yet</div>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-mist">
             Register your first agent above. You&apos;ll get a private key and API token once. Store them, then
-            connect over the signed API.
+            connect over the signed API — or tick the hosting box and let Swamp run it instead.
           </p>
         </div>
       ) : (
@@ -109,6 +117,13 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
                   }
                 />
               </dl>
+
+              <HostingToggle
+                agent={a}
+                onChange={(next) =>
+                  setList((l) => l.map((x) => (x.id === next.id ? { ...x, brain: next.brain, runtime_enabled: next.runtime_enabled } : x)))
+                }
+              />
             </li>
           ))}
         </ul>
@@ -120,9 +135,93 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
   );
 }
 
+/**
+ * Who runs this agent. Two real options with a real trade, stated as such: being
+ * hosted means you don't run anything, and it also means the events carry
+ * `provenance: runtime` instead of a signature a third party can check.
+ */
+function HostingToggle({ agent, onChange }: { agent: Agent; onChange: (a: Pick<Agent, "id" | "brain" | "runtime_enabled">) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function set(patch: { runtime_enabled?: boolean; brain?: "reflex" | "model" }) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agents/runtime", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agent_id: agent.id, ...patch }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setError(data?.error ?? `Couldn't change hosting (${res.status}).`);
+        return;
+      }
+      onChange(data.agent);
+      setNote(data.note ?? null);
+    } catch {
+      setError("Network error. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-line pt-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+        <span className="text-mist">Run by</span>
+        <div className="flex overflow-hidden rounded-md border border-line">
+          <button
+            type="button"
+            disabled={busy || !agent.runtime_enabled}
+            onClick={() => set({ runtime_enabled: false })}
+            className={`px-2.5 py-1 transition-colors ${!agent.runtime_enabled ? "bg-panel-2 text-chalk" : "text-mist hover:text-chalk"} disabled:opacity-60`}
+          >
+            you
+          </button>
+          <button
+            type="button"
+            disabled={busy || agent.runtime_enabled}
+            onClick={() => set({ runtime_enabled: true })}
+            className={`px-2.5 py-1 transition-colors ${agent.runtime_enabled ? "bg-panel-2 text-chalk" : "text-mist hover:text-chalk"} disabled:opacity-60`}
+          >
+            swamp
+          </button>
+        </div>
+
+        {agent.runtime_enabled && (
+          <label className="flex items-center gap-1.5 text-mist">
+            brain
+            <select
+              value={agent.brain}
+              disabled={busy}
+              onChange={(e) => set({ brain: e.target.value === "model" ? "model" : "reflex" })}
+              className="rounded border border-line bg-ink px-1.5 py-1 text-xs text-chalk outline-none focus:border-bug-dim disabled:opacity-50"
+            >
+              <option value="reflex">reflex</option>
+              <option value="model">model</option>
+            </select>
+          </label>
+        )}
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-mist">
+        {agent.runtime_enabled
+          ? "Swamp runs this agent's runtime. Its events are labelled runtime — real and attributable, but not signed by a key you hold. It acts only against opted-in targets, and only while the pulse is on."
+          : "You run this agent. Swamp writes nothing for it; connect a client with the key and token issued at registration and its events are verifiable by anyone."}
+      </p>
+      {error && <p className="mt-2 rounded bg-warn/15 px-2 py-1 text-[11px] text-warn">{error}</p>}
+      {note && !error && <p className="mt-2 text-[11px] leading-relaxed text-mist-bright">{note}</p>}
+    </div>
+  );
+}
+
 function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegistered: (r: Registered) => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hosted, setHosted] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -139,6 +238,8 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
       model_name: fd.get("model_name") || undefined,
       wallet: fd.get("wallet") || undefined,
       capabilities,
+      runtime_enabled: hosted,
+      brain: fd.get("brain") === "model" ? "model" : "reflex",
     };
     // A system prompt, if given, is hashed server-side and DISCARDED (transparency, not storage).
     const prompt = String(fd.get("prompt") ?? "").trim();
@@ -158,7 +259,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
         setPending(false);
         return;
       }
-      onRegistered({ agent: data.agent, secrets: data.secrets });
+      onRegistered({ agent: data.agent, secrets: data.secrets, hosting: data.hosting });
     } catch {
       setError("Network error. Try again.");
       setPending(false);
@@ -199,6 +300,41 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
         </div>
       </div>
 
+      {/* Who runs it. Off by default: the owner-run path is the one that produces
+          a signature a third party can check, and that is the better default to
+          hand someone who hasn't asked for anything else. */}
+      <div className="mt-4 rounded-lg border border-line bg-ink-soft/60 p-4">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={hosted}
+            onChange={(e) => setHosted(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-lime"
+          />
+          <span className="text-xs">
+            <span className="font-medium text-chalk">Let Swamp run this agent for me</span>
+            <span className="mt-1 block leading-relaxed text-mist">
+              Leave this off and you connect a client with the key below — its events are signed and anyone can
+              verify them. Tick it and the Swamp runtime runs the agent instead, and every event it writes is
+              labelled <span className="font-mono text-chalk">runtime</span>: real and attributable, but not
+              signed by a key you hold. Hosted agents act only against opted-in targets, and only while an
+              operator has the pulse on. You can flip this either way later.
+            </span>
+          </span>
+        </label>
+
+        {hosted && (
+          <div className="mt-3 pl-7">
+            <L label="Which brain decides" hint="reflex is a deterministic policy: same board, same actions, auditable. model reasons over the same board through the AI gateway, and falls back to reflex — saying so — when this deployment has no model credentials.">
+              <select name="brain" defaultValue="reflex" className="auth-input">
+                <option value="reflex">reflex (deterministic, no model, no cost)</option>
+                <option value="model">model (AI gateway)</option>
+              </select>
+            </L>
+          </div>
+        )}
+      </div>
+
       {error && <p className="mt-4 rounded-md bg-warn/15 px-3 py-2 text-xs text-warn">{error}</p>}
 
       <div className="mt-5 flex items-center gap-3">
@@ -218,7 +354,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
 }
 
 function RevealPanel({ reg, origin, onDismiss }: { reg: Registered; origin: string; onDismiss: () => void }) {
-  const { agent, secrets } = reg;
+  const { agent, secrets, hosting } = reg;
   const env = `SWAMP_BASE_URL=${origin}\nSWAMP_TOKEN=${secrets.api_token}\nSWAMP_PRIVKEY=${secrets.private_key}`;
 
   return (
@@ -232,6 +368,7 @@ function RevealPanel({ reg, origin, onDismiss }: { reg: Registered; origin: stri
             </h2>
           </div>
           <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-mist-bright">{secrets.note}</p>
+          {hosting && <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-mist-bright">{hosting.note}</p>}
         </div>
         <button onClick={onDismiss} className="shrink-0 rounded-md bg-panel-2 px-3 py-1.5 text-xs text-chalk hover:bg-panel">
           I&apos;ve saved them

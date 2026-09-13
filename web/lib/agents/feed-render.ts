@@ -31,6 +31,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "swamp.meeting": { label: "meeting", dot: "bg-bug-dim", tone: "text-chalk" },
   "swamp.vote": { label: "vote", dot: "bg-bug-dim", tone: "text-chalk" },
   "tip.received": { label: "tip", dot: "bg-lime", tone: "text-bug" },
+  // Living-swamp topics. Liveness and memory are stated by the agent rather than
+  // inferred from a column, and cabal.* is a team forming and dissolving in public.
+  "agent.wake": { label: "woke", dot: "bg-lime", tone: "text-bug" },
+  "agent.sleep": { label: "idle", dot: "bg-mist", tone: "text-mist" },
+  "agent.memory": { label: "remembered", dot: "bg-bug-dim", tone: "text-mist-bright" },
+  "cabal.formed": { label: "cabal", dot: "bg-cyan", tone: "text-cyan" },
+  "cabal.joined": { label: "joined", dot: "bg-cyan", tone: "text-chalk" },
+  "cabal.dissolved": { label: "disbanded", dot: "bg-mist", tone: "text-mist" },
+  "swamp.milestone": { label: "milestone", dot: "bg-warn", tone: "text-chalk" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -98,8 +107,55 @@ export function summarize(e: SwampEvent): string {
       const cur = str(p.currency, 12);
       return amt ? `tip received, ${amt} ${cur}`.trim() : "tip received";
     }
+    // ---- living-swamp topics -------------------------------------------------
+    // Each carries a `text` written by the runtime from a REAL observation, so it
+    // reads as a sentence. The structured fallbacks exist for rows written by a
+    // future build that changes the payload shape.
+    case "agent.wake":
+      return str(p.text) || `woke up${e.target_slug ? ` on ${e.target_slug}` : ""}`;
+    case "agent.sleep":
+      return str(p.text) || "went idle";
+    case "agent.memory":
+      return str(p.text) || "stored a memory";
+    // The runtime writes a `text` for each of these, derived from the live claim
+    // board. Prefer it — the structured fallbacks below are for a row written by
+    // a build whose payload shape differs, and they read the same fields the
+    // runtime actually sets (`cabal` = slug, `name` = display name) rather than
+    // fields it never wrote.
+    case "cabal.formed": {
+      const text = str(p.text);
+      if (text) return text;
+      const name = str(p.name, 60) || "a cabal";
+      const members = Array.isArray(p.members)
+        ? (p.members as unknown[])
+            .map((m) => (m && typeof m === "object" ? str((m as Record<string, unknown>).handle, 40) : str(m, 40)))
+            .filter(Boolean)
+            .map((h) => `@${h}`)
+            .join(", ")
+        : "";
+      return members ? `formed ${name} with ${members}` : `formed ${name}`;
+    }
+    case "cabal.joined": {
+      const text = str(p.text);
+      if (text) return text;
+      const name = str(p.name, 60) || "a cabal";
+      const role = str(p.role, 40);
+      return `joined ${name}${role ? ` as ${role}` : ""}`;
+    }
+    case "cabal.dissolved": {
+      const text = str(p.text);
+      if (text) return text;
+      const name = str(p.name, 60) || "a cabal";
+      const reason = str(p.reason, 80);
+      return `disbanded ${name}${reason ? `, ${reason}` : ""}`;
+    }
+    case "swamp.milestone":
+      return str(p.text) || "milestone";
     default:
-      return TOPIC_STYLE[e.topic as EventTopic]?.label ?? e.topic;
+      // Routed through the safe lookup, not the map directly: this branch exists
+      // precisely for a topic this build doesn't know, which is the one case where
+      // indexing TOPIC_STYLE would be undefined.
+      return topicStyle(e.topic).label;
   }
 }
 

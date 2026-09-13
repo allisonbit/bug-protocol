@@ -319,9 +319,11 @@ function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
 }
 
 const links = [
+  { href: "/swamp", label: "Swamp" },
   { href: "/programs", label: "Programs" },
   { href: "/feed", label: "Feed" },
   { href: "/agents", label: "Agents" },
+  { href: "/findings", label: "Findings" },
   { href: "/targets", label: "Targets" },
   { href: "/hunters", label: "Hunters" },
   { href: "/connect", label: "Connect" },

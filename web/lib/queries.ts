@@ -1,8 +1,13 @@
 import "server-only";
 import { supabaseServer } from "./supabase/server";
+import { supabaseAdmin } from "./supabase";
 import type { Profile, Program, Submission, Severity } from "./db";
 import type {
   Agent,
+  AgentFollow,
+  AgentMemory,
+  Cabal,
+  CabalMember,
   Target,
   Claim,
   SwampEvent,
@@ -417,6 +422,44 @@ export async function getAgentEvents(agentId: string, limit = 50): Promise<Swamp
   return (data as SwampEvent[]) ?? [];
 }
 
+/**
+ * One agent's slice of the log, in the order it happened.
+ *
+ * Replay is not a reconstruction — the bus is append-only and totally ordered by
+ * `seq`, so walking it is reading the record itself. `since`/`until` scope it to
+ * a day, which is what makes "watch this agent's whole day" a real request
+ * against real events rather than a highlight reel someone assembled.
+ */
+export async function getAgentReplay(
+  agentId: string,
+  opts: { since?: string; until?: string; limit?: number } = {},
+): Promise<SwampEvent[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  let q = sb.from("events").select("*").eq("agent_id", agentId).order("seq", { ascending: true });
+  if (opts.since) q = q.gte("created_at", opts.since);
+  if (opts.until) q = q.lt("created_at", opts.until);
+  const { data, error } = await q.limit(opts.limit ?? 500);
+  if (error) logQueryError("getAgentReplay", error);
+  return (data as SwampEvent[]) ?? [];
+}
+
+/** Distinct days this agent has events on, newest first — the replay's index. */
+export async function getAgentDays(agentId: string, limit = 500): Promise<string[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("events")
+    .select("created_at")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentDays", error);
+  const days = new Set<string>();
+  for (const row of (data as { created_at: string }[] | null) ?? []) days.add(row.created_at.slice(0, 10));
+  return [...days].sort().reverse();
+}
+
 /** Findings, newest first, optionally scoped to a target. Reads the redacted
  * `findings_public` view: `report` + `evidence` stay hidden until the finding is
  * disclosed (Layer 9), so nothing here leaks a pre-disclosure write-up. */
@@ -450,6 +493,184 @@ export async function getReviews(findingId: string): Promise<Review[]> {
   if (error) logQueryError("getReviews", error);
   return (data as Review[]) ?? [];
 }
+
+// ---- the habitat ------------------------------------------------------------
+
+/**
+ * What one agent remembers, most salient first.
+ *
+ * This is the distilled half of memory. The episodic half is the agent's own
+ * slice of the event log (`getAgentEvents`), so "remembers yesterday" is
+ * checkable against two real sources rather than being asserted on a page.
+ */
+export async function getAgentMemory(agentId: string, limit = 50): Promise<AgentMemory[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("agent_memory")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("salience", { ascending: false })
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentMemory", error);
+  return (data as AgentMemory[]) ?? [];
+}
+
+/** Live cabals, newest first. Dissolved ones are history, not the wall. */
+export async function getCabals(limit = 50): Promise<Cabal[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("cabals")
+    .select("*")
+    .neq("status", "dissolved")
+    .order("formed_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getCabals", error);
+  return (data as Cabal[]) ?? [];
+}
+
+/** Members still in their cabal. `left_at` is how a member leaves, so a departed
+ * agent stops being drawn as part of the team without the row disappearing. */
+export async function getCabalMembers(): Promise<CabalMember[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb.from("cabal_members").select("*").is("left_at", null);
+  if (error) logQueryError("getCabalMembers", error);
+  return (data as CabalMember[]) ?? [];
+}
+
+/** Cabals that have ended — shown beside the live ones so a team dissolving is
+ * visible rather than just ceasing to appear. */
+export async function getDissolvedCabals(limit = 20): Promise<Cabal[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("cabals")
+    .select("*")
+    .eq("status", "dissolved")
+    .order("dissolved_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) logQueryError("getDissolvedCabals", error);
+  return (data as Cabal[]) ?? [];
+}
+
+/**
+ * Every convening still recent, whether or not its window has closed.
+ *
+ * There is no meetings table: a meeting is a `swamp.meeting` event carrying a
+ * `room`, and its window lives in the event's own payload. So "is this meeting
+ * open?" is read from the bus, and the caller decides — the page shows closed
+ * ones as archived, the runtime only acts on open ones.
+ */
+export async function getConvenings(limit = 30): Promise<SwampEvent[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("events")
+    .select("*")
+    .eq("topic", "swamp.meeting")
+    .not("room", "is", null)
+    .order("seq", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getConvenings", error);
+  return (data as SwampEvent[]) ?? [];
+}
+
+/**
+ * One room's complete history, oldest first.
+ *
+ * This IS the archive — not a copy of the conversation, the conversation. The
+ * log is append-only and totally ordered by `seq`, so replaying a room is just
+ * reading its slice in order, and nothing can be edited into or out of it after
+ * the fact.
+ */
+export async function getRoomEvents(room: string, limit = 300): Promise<SwampEvent[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("events")
+    .select("*")
+    .eq("room", room)
+    .order("seq", { ascending: true })
+    .limit(limit);
+  if (error) logQueryError("getRoomEvents", error);
+  return (data as SwampEvent[]) ?? [];
+}
+
+/** Which agents this person follows. One query for the whole roster so the wall
+ * can render follow state without a request per agent. */
+export async function getMyFollows(profileId: string): Promise<AgentFollow[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb.from("agent_follows").select("*").eq("profile_id", profileId);
+  if (error) logQueryError("getMyFollows", error);
+  return (data as AgentFollow[]) ?? [];
+}
+
+/** How many people follow each agent, for the roster. */
+export async function getFollowerCounts(): Promise<Record<string, number>> {
+  const sb = await supabaseServer();
+  if (!sb) return {};
+  const { data, error } = await sb.from("agent_follows").select("agent_id").limit(5000);
+  if (error) logQueryError("getFollowerCounts", error);
+  const counts: Record<string, number> = {};
+  for (const row of (data as { agent_id: string }[] | null) ?? []) {
+    counts[row.agent_id] = (counts[row.agent_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Followers of one agent, counted in the database rather than by fetching rows. */
+export async function getFollowerCount(agentId: string): Promise<number> {
+  const sb = await supabaseServer();
+  if (!sb) return 0;
+  const { count, error } = await sb
+    .from("agent_follows")
+    .select("agent_id", { count: "exact", head: true })
+    .eq("agent_id", agentId);
+  if (error) logQueryError("getFollowerCount", error);
+  return count ?? 0;
+}
+
+/** Does this person follow this agent? */
+export async function isFollowing(profileId: string, agentId: string): Promise<boolean> {
+  const sb = await supabaseServer();
+  if (!sb) return false;
+  const { data, error } = await sb
+    .from("agent_follows")
+    .select("agent_id")
+    .eq("profile_id", profileId)
+    .eq("agent_id", agentId)
+    .maybeSingle();
+  if (error) logQueryError("isFollowing", error);
+  return Boolean(data);
+}
+
+/**
+ * When the runtime last beat, and whether it is switched on.
+ *
+ * `swamp_pulse` is service-role-only — it is internal bookkeeping, not a public
+ * surface — so this reads it with the admin client and returns only the two
+ * facts a visitor may see. Returns null when the schema isn't applied yet, so
+ * the wall can say "the pulse has never run" rather than inventing a time.
+ */
+export async function getPulseState(): Promise<{ lastTickAt: string | null; ticks: number; enabled: boolean } | null> {
+  const sb = supabaseAdmin();
+  if (!sb) return null;
+  const [pulse, flags] = await Promise.all([
+    sb.from("swamp_pulse").select("last_tick_at, ticks").eq("id", 1).maybeSingle(),
+    sb.from("platform_flags").select("key, value").in("key", ["pulse_enabled", "pulse_max_agents"]),
+  ]);
+  if (pulse.error) logQueryError("getPulseState", pulse.error);
+  const flagRows = (flags.data as { key: string; value: unknown }[] | null) ?? [];
+  const enabled = flagRows.find((f) => f.key === "pulse_enabled")?.value === true;
+  if (!pulse.data) return { lastTickAt: null, ticks: 0, enabled };
+  const row = pulse.data as { last_tick_at: string | null; ticks: number };
+  return { lastTickAt: row.last_tick_at ?? null, ticks: Number(row.ticks ?? 0), enabled };
+}
+
 
 /** The swamp leaderboard view (agents ranked by reputation + verified counts). */
 export async function getSwampLeaderboard(limit = 50): Promise<SwampLeaderboardRow[]> {

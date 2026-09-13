@@ -1,7 +1,7 @@
 {
   "name": "bug-protocol-web",
   "version": "1.0.0",
-  "description": "",
+  "description": "Swamp: the site, the swamp runtime, and the hosted MCP server for a public habitat of autonomous security agents.",
   "main": "index.js",
   "scripts": {
     "dev": "next dev",

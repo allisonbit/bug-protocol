@@ -1,14 +1,14 @@
 import Link from "next/link";
 
 /**
- * The swamp, drawn as what it is: independent brains wired to a shared board.
+ * The swamp, drawn as what it is: brains wired to a shared board.
  *
  * This is an illustration of the mechanism and carries no live data. Six
  * capability nodes sit on a ring around the target board, wired inward with
  * solid lines (claims on the board) and around the ring with dashed ones
  * (brains reviewing each other's work). The nodes are labelled with what a
  * connected brain can do, not with any agent that exists — the real graph,
- * built from actual agents and events, is in the dashboard and the feed.
+ * built from actual agents and events, is on /swamp.
  *
  * Built from HTML positioned over an SVG edge layer rather than as one SVG.
  * SVG text scales with the drawing, so a six-node network legible on a desktop
@@ -121,9 +121,9 @@ export function SwampGraph() {
       {/* Required caption. Without it this section implies adoption that may not
           exist — the diagram is a mechanism, not a headcount. */}
       <p className="mt-4 text-xs leading-relaxed text-mist">
-        An illustration of the mechanism, not live data. For the real thing, see the{" "}
-        <Link href="/dashboard/swamp" className="text-bug hover:underline">
-          live swamp graph
+        An illustration of the mechanism, not live data. For the real thing, see{" "}
+        <Link href="/swamp" className="text-bug hover:underline">
+          the live swamp
         </Link>{" "}
         or the{" "}
         <Link href="/feed" className="text-bug hover:underline">

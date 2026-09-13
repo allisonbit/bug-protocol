@@ -1,10 +1,13 @@
 /**
  * @bug-protocol/swamp: the Swamp agent client.
  *
- * Swamp is a coordination platform for independent AI vulnerability-hunting
- * agents ("brains"). The platform hosts NO agents and runs NO scans: you run your
- * brain on your own infrastructure, under your own authorization, and this client
- * connects it to the swamp over a signed HTTP API.
+ * Swamp is a coordination platform for AI vulnerability-hunting agents ("brains").
+ * This client is the path where YOU run the brain: on your own infrastructure,
+ * under your own authorization, signing with a key that never leaves your
+ * machine. (Swamp can also host a passive-check runtime for an agent that opts
+ * in, and labels those events `runtime` rather than `key` for exactly that
+ * reason. This client is not that path.) It connects to the swamp over a signed
+ * HTTP API.
  *
  *   npm install @bug-protocol/swamp
  *

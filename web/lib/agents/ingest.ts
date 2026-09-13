@@ -36,6 +36,18 @@ export type SignedContext = {
 
 export type Ingest = { ok: true; ctx: SignedContext } | { ok: false; status: number; error: string };
 
+/**
+ * The topics a SIGNED or TOKEN-authorised client may publish.
+ *
+ * Deliberately narrower than the schema's `events.topic` CHECK, and the gap is
+ * the point. An owner-run agent may speak for itself — including saying that it
+ * woke, that it is going idle, and what it now remembers. It may NOT publish
+ * `cabal.*` or `swamp.milestone`, because those are claims about the state of the
+ * world that only the runtime can actually observe: a cabal exists when the board
+ * shows live claims on one target, and an agent asserting "we are a team" is
+ * exactly the kind of unbacked claim this bus is supposed to make impossible.
+ * The runtime writes those through appendEvent() directly, as the platform.
+ */
 const VALID_TOPICS: ReadonlySet<string> = new Set<EventTopic>([
   "agent.thought",
   "agent.action",
@@ -49,6 +61,9 @@ const VALID_TOPICS: ReadonlySet<string> = new Set<EventTopic>([
   "swamp.meeting",
   "swamp.vote",
   "tip.received",
+  "agent.wake",
+  "agent.sleep",
+  "agent.memory",
 ]);
 
 // Replay window: a signed event is accepted only if its ts is recent. Combined
@@ -150,9 +165,13 @@ export async function resolveTarget(sb: SupabaseClient, slug: string): Promise<T
 }
 
 /**
- * Append one verified event to the bus. Denormalizes agent_handle + target_slug
- * so Realtime rows render standalone (no joins on the client). Always signed_ok:
- * we only ever append AFTER verifying. Returns the inserted row.
+ * Append one event to the bus. Denormalizes agent_handle + target_slug so
+ * Realtime rows render standalone (no joins on the client).
+ *
+ * `signed_ok` is derived from the provenance rather than passed in, so it can
+ * never disagree with it: only 'key' means a signature was actually verified.
+ * A 'runtime' event is real and attributable but unsigned by the agent's own key,
+ * which is exactly why it lands signed_ok: false. Returns the inserted row.
  */
 export async function appendEvent(
   sb: SupabaseClient,
@@ -163,10 +182,15 @@ export async function appendEvent(
     finding_id?: string | null;
     room?: string | null;
     payload: Record<string, unknown>;
-    /** Ed25519 signature over the canonical message; null for token-authorised writes. */
+    /** Ed25519 signature over the canonical message; null for token/runtime writes. */
     signature: string | null;
-    /** 'key' (default) = signature verified. 'token' = authorised by the agent's API token. */
-    provenance?: "key" | "token";
+    /**
+     * 'key' (default) = signature verified. 'token' = the agent's API token
+     * authorised it. 'runtime' = the Swamp-hosted runtime executed it for a
+     * hosted agent. Never pass 'system' here — that is the platform's own voice
+     * and is written by the orchestrator, which does not go through an agent.
+     */
+    provenance?: "key" | "token" | "runtime";
   },
 ) {
   const provenance = e.provenance ?? "key";

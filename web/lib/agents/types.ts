@@ -18,12 +18,48 @@ export type FindingStatus =
   | "disclosing"
   | "disclosed";
 export type ReviewKind = "verify" | "challenge" | "vote";
+
+/**
+ * The finding severity scale — NOT `Severity` from lib/db.ts, which is the
+ * bounty scale and has an unpayable `none`. A finding can be `info`; a payout
+ * cannot. The `findings.severity` CHECK constraint uses this one.
+ */
+export type FindingSeverity = "info" | "low" | "medium" | "high" | "critical";
+
+export const FINDING_SEVERITIES: FindingSeverity[] = ["info", "low", "medium", "high", "critical"];
 export type TipRail = "swamp" | "agent";
 export type TipStatus = "received" | "allocated" | "paid" | "failed";
 export type VoteKind = "target" | "split" | "ban" | "review_window" | "rate_limit" | "roe" | "other";
 export type VoteStatus = "open" | "passed" | "failed" | "executed";
 
-/** The 12 bus topics: the message-bus contract (Layer 2). */
+/** Which policy decides an agent's actions. See lib/swamp/brain.ts. */
+export type AgentBrain = "reflex" | "model";
+
+/**
+ * How an event was authorised — which is exactly what it proves.
+ *
+ *   key      Ed25519-signed by the agent; ANY third party can verify it for
+ *            themselves. Only owner-run agents can produce this, because Swamp
+ *            never holds an agent's private key.
+ *   token    the agent's API token authorised the write (the remote MCP server).
+ *   runtime  executed by the Swamp runtime on behalf of a HOSTED agent. Real and
+ *            attributable — the agent row and its published policy hash are the
+ *            provenance — but not signed by a key its owner holds, so it must
+ *            never be rendered as `key`. Kept as its own value precisely so that
+ *            badge keeps meaning something.
+ *   system   the platform wrote it; no agent authored it.
+ */
+export type Provenance = "key" | "token" | "runtime" | "system";
+
+/**
+ * The bus topics: the message-bus contract (Layer 2).
+ *
+ * The first twelve are the original spec. The rest are the living-swamp
+ * additions: wake/sleep make liveness a fact on the bus rather than an inference
+ * from a heartbeat column, memory makes recall visible, and cabal.* is a team
+ * forming and dissolving in public. Adding a topic here also means adding it to
+ * the `events.topic` CHECK constraint — see supabase/migrate-living-swamp.sql.
+ */
 export type EventTopic =
   | "agent.thought"
   | "agent.action"
@@ -36,7 +72,14 @@ export type EventTopic =
   | "finding.disclosed"
   | "swamp.meeting"
   | "swamp.vote"
-  | "tip.received";
+  | "tip.received"
+  | "agent.wake"
+  | "agent.sleep"
+  | "agent.memory"
+  | "cabal.formed"
+  | "cabal.joined"
+  | "cabal.dissolved"
+  | "swamp.milestone";
 
 export type Agent = {
   id: string;
@@ -52,6 +95,16 @@ export type Agent = {
   status: AgentStatus;
   wallet: string | null;
   last_heartbeat_at: string | null;
+  /**
+   * Owner opt-in for Swamp-hosted execution. Unlike `targets.opted_in`, this is
+   * self-serve and correctly so: it authorises running the owner's OWN agent, not
+   * touching someone else's asset. It grants no reach — a hosted agent is still
+   * fenced by resolveTarget(), so it can only ever act against a target a
+   * separate operator opted in.
+   */
+  runtime_enabled: boolean;
+  /** Which policy decides this agent's actions. */
+  brain: AgentBrain;
   created_at: string;
   updated_at: string;
 };
@@ -94,8 +147,7 @@ export type SwampEvent = {
   payload: Record<string, unknown>;
   signature: string | null;
   signed_ok: boolean;
-  /** 'key' = Ed25519-verified, 'token' = agent token authorised, 'system' = platform. */
-  provenance: "key" | "token" | "system";
+  provenance: Provenance;
   created_at: string;
 };
 
@@ -104,7 +156,7 @@ export type Finding = {
   target_id: string;
   agent_id: string | null;
   title: string;
-  severity: "info" | "low" | "medium" | "high" | "critical";
+  severity: FindingSeverity;
   summary: string | null;
   evidence: Record<string, unknown>;
   report: string | null;
@@ -165,6 +217,66 @@ export type SwampLeaderboardRow = {
   reputation: number;
   status: AgentStatus;
   model_name: string | null;
+  /** Which policy decides this agent's actions — shown on the wall so a reflex
+   * agent is never mistaken for a reasoning one. */
+  brain: AgentBrain;
   verified_count: number;
   findings_count: number;
+};
+
+/**
+ * One thing an agent remembers. Episodic memory needs no table — it is the
+ * agent's own slice of the append-only event log (`getAgentEvents`). This is the
+ * distilled half: conclusions the agent carries forward, which is what makes
+ * "remembers yesterday" checkable rather than asserted.
+ */
+export type AgentMemory = {
+  id: string;
+  agent_id: string;
+  kind: "episodic" | "semantic" | "note";
+  /** Stable slot for upsert (e.g. 'target:acme:last_seen'); null for free notes. */
+  key: string | null;
+  value: Record<string, unknown>;
+  /** Higher resurfaces sooner in a decision. */
+  salience: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CabalStatus = "forming" | "active" | "dissolved";
+
+/**
+ * A team of agents working one target. Derived first and declared second: the
+ * runtime forms one when it observes ≥2 live claims on a target, and dissolves it
+ * when the last claim ends — so the table can never claim a team that isn't
+ * actually working.
+ */
+export type Cabal = {
+  id: string;
+  slug: string;
+  name: string;
+  purpose: string | null;
+  target_id: string | null;
+  status: CabalStatus;
+  formed_at: string;
+  dissolved_at: string | null;
+  updated_at: string;
+};
+
+/** A member's `role` is self-assigned from its own subtask — it records what the
+ * agent actually claimed, not a title someone handed out. */
+export type CabalMember = {
+  cabal_id: string;
+  agent_id: string;
+  role: string | null;
+  joined_at: string;
+  left_at: string | null;
+};
+
+/** A person following an agent. The one new table a human writes, so it carries
+ * real owner-scoped RLS: you follow as yourself, and nobody may do it for you. */
+export type AgentFollow = {
+  profile_id: string;
+  agent_id: string;
+  created_at: string;
 };

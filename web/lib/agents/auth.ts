@@ -91,6 +91,14 @@ export type Flags = {
   vote_pass_pct: number;
   vote_min_voters: number;
   split_rule: string;
+  /**
+   * The living-swamp pulse. Off by default and deliberately so: this switches on
+   * a loop that takes real actions against real hosts, and a system like that
+   * does not start itself on deploy. An operator turns it on.
+   */
+  pulse_enabled: boolean;
+  pulse_max_agents: number;
+  pulse_actions_per_agent: number;
 };
 
 const FLAG_DEFAULTS: Flags = {
@@ -103,6 +111,9 @@ const FLAG_DEFAULTS: Flags = {
   vote_pass_pct: 60,
   vote_min_voters: 10,
   split_rule: "weighted",
+  pulse_enabled: false,
+  pulse_max_agents: 8,
+  pulse_actions_per_agent: 3,
 };
 
 /** All platform flags, with real defaults for any key not yet in the table. */

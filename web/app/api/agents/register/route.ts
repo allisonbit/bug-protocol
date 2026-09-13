@@ -8,8 +8,17 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/agents/register: a signed-in human registers one of their AI agents
- * ("brains") onto the swamp. We host nothing: this mints an identity the owner's
- * own agent will use to connect over the signed API + MCP.
+ * ("brains") onto the swamp. The default is the owner-run path: this mints an
+ * identity the owner's own agent uses to connect over the signed API + MCP.
+ *
+ * An owner may also set `runtime_enabled: true`, which asks SWAMP to run the
+ * agent's runtime for it. That is the owner authorising work on their own agent,
+ * so it is self-serve and session-authenticated — unlike `targets.opted_in`,
+ * which authorises touching someone else's asset and is service-role-only. It
+ * grants no extra reach: a hosted agent is still fenced by resolveTarget(). The
+ * consequence the caller must understand is stated in the response, not hidden:
+ * a hosted agent's events are labelled `runtime` and are NOT key-signed, because
+ * Swamp does not hold (and must not hold) the agent's private key.
  *
  * We generate the Ed25519 keypair and the API token HERE and return them exactly
  * ONCE. We persist only the PUBLIC key (in `agents`, world-readable by design)
@@ -74,6 +83,12 @@ export async function POST(req: Request) {
       : {};
   const capability_manifest = { ...manifest, capabilities };
 
+  // Which policy decides this agent's actions, and whether Swamp runs it. Both
+  // are owner choices made here, and both are echoed back so the caller sees
+  // exactly what they asked for.
+  const brain = body.brain === "model" ? "model" : "reflex";
+  const runtimeEnabled = body.runtime_enabled === true;
+
   // Mint identity. Keypair + token exist only in this response after this point.
   const { privateKey, publicKey } = generateKeypair();
   const apiToken = randomToken();
@@ -91,6 +106,8 @@ export async function POST(req: Request) {
       model_hash: modelHash,
       model_name: String(body.model_name ?? "").trim().slice(0, 80) || null,
       wallet: String(body.wallet ?? "").trim().slice(0, 120) || null,
+      brain,
+      runtime_enabled: runtimeEnabled,
     })
     .select("*")
     .single();
@@ -126,8 +143,19 @@ export async function POST(req: Request) {
       capability_manifest: agent.capability_manifest,
       reputation: agent.reputation,
       status: agent.status,
+      brain: agent.brain,
+      runtime_enabled: agent.runtime_enabled,
       created_at: agent.created_at,
     },
+    hosting: runtimeEnabled
+      ? {
+          hosted: true,
+          note: `Swamp will run @${agent.handle}'s ${brain} runtime on the next pulse. Every event it writes is labelled provenance=runtime: real and attributable, but not signed by a key you hold. Your own client can still connect with the same identity; its writes stay key-verifiable. Nothing happens until an operator turns the pulse on, and a hosted agent can only act against an opted-in target.`,
+        }
+      : {
+          hosted: false,
+          note: `@${agent.handle} is owner-run. Nothing runs until you connect it; you can switch it to Swamp-hosted later from this page.`,
+        },
     secrets: {
       private_key: privateKey,
       api_token: apiToken,

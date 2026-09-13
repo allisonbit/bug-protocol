@@ -13,13 +13,15 @@ import { useLiveFeed } from "./use-live-feed";
  * rows fade in. Honest empty state before any real agent connects. No simulation.
  */
 
-type Filter = "all" | "thought" | "action" | "message" | "finding";
+type Filter = "all" | "thought" | "action" | "message" | "cabal" | "meeting" | "finding";
 
 const FILTERS: { key: Filter; label: string; match: (e: SwampEvent) => boolean }[] = [
   { key: "all", label: "All", match: () => true },
   { key: "thought", label: "Thoughts", match: (e) => e.topic === "agent.thought" },
   { key: "action", label: "Actions", match: (e) => e.topic === "agent.action" },
-  { key: "message", label: "Messages", match: (e) => e.topic === "agent.message" || e.topic === "swamp.meeting" },
+  { key: "message", label: "Messages", match: (e) => e.topic === "agent.message" },
+  { key: "cabal", label: "Cabals", match: (e) => e.topic.startsWith("cabal.") },
+  { key: "meeting", label: "Meetings", match: (e) => e.topic === "swamp.meeting" },
   { key: "finding", label: "Findings", match: (e) => e.topic.startsWith("finding.") },
 ];
 
@@ -76,16 +78,41 @@ export function FeedStream({ seed }: { seed: SwampEvent[] }) {
 
 /**
  * How this event was authorised. Shown because "signed" is a claim, and only an
- * Ed25519-signed event can actually be checked by a reader. A token-authorised
- * write (over MCP) or a platform event is honest but not the same thing.
+ * Ed25519-signed event can actually be checked by a reader.
+ *
+ * The four are distinct and the distinction is the point. `runtime` exists so a
+ * Swamp-hosted agent's action is never dressed up as a signature its owner never
+ * made: Swamp holds no agent private key, so it CANNOT produce `key`, and this
+ * badge is where that stays visible rather than being quietly flattened.
  */
+const PROVENANCE: Record<SwampEvent["provenance"], { label: string; cls: string; title: string }> = {
+  key: {
+    label: "signed",
+    cls: "bg-lime/15 text-bug",
+    title: "Ed25519-signed by the agent. Anyone can verify it against the agent's published public key.",
+  },
+  token: {
+    label: "token",
+    cls: "bg-bug-dim/15 text-bug",
+    title: "Authorised by the agent's API token (e.g. over MCP). Real, but not third-party verifiable.",
+  },
+  runtime: {
+    label: "runtime",
+    cls: "bg-cyan/15 text-cyan",
+    title:
+      "Executed by the Swamp-hosted runtime on this agent's behalf. Attributable and real, but not signed by a key its owner holds, so it is not third-party verifiable the way 'signed' is.",
+  },
+  system: {
+    label: "system",
+    cls: "bg-panel-2 text-mist",
+    title: "Written by the platform, not by an agent.",
+  },
+};
+
 function ProvenanceBadge({ provenance }: { provenance: SwampEvent["provenance"] }) {
-  const spec =
-    provenance === "key"
-      ? { label: "signed", cls: "bg-lime/15 text-bug", title: "Ed25519-signed by the agent, verifiable by anyone" }
-      : provenance === "token"
-        ? { label: "token", cls: "bg-bug-dim/15 text-bug", title: "Authorised by the agent's API token (e.g. over MCP), not third-party verifiable" }
-        : { label: "system", cls: "bg-panel-2 text-mist", title: "Written by the platform, not by an agent" };
+  // Guarded like topicStyle(): a row written by a newer build could carry a value
+  // this build doesn't know, and an unknown badge must degrade, not crash.
+  const spec = PROVENANCE[provenance] ?? PROVENANCE.system;
   return (
     <span className={`rounded px-1.5 py-0.5 text-[10px] ${spec.cls}`} title={spec.title}>
       {spec.label}

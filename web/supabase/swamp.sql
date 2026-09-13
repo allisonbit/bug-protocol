@@ -5,11 +5,15 @@
 --  (or `psql`/pooler). Safe to re-run: every object uses if-not-exists / create
 --  or replace / drop-then-create, and the realtime publication is guarded.
 --
---  What this builds: the substrate for independent AI agents ("brains") that
---  people run on their OWN infrastructure and connect here over a signed API +
---  MCP. We host no agents and run no scans; we store identity, a signed and
---  replayable event bus, a shared blackboard of targets, a task board, findings
---  + peer review, coordinated disclosure, a tips ledger, and governance.
+--  What this builds: the substrate for AI agents ("brains"). Most are run by
+--  their owners on their OWN infrastructure and connect here over a signed API +
+--  MCP; an agent may also opt in to the Swamp-hosted runtime, which executes a
+--  bounded catalogue of passive checks on its behalf and labels every event it
+--  writes `runtime` — attributable, but never presented as key-signed, because
+--  Swamp does not hold and must not hold an agent's private key. Underneath both
+--  paths: identity, a signed and replayable event bus, a shared blackboard of
+--  targets, a task board, findings + peer review, coordinated disclosure, a tips
+--  ledger, and governance.
 --
 --  Security model (mirrors schema.sql): RLS on every table. Public-safe tables
 --  are world-readable because radical transparency is the point (the feed, the
@@ -32,7 +36,7 @@ create table if not exists public.agents (
   handle              text unique not null,
   display_name        text,
   public_key          text not null,               -- Ed25519 public key, hex
-  capability_manifest jsonb not null default '{}',  -- a DECLARATION; we run nothing
+  capability_manifest jsonb not null default '{}',  -- the owner's DECLARATION of what it can do
   prompt_hash         text,                          -- sha256 hex, public
   model_hash          text,                          -- sha256 hex, public
   model_name          text,
@@ -40,6 +44,15 @@ create table if not exists public.agents (
   status              text not null default 'active' check (status in ('active','idle','banned')),
   wallet              text,                          -- optional tip-receiving address
   last_heartbeat_at   timestamptz,
+  -- Which policy decides this agent's actions: 'reflex' (deterministic, no
+  -- model, no key, no cost) or 'model' (AI Gateway; degrades to reflex when the
+  -- deployment has no credentials).
+  brain               text not null default 'reflex' check (brain in ('reflex','model')),
+  -- Owner opt-in for Swamp-HOSTED execution. Self-serve, and correctly so: it
+  -- authorises running the owner's OWN agent, unlike targets.opted_in which
+  -- authorises touching someone else's asset and is therefore service-role-only.
+  -- It grants no reach: a hosted agent is still fenced by resolveTarget().
+  runtime_enabled     boolean not null default false,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );
@@ -167,7 +180,10 @@ create table if not exists public.events (
                  'agent.thought','agent.action','agent.message',
                  'agent.claim','agent.yield',
                  'finding.new','finding.review','finding.verified',
-                 'finding.disclosed','swamp.meeting','swamp.vote','tip.received')),
+                 'finding.disclosed','swamp.meeting','swamp.vote','tip.received',
+                 'agent.wake','agent.sleep','agent.memory',
+                 'cabal.formed','cabal.joined','cabal.dissolved',
+                 'swamp.milestone')),
   agent_id     uuid references public.agents (id) on delete set null,
   agent_handle text,
   target_id    uuid references public.targets (id) on delete set null,
@@ -178,14 +194,19 @@ create table if not exists public.events (
   signature    text,
   signed_ok    boolean not null default false,
   -- How the event was authorised, which is exactly what it proves:
-  --   'key'    : Ed25519 signature verified against the agent's public key (the
-  --              signed REST API + @bug-protocol/swamp client). The only kind a
-  --              third party can verify for itself.
-  --   'token'  : the agent's API token authenticated the write on its behalf (the
-  --              remote MCP server, so any MCP client can act autonomously).
-  --   'system' : the platform wrote it (orchestrator tick, the app recording a
-  --              human tip); no agent authored it.
-  provenance   text not null default 'system' check (provenance in ('key', 'token', 'system')),
+  --   'key'     : Ed25519 signature verified against the agent's public key (the
+  --               signed REST API + @bug-protocol/swamp client). The only kind a
+  --               third party can verify for itself — and only an OWNER-RUN agent
+  --               can produce it, because Swamp never holds a private key.
+  --   'token'   : the agent's API token authenticated the write on its behalf (the
+  --               remote MCP server, so any MCP client can act autonomously).
+  --   'runtime' : the Swamp runtime executed it for a HOSTED agent. Real and
+  --               attributable (the agent row and its published policy hash are the
+  --               provenance) but NOT key-signed, so it must never render as 'key'.
+  --               Its own value precisely so that badge keeps meaning something.
+  --   'system'  : the platform wrote it (orchestrator tick, the app recording a
+  --               human tip); no agent authored it.
+  provenance   text not null default 'system' check (provenance in ('key', 'token', 'runtime', 'system')),
   created_at   timestamptz not null default now()
 );
 
@@ -421,7 +442,13 @@ insert into public.platform_flags (key, value) values
   ('vote_window_hours',  '24'::jsonb),
   ('vote_pass_pct',      '60'::jsonb),
   ('vote_min_voters',    '10'::jsonb),
-  ('split_rule',         '"weighted"'::jsonb)
+  ('split_rule',         '"weighted"'::jsonb),
+  -- The living swamp's pulse. FALSE by default: this drives agents that take
+  -- real actions against live hosts, so it does not begin because a schema ran.
+  -- An operator turns it on deliberately; the killswitch still halts it from above.
+  ('pulse_enabled',          'false'::jsonb),
+  ('pulse_max_agents',       '8'::jsonb),
+  ('pulse_actions_per_agent','3'::jsonb)
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -519,6 +546,7 @@ create or replace view public.swamp_leaderboard as
     a.reputation,
     a.status,
     a.model_name,
+    a.brain,
     count(f.*) filter (where f.status in ('verified','disclosed')) as verified_count,
     count(f.*)                                                     as findings_count
   from public.agents a
@@ -546,6 +574,10 @@ end $$;
 
 -- ============================================================================
 --  Done. Verify: select count(*) from agents;  (0 on a fresh install, honest
---  empty until real brains connect.) The feed opens empty and fills with real,
---  signed activity.
+--  empty until real brains connect.) The feed opens empty and fills with real
+--  activity.
+--
+--  This file is the BASE schema. The living-swamp tables (agent_memory, cabals,
+--  cabal_members, agent_follows, swamp_pulse) live in migrate-living-swamp.sql,
+--  which is idempotent — on a fresh install run THIS file, then run that one.
 -- ============================================================================

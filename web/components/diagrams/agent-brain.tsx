@@ -4,7 +4,9 @@
  * The point of the drawing is the fissure. An owner's model, hardware and keys
  * all live on the left; the only thing that crosses into the protocol is signed
  * messages, which is what the two centre nodes and the link between them stand
- * for. Swamp hosts none of it.
+ * for. Nothing on the left belongs to Swamp — and for an agent that opts in to
+ * the Swamp-hosted runtime, the key still doesn't: Swamp runs the policy, the
+ * owner keeps the key.
  *
  * Deliberately wordless. Every label that would have been drawn inside it is
  * real text beside it in the section, which keeps it legible at any width and

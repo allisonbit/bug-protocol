@@ -28,6 +28,23 @@ export class ActionError extends Error {
   }
 }
 
+/**
+ * Who authorised this write.
+ *
+ *   token    the agent's owner called in over MCP with the agent's API token.
+ *   runtime  the Swamp-hosted runtime executed this on the agent's behalf.
+ *
+ * These share every line of code below on purpose. A second implementation for
+ * hosted agents would be a second place for the scope fence, the rate limit and
+ * the state machines to be got wrong, and any divergence between the two would
+ * be invisible until it mattered. The only difference is the label the event
+ * carries, which is the only difference that is actually true.
+ *
+ * Neither can produce `'key'`: that requires an Ed25519 signature made with the
+ * agent's private key, and Swamp holds no private key for anyone.
+ */
+export type AgentWriteProvenance = "token" | "runtime";
+
 /** Sliding-window rate limit over the agent's own events. Throws when exceeded. */
 export async function enforceRateLimit(sb: SupabaseClient, agentId: string): Promise<void> {
   const flags = await getFlags(sb);
@@ -42,7 +59,7 @@ export async function enforceRateLimit(sb: SupabaseClient, agentId: string): Pro
   }
 }
 
-/** Append one token-authorised event, rate-limited first. */
+/** Append one authorised event, rate-limited first. */
 async function emit(
   sb: SupabaseClient,
   agent: Agent,
@@ -53,9 +70,10 @@ async function emit(
     room?: string | null;
     payload: Record<string, unknown>;
   },
+  provenance: AgentWriteProvenance = "token",
 ) {
   await enforceRateLimit(sb, agent.id);
-  return appendEvent(sb, { ...e, agent, signature: null, provenance: "token" });
+  return appendEvent(sb, { ...e, agent, signature: null, provenance });
 }
 
 const CLAIM_TTL_MS = 30 * 60 * 1000; // 30-minute soft-lock, renewable (matches the signed route)
@@ -71,6 +89,7 @@ export async function agentClaim(
   agent: Agent,
   slug: string,
   subtask: string | null,
+  provenance: AgentWriteProvenance = "token",
 ): Promise<ClaimResult> {
   const res = await resolveTarget(sb, slug);
   if (!res.ok) throw new ActionError(res.status, res.error);
@@ -112,11 +131,16 @@ export async function agentClaim(
     claim = data as Claim;
   }
 
-  await emit(sb, agent, {
-    topic: "agent.claim",
-    target,
-    payload: { subtask, claimed_until: until, renewed: Boolean(mine) },
-  });
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "agent.claim",
+      target,
+      payload: { subtask, claimed_until: until, renewed: Boolean(mine) },
+    },
+    provenance,
+  );
   return { claim, renewed: Boolean(mine) };
 }
 
@@ -126,6 +150,7 @@ export async function agentYield(
   agent: Agent,
   slug: string,
   subtask: string | null,
+  provenance: AgentWriteProvenance = "token",
 ): Promise<number> {
   const { data: t } = await sb.from("targets").select("*").eq("slug", slug).maybeSingle();
   if (!t) throw new ActionError(404, `No target "${slug}" on the board.`);
@@ -147,15 +172,26 @@ export async function agentYield(
     released = ids.length;
   }
 
-  await emit(sb, agent, { topic: "agent.yield", target, payload: { subtask, released } });
+  await emit(sb, agent, { topic: "agent.yield", target, payload: { subtask, released } }, provenance);
   return released;
 }
 
-/** Publish a thought / action / message to the signed-and-replayable event stream. */
+/**
+ * Publish a thought / action / message to the signed-and-replayable event stream.
+ *
+ * `room` is what makes a meeting: a meeting is not a new substrate, it is this
+ * column with a name in it, and the archive is the room's own event history.
+ */
 export async function agentPublishThought(
   sb: SupabaseClient,
   agent: Agent,
-  input: { text: string; topic?: "agent.thought" | "agent.action" | "agent.message"; target?: string | null },
+  input: {
+    text: string;
+    topic?: "agent.thought" | "agent.action" | "agent.message";
+    target?: string | null;
+    room?: string | null;
+  },
+  provenance: AgentWriteProvenance = "token",
 ): Promise<{ seq: number }> {
   const text = input.text.trim().slice(0, 4000);
   if (!text) throw new ActionError(400, "Thought text is required.");
@@ -167,7 +203,9 @@ export async function agentPublishThought(
     target = (data as Target | null) ?? null;
   }
 
-  const row = (await emit(sb, agent, { topic, target, payload: { text } })) as { seq?: number } | null;
+  const row = (await emit(sb, agent, { topic, target, room: input.room ?? null, payload: { text } }, provenance)) as
+    | { seq?: number }
+    | null;
   return { seq: row?.seq ?? 0 };
 }
 
@@ -186,6 +224,7 @@ export async function agentPublishFinding(
     evidence?: Record<string, unknown>;
     security_contact?: string;
   },
+  provenance: AgentWriteProvenance = "token",
 ): Promise<{ id: string; status: string; verify_deadline: string }> {
   const res = await resolveTarget(sb, input.target);
   if (!res.ok) throw new ActionError(res.status, res.error);
@@ -221,12 +260,17 @@ export async function agentPublishFinding(
   if (error) throw new ActionError(500, error.message);
   const finding = data as Finding;
 
-  await emit(sb, agent, {
-    topic: "finding.new",
-    target,
-    finding_id: finding.id,
-    payload: { title, severity, summary },
-  });
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "finding.new",
+      target,
+      finding_id: finding.id,
+      payload: { title, severity, summary },
+    },
+    provenance,
+  );
   return { id: finding.id, status: finding.status, verify_deadline };
 }
 
@@ -237,6 +281,7 @@ export async function agentReviewFinding(
   findingId: string,
   kind: "verify" | "challenge",
   rationale: string | null,
+  provenance: AgentWriteProvenance = "token",
 ): Promise<{ kind: string }> {
   if (kind !== "verify" && kind !== "challenge") {
     throw new ActionError(400, "kind must be 'verify' or 'challenge'.");
@@ -282,7 +327,7 @@ export async function agentReviewFinding(
     finding_id: findingId,
     payload: { kind, rationale, finding_title: finding.title },
     signature: null,
-    provenance: "token",
+    provenance,
   });
   return { kind };
 }
@@ -292,6 +337,7 @@ export async function agentProposeVote(
   sb: SupabaseClient,
   agent: Agent,
   input: { title: string; kind?: string; body?: string; payload?: Record<string, unknown> },
+  provenance: AgentWriteProvenance = "token",
 ): Promise<{ id: string; closes_at: string }> {
   const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other"]);
   const title = input.title.trim().slice(0, 200);
@@ -324,7 +370,7 @@ export async function agentProposeVote(
     agent,
     payload: { title, kind, vote_id: v.id, proposal: true },
     signature: null,
-    provenance: "token",
+    provenance,
   });
   return v;
 }
@@ -335,6 +381,7 @@ export async function agentCastVote(
   agent: Agent,
   voteId: string,
   choice: "yes" | "no" | "abstain",
+  provenance: AgentWriteProvenance = "token",
 ): Promise<{ choice: string; weight: number }> {
   if (!["yes", "no", "abstain"].includes(choice)) {
     throw new ActionError(400, "choice must be 'yes', 'no', or 'abstain'.");
@@ -362,7 +409,7 @@ export async function agentCastVote(
     agent,
     payload: { choice, vote_id: voteId },
     signature: null,
-    provenance: "token",
+    provenance,
   });
   return { choice, weight };
 }

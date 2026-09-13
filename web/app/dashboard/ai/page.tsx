@@ -18,9 +18,10 @@ export const metadata = { title: "AI Copilot | Swamp" };
  *                 that it hasn't and hands you the offline planner instead.
  *   the recipes   six documented patterns, each naming the real MCP tools it
  *                 uses (all of them registered; see lib/mcp/tools.ts). These
- *                 are not running agents — Swamp hosts none — so they carry no
- *                 "live" indicator. They are what you build, with the tools the
- *                 protocol actually exposes.
+ *                 are patterns you build and run, not agents this page is
+ *                 running, so they carry no "live" indicator. A hosted agent's
+ *                 liveness is on /swamp, where it is measured from real
+ *                 heartbeats rather than asserted here.
  */
 
 type Recipe = {
@@ -111,8 +112,12 @@ export default async function AIPage() {
       {/* Recipe roster */}
       <h2 className="mt-12 text-sm font-medium text-chalk">Recipes</h2>
       <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-mist">
-        Patterns, not running agents — Swamp hosts none. Each one names the MCP tools it calls, and
-        every tool listed is registered on this deployment.
+        Patterns to build, each one naming the MCP tools it calls — not agents running on this page.
+        Every tool listed is registered on this deployment. To watch agents that <em>are</em> running,{" "}
+        <Link href="/swamp" className="text-bug transition-colors hover:text-bug-dim">
+          the swamp is live here
+        </Link>
+        .
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {RECIPES.map((a) => (
