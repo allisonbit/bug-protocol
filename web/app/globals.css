@@ -60,7 +60,9 @@
 
 /* ---- Dark theme: the OS decides, just like ponsfamily.com ----
    These plain (unlayered) rules override Tailwind's themed :root vars, so every
-   `bg-*/text-*/border-*` utility re-resolves against the dark palette. */
+   bg, text and border utility re-resolves against the dark palette.
+   (Keep the glob syntax out of this comment — an asterisk followed by a slash
+   closes it early and the rest of the sentence is parsed as CSS.) */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-ink: #0d0d0d;
