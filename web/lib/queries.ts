@@ -20,21 +20,35 @@ import type {
  * applied yet, so pages render an honest empty state instead of crashing.
  */
 
+/**
+ * Reads in this file fail soft on purpose: the dashboard is a view over a
+ * backend that can legitimately be empty, and throwing would take a page down
+ * over something the reader can't act on. But failing soft *silently* makes a
+ * broken query indistinguishable from an empty one — a missing view, a denied
+ * policy and a genuinely quiet swamp all render the same empty state. So the
+ * fallback stays, and the failure goes to the logs where it can be seen.
+ */
+function logQueryError(name: string, error: { message: string } | null): void {
+  if (error) console.error(`[queries] ${name} failed: ${error.message}`);
+}
+
 export async function getProfile(id: string): Promise<Profile | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("profiles").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await sb.from("profiles").select("*").eq("id", id).maybeSingle();
+  if (error) logQueryError("getProfile", error);
   return (data as Profile) ?? null;
 }
 
 export async function getMyPrograms(uid: string): Promise<Program[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("programs")
     .select("*")
     .eq("owner", uid)
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getMyPrograms", error);
   return (data as Program[]) ?? [];
 }
 
@@ -45,11 +59,12 @@ export type SubmissionWithProgram = Submission & {
 export async function getMySubmissions(uid: string): Promise<SubmissionWithProgram[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("submissions")
     .select("*, program:programs(slug,name,currency)")
     .eq("hunter", uid)
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getMySubmissions", error);
   return (data as unknown as SubmissionWithProgram[]) ?? [];
 }
 
@@ -57,15 +72,17 @@ export async function getMySubmissions(uid: string): Promise<SubmissionWithProgr
 export async function getInbox(uid: string): Promise<SubmissionWithProgram[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data: mine } = await sb.from("programs").select("id").eq("owner", uid);
+  const { data: mine, error: mineError } = await sb.from("programs").select("id").eq("owner", uid);
+  logQueryError("getInbox (owned programs)", mineError);
   const ids = (mine ?? []).map((r) => (r as { id: string }).id);
   if (ids.length === 0) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("submissions")
     .select("*, program:programs(slug,name,currency)")
     .in("program_id", ids)
     .eq("status", "pending")
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getInbox", error);
   return (data as unknown as SubmissionWithProgram[]) ?? [];
 }
 
@@ -76,22 +93,24 @@ export type PublicProgram = Program & {
 export async function getLivePrograms(): Promise<PublicProgram[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("programs")
     .select("*, owner_profile:profiles(handle,display_name,avatar_url)")
     .in("status", ["live", "paused"])
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getLivePrograms", error);
   return (data as unknown as PublicProgram[]) ?? [];
 }
 
 export async function getProgramBySlug(slug: string): Promise<PublicProgram | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb
+  const { data, error } = await sb
     .from("programs")
     .select("*, owner_profile:profiles(handle,display_name,avatar_url)")
     .eq("slug", slug)
     .maybeSingle();
+  if (error) logQueryError("getProgramBySlug", error);
   return (data as unknown as PublicProgram) ?? null;
 }
 
@@ -102,11 +121,12 @@ export type SubmissionWithHunter = Submission & {
 export async function getProgramSubmissions(programId: string): Promise<SubmissionWithHunter[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("submissions")
     .select("*, hunter_profile:profiles(handle,display_name,avatar_url)")
     .eq("program_id", programId)
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getProgramSubmissions", error);
   return (data as unknown as SubmissionWithHunter[]) ?? [];
 }
 
@@ -119,11 +139,12 @@ export async function getSubmission(id: string): Promise<
 > {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb
+  const { data, error } = await sb
     .from("submissions")
     .select("*, program:programs(*), hunter_profile:profiles(handle,display_name,avatar_url)")
     .eq("id", id)
     .maybeSingle();
+  if (error) logQueryError("getSubmission", error);
   return (data as never) ?? null;
 }
 
@@ -138,13 +159,14 @@ export type Hunter = Pick<
 export async function getLeaderboard(limit = 50): Promise<Hunter[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("profiles")
     .select("id,handle,display_name,avatar_url,role,accepted_count,total_earned,rep")
     .gt("accepted_count", 0)
     .order("rep", { ascending: false })
     .order("total_earned", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getLeaderboard", error);
   return (data as Hunter[]) ?? [];
 }
 
@@ -184,7 +206,12 @@ export type PublicProfileData = {
 export async function getPublicProfile(handle: string): Promise<PublicProfileData | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data: profile } = await sb.from("profiles").select("*").eq("handle", handle).maybeSingle();
+  const { data: profile, error: profileError } = await sb
+    .from("profiles")
+    .select("*")
+    .eq("handle", handle)
+    .maybeSingle();
+  logQueryError("getPublicProfile (profile)", profileError);
   if (!profile) return null;
   const p = profile as Profile;
 
@@ -202,6 +229,9 @@ export async function getPublicProfile(handle: string): Promise<PublicProfileDat
       .order("triaged_at", { ascending: false })
       .limit(50),
   ]);
+
+  logQueryError("getPublicProfile (programs)", programsRes.error);
+  logQueryError("getPublicProfile (disclosures)", disclosuresRes.error);
 
   const disclosures: Disclosure[] = ((disclosuresRes.data as unknown as DisclosureRow[]) ?? []).map((d) => ({
     id: d.id,
@@ -244,12 +274,13 @@ type ProgramDisclosureRow = {
 export async function getProgramDisclosures(programId: string, limit = 50): Promise<ProgramDisclosure[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("disclosures")
     .select("id,title,severity,assigned_severity,reward,triaged_at,hunter_handle,hunter_name,hunter_avatar")
     .eq("program_id", programId)
     .order("triaged_at", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getProgramDisclosures", error);
   return ((data as unknown as ProgramDisclosureRow[]) ?? []).map((d) => ({
     id: d.id,
     title: d.title,
@@ -270,12 +301,13 @@ export async function getProgramDisclosures(programId: string, limit = 50): Prom
 export async function getAgents(limit = 100): Promise<Agent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("agents")
     .select("*")
     .order("reputation", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getAgents", error);
   return (data as Agent[]) ?? [];
 }
 
@@ -283,7 +315,8 @@ export async function getAgents(limit = 100): Promise<Agent[]> {
 export async function getAgent(handle: string): Promise<Agent | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("agents").select("*").eq("handle", handle).maybeSingle();
+  const { data, error } = await sb.from("agents").select("*").eq("handle", handle).maybeSingle();
+  if (error) logQueryError("getAgent", error);
   return (data as Agent) ?? null;
 }
 
@@ -291,7 +324,8 @@ export async function getAgent(handle: string): Promise<Agent | null> {
 export async function getAgentById(id: string): Promise<Agent | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("agents").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await sb.from("agents").select("*").eq("id", id).maybeSingle();
+  if (error) logQueryError("getAgentById", error);
   return (data as Agent) ?? null;
 }
 
@@ -299,11 +333,12 @@ export async function getAgentById(id: string): Promise<Agent | null> {
 export async function getMyAgents(uid: string): Promise<Agent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("agents")
     .select("*")
     .eq("owner", uid)
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getMyAgents", error);
   return (data as Agent[]) ?? [];
 }
 
@@ -311,19 +346,21 @@ export async function getMyAgents(uid: string): Promise<Agent[]> {
 export async function getTargets(): Promise<Target[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("targets")
     .select("*")
     .eq("opted_in", true)
     .neq("status", "closed")
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getTargets", error);
   return (data as Target[]) ?? [];
 }
 
 export async function getTarget(slug: string): Promise<Target | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("targets").select("*").eq("slug", slug).maybeSingle();
+  const { data, error } = await sb.from("targets").select("*").eq("slug", slug).maybeSingle();
+  if (error) logQueryError("getTarget", error);
   return (data as Target) ?? null;
 }
 
@@ -331,7 +368,8 @@ export async function getTarget(slug: string): Promise<Target | null> {
 export async function getTargetById(id: string): Promise<Target | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("targets").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await sb.from("targets").select("*").eq("id", id).maybeSingle();
+  if (error) logQueryError("getTargetById", error);
   return (data as Target) ?? null;
 }
 
@@ -346,7 +384,8 @@ export async function getBoard(targetId?: string): Promise<Claim[]> {
     .gt("claimed_until", new Date().toISOString())
     .order("claimed_at", { ascending: false });
   if (targetId) q = q.eq("target_id", targetId);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) logQueryError("getBoard", error);
   return (data as Claim[]) ?? [];
 }
 
@@ -355,11 +394,12 @@ export async function getBoard(targetId?: string): Promise<Claim[]> {
 export async function getFeed(limit = 50): Promise<SwampEvent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("events")
     .select("*")
     .order("seq", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getFeed", error);
   return (data as SwampEvent[]) ?? [];
 }
 
@@ -367,12 +407,13 @@ export async function getFeed(limit = 50): Promise<SwampEvent[]> {
 export async function getAgentEvents(agentId: string, limit = 50): Promise<SwampEvent[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("events")
     .select("*")
     .eq("agent_id", agentId)
     .order("seq", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getAgentEvents", error);
   return (data as SwampEvent[]) ?? [];
 }
 
@@ -384,14 +425,16 @@ export async function getFindings(targetId?: string, limit = 50): Promise<Findin
   if (!sb) return [];
   let q = sb.from("findings_public").select("*").order("created_at", { ascending: false }).limit(limit);
   if (targetId) q = q.eq("target_id", targetId);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) logQueryError("getFindings", error);
   return (data as Finding[]) ?? [];
 }
 
 export async function getFinding(id: string): Promise<Finding | null> {
   const sb = await supabaseServer();
   if (!sb) return null;
-  const { data } = await sb.from("findings_public").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await sb.from("findings_public").select("*").eq("id", id).maybeSingle();
+  if (error) logQueryError("getFinding", error);
   return (data as Finding) ?? null;
 }
 
@@ -399,11 +442,12 @@ export async function getFinding(id: string): Promise<Finding | null> {
 export async function getReviews(findingId: string): Promise<Review[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("reviews")
     .select("*")
     .eq("finding_id", findingId)
     .order("created_at", { ascending: false });
+  if (error) logQueryError("getReviews", error);
   return (data as Review[]) ?? [];
 }
 
@@ -411,11 +455,12 @@ export async function getReviews(findingId: string): Promise<Review[]> {
 export async function getSwampLeaderboard(limit = 50): Promise<SwampLeaderboardRow[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("swamp_leaderboard")
     .select("*")
     .order("reputation", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getSwampLeaderboard", error);
   return (data as SwampLeaderboardRow[]) ?? [];
 }
 
@@ -423,7 +468,8 @@ export async function getSwampLeaderboard(limit = 50): Promise<SwampLeaderboardR
 export async function getTips(limit = 50): Promise<Tip[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb.from("tips").select("*").order("created_at", { ascending: false }).limit(limit);
+  const { data, error } = await sb.from("tips").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (error) logQueryError("getTips", error);
   return (data as Tip[]) ?? [];
 }
 
@@ -431,11 +477,12 @@ export async function getTips(limit = 50): Promise<Tip[]> {
 export async function getVotes(limit = 50): Promise<Vote[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
-  const { data } = await sb
+  const { data, error } = await sb
     .from("votes")
     .select("*")
     .order("status", { ascending: true })
     .order("closes_at", { ascending: false })
     .limit(limit);
+  if (error) logQueryError("getVotes", error);
   return (data as Vote[]) ?? [];
 }
