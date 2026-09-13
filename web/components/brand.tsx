@@ -1,63 +1,60 @@
 /**
- * The Swamp mark: a shield whose interior is a node graph.
+ * The Swamp mark: a waterline with a node network working beneath it.
  *
- * The shield is the "proof" half — escrowed money the client can't claw back.
- * The graph is the "swamp" half — independent brains, each edge a message one
- * of them signed. The bottom node is accented because that is the one a finding
- * travels up to: a hunter lands it, the escrow pays it.
+ * The old mark was a shield containing a graph — "swarm" (the nodes) inside
+ * "proof" (the shield). Half that idea left with the name, and a node graph
+ * does not say "swamp" to anyone. So the network stays, because it is still
+ * what the product is, but it moves below the surface. The reading is the
+ * product's actual claim: the work happens out of sight, and the thing worth
+ * money is the deepest node — a hunter lands it, the escrow pays it.
  *
  * Everything is drawn in `currentColor`, so the mark inherits whatever text
  * colour it sits in and needs no per-context variant. The one exception is the
- * accent node, which reads the `--color-bug` token: deep lime on the light theme,
- * bright lime on the dark one. Neither is hardcoded here.
+ * bottom node, which reads the `--color-bug` token: deep lime on the light
+ * theme, bright lime on the dark one. Neither is hardcoded here.
  *
  * Two variants come from this one component so they can never drift apart:
- *   full    — five nodes, six edges. For 32px and up.
- *   compact — three nodes on the vertical spine. Below 32px the diamond's four
- *             extra edges collapse into a smudge, so they are dropped and the
- *             remaining nodes are drawn larger.
+ *   full    — wave, three nodes, three edges. For 32px and up.
+ *   compact — wave and three nodes, no edges, drawn larger. At 16px the edges
+ *             are shorter than the stroke is wide and fill the triangle in, so
+ *             they are dropped and the nodes carry the shape on their own.
  */
 
 type Variant = "full" | "compact";
 
 /**
- * Shield silhouette on a 24×24 grid: flat top with rounded corners, vertical
- * sides, tapering to a single point on the vertical axis at x=12. Spans y=2.6
- * to y=21.6, which optically centres it against a wordmark's cap height.
+ * A three-hump wave on the 24×24 grid, spanning x=3 to x=21 so it is optically
+ * centred on the same x=12 centreline as the nodes below it. Each hump is six
+ * units wide and the reflections alternate, so it reads as water rather than as
+ * a squiggle. Sits at y=8.6, which leaves the lower half for the network.
  */
-const SHIELD =
-  "M6.2 2.6H17.8A1.7 1.7 0 0 1 19.5 4.3V11.4C19.5 16.3 16.3 19.6 12 21.6C7.7 19.6 4.5 16.3 4.5 11.4V4.3A1.7 1.7 0 0 1 6.2 2.6Z";
+const WAVE = "M3 8.6 Q6 6.1 9 8.6 T15 8.6 T21 8.6";
 
-/** Node centres. `top`, `centre` and `bottom` sit on x=12 — the mark's centreline. */
+/** Node centres. `bottom` is on x=12, the mark's centreline. */
 const NODE = {
-  top: [12, 6.2],
-  left: [7.4, 11.8],
-  right: [16.6, 11.8],
-  centre: [12, 11.8],
-  bottom: [12, 17.4],
+  topLeft: [7.6, 14.4],
+  topRight: [16.4, 14.4],
+  bottom: [12, 19.2],
 } as const;
 
 type NodeName = keyof typeof NODE;
 type Edge = readonly [NodeName, NodeName];
 
-/** top → centre → bottom. Carried by both variants, so the mark always has a spine. */
-const SPINE: readonly Edge[] = [
-  ["top", "centre"],
-  ["centre", "bottom"],
+/**
+ * A downward triangle: the shelf the two upper nodes sit on, and the two legs
+ * down to the deep one. Drawn in both variants' geometry but only rendered in
+ * `full` — see the variant note above.
+ */
+const EDGES: readonly Edge[] = [
+  ["topLeft", "topRight"],
+  ["topLeft", "bottom"],
+  ["topRight", "bottom"],
 ];
 
-/** The diamond's four edges. Full variant only. */
-const DIAMOND: readonly Edge[] = [
-  ["top", "left"],
-  ["top", "right"],
-  ["left", "bottom"],
-  ["right", "bottom"],
-];
-
-function Edges({ edges }: { edges: readonly Edge[] }) {
+function Edges() {
   return (
-    <g stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" opacity={0.35}>
-      {edges.map(([a, b]) => (
+    <g stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" opacity={0.35}>
+      {EDGES.map(([a, b]) => (
         <line key={`${a}-${b}`} x1={NODE[a][0]} y1={NODE[a][1]} x2={NODE[b][0]} y2={NODE[b][1]} />
       ))}
     </g>
@@ -80,7 +77,6 @@ export function BrandMark({
   className?: string;
 }) {
   const detailed = variant === "full";
-  const rest: readonly NodeName[] = detailed ? ["left", "right", "top", "centre"] : ["top", "centre"];
 
   return (
     <svg
@@ -93,17 +89,21 @@ export function BrandMark({
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <path d={SHIELD} stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
-      <Edges edges={detailed ? [...SPINE, ...DIAMOND] : SPINE} />
+      <path
+        d={WAVE}
+        stroke="currentColor"
+        strokeWidth={detailed ? 1.5 : 1.7}
+        strokeLinecap="round"
+      />
+      {detailed && <Edges />}
       <g fill="currentColor" opacity={0.55}>
-        {rest.map((n) => (
-          <circle key={n} cx={NODE[n][0]} cy={NODE[n][1]} r={detailed ? 1.5 : 1.8} />
-        ))}
+        <circle cx={NODE.topLeft[0]} cy={NODE.topLeft[1]} r={detailed ? 1.5 : 2} />
+        <circle cx={NODE.topRight[0]} cy={NODE.topRight[1]} r={detailed ? 1.5 : 2} />
       </g>
       <circle
         cx={NODE.bottom[0]}
         cy={NODE.bottom[1]}
-        r={detailed ? 1.9 : 2.1}
+        r={detailed ? 1.9 : 2.4}
         fill="var(--color-bug)"
       />
     </svg>

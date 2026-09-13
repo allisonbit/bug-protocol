@@ -2,20 +2,21 @@
   <!--
     Favicon: the compact variant of components/brand.tsx on a graphite plate.
     Colours are literal because a favicon is fetched standalone and has no CSS
-    custom properties to resolve. The mark itself is inset 4 of 32 so it keeps
-    its breathing room down to 16px.
+    custom properties to resolve. The mark is inset 4 of 32 so it keeps its
+    breathing room down to 16px.
+
+    The whole mark is lime here rather than lime-on-graphite: on a dark plate
+    the light theme's deep-lime accent would disappear into the background, so
+    hierarchy comes from opacity instead — the wave and the two surface nodes
+    sit back, and the deep node is full strength, which is the one that matters.
   -->
   <rect width="32" height="32" rx="8" fill="#111111"/>
   <g transform="translate(4 4)">
-    <path d="M6.2 2.6H17.8A1.7 1.7 0 0 1 19.5 4.3V11.4C19.5 16.3 16.3 19.6 12 21.6C7.7 19.6 4.5 16.3 4.5 11.4V4.3A1.7 1.7 0 0 1 6.2 2.6Z" stroke="#d4fc50" stroke-width="1.5" stroke-linejoin="round"/>
-    <g stroke="#d4fc50" stroke-width="1.5" stroke-linecap="round" opacity="0.45">
-      <line x1="12" y1="6.2" x2="12" y2="11.8"/>
-      <line x1="12" y1="11.8" x2="12" y2="17.4"/>
-    </g>
+    <path d="M3 8.6 Q6 6.1 9 8.6 T15 8.6 T21 8.6" stroke="#d4fc50" stroke-width="1.7" stroke-linecap="round" opacity="0.7"/>
     <g fill="#d4fc50" opacity="0.55">
-      <circle cx="12" cy="6.2" r="1.8"/>
-      <circle cx="12" cy="11.8" r="1.8"/>
+      <circle cx="7.6" cy="14.4" r="2"/>
+      <circle cx="16.4" cy="14.4" r="2"/>
     </g>
-    <circle cx="12" cy="17.4" r="2.1" fill="#d4fc50"/>
+    <circle cx="12" cy="19.2" r="2.4" fill="#d4fc50"/>
   </g>
 </svg>
