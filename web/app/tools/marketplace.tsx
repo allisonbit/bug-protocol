@@ -17,6 +17,7 @@ import { useApprove } from "@/lib/useApprove";
 import { chainMeta, txUrlOn, addressUrlOn } from "@/lib/chains";
 import { short, fmtAmount } from "@/lib/format";
 import { Badge, Button, Card, Copyable, Empty, Field, Input, Select, Textarea } from "@/components/ui";
+import { BrandMark } from "@/components/brand";
 
 /** Client-side shape of a mirror row (the JSON /api/tools returns). */
 type Listing = {
@@ -385,8 +386,7 @@ function PublishForm({
   if (phase === "done" && publishedId) {
     return (
       <Card className="border-bug-dim/50 bg-bug-dim/5 p-6 text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" className="mx-auto size-8" />
+        <BrandMark size={32} className="mx-auto" />
         <h3 className="mt-2 text-sm font-semibold text-chalk">Tool #{publishedId} published</h3>
         <p className="mt-2 text-xs text-mist">
           It&apos;s live on chain with your stake bonded and indexed for search. Anyone can download it and

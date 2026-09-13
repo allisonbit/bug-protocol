@@ -10,6 +10,7 @@ import { SUPPORTED_CHAINS, chainMeta } from "@/lib/chains";
 import { displayName } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import { useWalletSignIn } from "@/lib/useWalletSignIn";
+import { BrandLockup } from "@/components/brand";
 import { WalletDrawer } from "./wallet-drawer";
 
 /**
@@ -339,10 +340,8 @@ export function Nav() {
   return (
     <header className="glass sticky top-0 z-20 border-b border-line">
       <nav className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3.5 text-sm">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.svg" alt="" className="size-7" />
-          <span className="text-gradient text-base">Swarmproof</span>
+        <Link href="/" className="shrink-0">
+          <BrandLockup size={26} />
         </Link>
         <div className="hidden items-center gap-5 md:flex">
           {nav.map((l) => (

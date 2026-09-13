@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useWalletSignIn } from "@/lib/useWalletSignIn";
+import { BrandMark } from "@/components/brand";
 
 type Mode = "login" | "signup";
 
@@ -92,8 +93,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   return (
     <div className="mx-auto w-full max-w-sm">
       <div className="flex flex-col items-center text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" className="size-11" />
+        <BrandMark size={44} label="Swamp" />
         <h1 className="mt-5 text-2xl font-semibold tracking-tight">
           {mode === "signup" ? "Create your account" : "Welcome back"}
         </h1>

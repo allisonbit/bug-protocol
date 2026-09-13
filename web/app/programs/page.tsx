@@ -2,11 +2,12 @@ import Link from "next/link";
 import { getLivePrograms } from "@/lib/queries";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { money, topTier, displayName, programStatusMeta } from "@/lib/db";
+import { BrandMark } from "@/components/brand";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Programs | Swarmproof",
+  title: "Programs | Swamp",
   description: "Live bug bounty programs. Pick a target, find bugs, get paid from escrow.",
 };
 
@@ -65,7 +66,7 @@ export default async function ProgramsPage() {
                     </div>
                     <h2 className="mt-3.5 font-medium text-chalk">{p.name}</h2>
                     <p className="mt-1 line-clamp-2 flex-1 text-sm leading-relaxed text-mist">
-                      {p.summary || "Security program on Swarmproof."}
+                      {p.summary || "Security program on Swamp."}
                     </p>
                     <div className="mt-4 flex items-end justify-between border-t border-line pt-3.5">
                       <div>
@@ -91,8 +92,7 @@ function EmptyState({ configured }: { configured: boolean }) {
   return (
     <div className="mt-10 rounded-xl border border-dashed border-line bg-ink-soft/50 p-12 text-center">
       <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-line bg-panel">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon.svg" alt="" className="size-6" />
+        <BrandMark size={24} />
       </div>
       <h2 className="mt-4 text-lg font-medium text-chalk">
         {configured ? "No live programs yet" : "Programs are almost ready"}

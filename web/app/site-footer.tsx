@@ -1,13 +1,12 @@
 import Link from "next/link";
+import { BrandLockup } from "@/components/brand";
 
 export function SiteFooter() {
   return (
     <footer className="mt-28 border-t border-line">
       <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <div className="flex items-center gap-2 font-semibold">
-            <span className="text-gradient text-lg">Swarmproof</span>
-          </div>
+          <BrandLockup size={26} wordClassName="text-lg" />
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-mist">
             The bug bounty protocol where accepted findings pay from escrow the client can&apos;t claw
             back. Any chain, any currency.
@@ -40,7 +39,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t border-line px-6 py-6">
         <p className="mx-auto max-w-6xl text-xs text-mist">
-          Swarmproof is protocol software. Payments settle in whatever currency a client funds.
+          Swamp is protocol software. Payments settle in whatever currency a client funds.
         </p>
       </div>
     </footer>
