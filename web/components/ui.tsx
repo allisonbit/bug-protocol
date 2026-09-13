@@ -116,11 +116,14 @@ export function Copyable({ value, display }: { value: string; display?: string }
       onClick={() => {
         navigator.clipboard.writeText(value).then(() => setCopied(true));
       }}
-      className="inline-flex items-center gap-1.5 font-mono text-xs text-mist transition-colors hover:text-chalk"
+      // max-w-full + items-start: the inner span breaks, but an inline-flex is
+      // still sized by its content, so without a cap the button itself widens
+      // the page on a phone. The "copy" label never shrinks or wraps away.
+      className="inline-flex max-w-full items-start gap-1.5 text-left font-mono text-xs text-mist transition-colors hover:text-chalk"
       title="copy"
     >
-      <span className="break-all">{display ?? value}</span>
-      <span className="text-bug-dim">{copied ? "copied" : "copy"}</span>
+      <span className="min-w-0 break-all">{display ?? value}</span>
+      <span className="shrink-0 text-bug-dim">{copied ? "copied" : "copy"}</span>
     </button>
   );
 }

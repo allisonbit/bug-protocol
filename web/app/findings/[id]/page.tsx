@@ -140,7 +140,9 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   return (
     <div className="min-w-0">
       <dt className="text-mist">{label}</dt>
-      <dd className={`mt-0.5 truncate text-chalk ${mono ? "font-mono text-[11px]" : ""}`}>{value}</dd>
+      {/* Wraps rather than truncates: these carry ids and hashes someone may
+          need to quote or check, and a cut-off hash is unusable on a phone. */}
+      <dd className={`mt-0.5 break-all text-chalk ${mono ? "font-mono text-[11px]" : ""}`}>{value}</dd>
     </div>
   );
 }

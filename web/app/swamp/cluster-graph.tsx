@@ -148,11 +148,21 @@ export function ClusterGraph({
         </p>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
+          {/* The graph fills whatever width it is given rather than forcing a
+              560px scroller. Every node is positioned in PERCENTAGES, so the
+              layout is already resolution-independent — the old min-width only
+              existed to keep labels legible, and it bought that by making a
+              phone user drag sideways to see half the swamp. A taller box on
+              small screens buys the same legibility by giving the same nodes
+              more vertical room, and nothing is cropped or dropped at any
+              width. The container keeps overflow-x-auto as a floor: if a very
+              long handle ever exceeds the box, it scrolls rather than
+              stretching the page. */}
+          <div className="mt-4 max-w-full overflow-x-auto">
             <div
               role="img"
               aria-label={label}
-              className="relative aspect-[4/3] min-w-[560px] rounded-xl bg-panel"
+              className="relative aspect-[3/4] w-full rounded-xl bg-panel sm:aspect-[4/3]"
             >
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full" aria-hidden="true">
                 {/* Claim edges: agent to the target it holds. */}
@@ -187,7 +197,7 @@ export function ClusterGraph({
                   <Link
                     key={cp.id}
                     href={`/targets/${t.slug}`}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1.5 text-center text-[11px] transition-colors ${
+                    className={`absolute max-w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-lg px-2.5 py-1.5 text-center text-[11px] transition-colors ${
                       cabal
                         ? "border border-cyan/50 bg-panel-2 text-chalk hover:border-cyan"
                         : "border border-line bg-panel-2 text-chalk hover:border-bug-dim"
@@ -195,7 +205,7 @@ export function ClusterGraph({
                     style={{ left: `${cp.x}%`, top: `${cp.y}%` }}
                     title={`${t.name} — ${crew.length} live claim(s)${cabal ? `, cabal: ${cabal.name}` : ""}`}
                   >
-                    <span className="font-medium">{t.slug}</span>
+                    <span className="font-medium break-all">{t.slug}</span>
                     <span className="ml-1.5 text-mist">{crew.length}</span>
                     {cabal && <span className="ml-1 text-cyan" aria-label="cabal">◆</span>}
                   </Link>
@@ -207,7 +217,7 @@ export function ClusterGraph({
                 <Link
                   key={p.id}
                   href={`/agents/${p.handle}`}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-bug-dim/25 px-2 py-0.5 text-[10px] whitespace-nowrap text-chalk transition-colors hover:bg-bug-dim/50"
+                  className="absolute max-w-[40%] -translate-x-1/2 -translate-y-1/2 truncate rounded-full bg-bug-dim/25 px-2 py-0.5 text-[10px] whitespace-nowrap text-chalk transition-colors hover:bg-bug-dim/50"
                   style={{ left: `${p.x}%`, top: `${p.y}%` }}
                   title={`@${p.handle}${p.role ? ` — claimed ${p.role}` : ""}`}
                 >
@@ -220,7 +230,7 @@ export function ClusterGraph({
                 <Link
                   key={p.id}
                   href={`/agents/${p.handle}`}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-panel-2 px-2 py-0.5 text-[10px] whitespace-nowrap text-mist transition-colors hover:text-chalk"
+                  className="absolute max-w-[40%] -translate-x-1/2 -translate-y-1/2 truncate rounded-full bg-panel-2 px-2 py-0.5 text-[10px] whitespace-nowrap text-mist transition-colors hover:text-chalk"
                   style={{ left: `${p.x}%`, top: `${p.y}%` }}
                   title={`@${p.handle} — holds no live claim`}
                 >

@@ -229,6 +229,60 @@ function MenuLink({ href, onClick, children }: { href: string; onClick: () => vo
   );
 }
 
+/**
+ * The on-chain controls for the small-screen menu.
+ *
+ * `WalletButton`'s disconnected state and `ChainSwitcher` are both `hidden
+ * sm:block`, so below 640px there was no way to connect a wallet or change
+ * network at all — and the mobile account block only offered a wallet option to
+ * someone ALREADY connected, which on a phone nobody could become. That is lost
+ * function, not a tightened layout, so the same two controls live here at full
+ * width rather than being dropped.
+ */
+function MobileChainControls({ onNavigate }: { onNavigate: () => void }) {
+  const { address, isConnected } = useAccount();
+  const { connect, isPending } = useConnect();
+  const chainId = useChainId();
+  const { switchChain, isPending: switching } = useSwitchChain();
+  const known = SUPPORTED_CHAINS.some((c) => c.id === chainId);
+
+  if (!isConnected) {
+    return (
+      <button
+        onClick={() => {
+          connect({ connector: injected() });
+          onNavigate();
+        }}
+        disabled={isPending}
+        className="mt-2 w-full rounded-md border border-line px-3 py-2.5 text-center text-sm text-mist transition-colors hover:text-chalk disabled:opacity-50 sm:hidden"
+      >
+        {isPending ? "connecting..." : "Connect wallet"}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 sm:hidden">
+      <label className="block px-3 pb-1 text-[11px] tracking-wide text-mist uppercase" htmlFor="mobile-chain">
+        Network {address ? `— ${short(address)}` : ""}
+      </label>
+      <select
+        id="mobile-chain"
+        value={known ? chainId : ""}
+        disabled={switching}
+        onChange={(e) => switchChain({ chainId: Number(e.target.value) })}
+        className="w-full rounded-md border border-line bg-ink px-3 py-2.5 text-sm text-mist outline-none focus:border-bug-dim disabled:opacity-50"
+      >
+        {!known && <option value="">unsupported net</option>}
+        {SUPPORTED_CHAINS.map((c) => (
+          <option key={c.id} value={c.id}>
+            {chainMeta(c.id).short}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** Account actions for the small-screen menu, where the popover doesn't fit. */
 function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
   const { user, profile, signOut } = useAuth();
@@ -394,6 +448,7 @@ export function Nav() {
                 {l.label}
               </Link>
             ))}
+            <MobileChainControls onNavigate={() => setMenu(false)} />
             <MobileAccount onNavigate={() => setMenu(false)} />
           </div>
         </div>

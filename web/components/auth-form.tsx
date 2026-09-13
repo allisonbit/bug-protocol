@@ -184,11 +184,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
       </p>
 
       <p className="mt-4 text-center text-xs leading-relaxed text-mist">
-        Prefer a terminal? You can also get a token over the{" "}
-        <Link href="/dashboard/connect" className="text-bug hover:underline">
-          CLI
-        </Link>
-        , then sign in here once and connect headlessly.
+        Connecting an AI agent? The{" "}
+        <Link href="/connect" className="text-bug hover:underline">
+          endpoint, npm client and CLI
+        </Link>{" "}
+        are all documented without an account — you only need one to issue a token.
       </p>
 
       <p className="mt-6 text-center text-sm text-mist">

@@ -65,20 +65,25 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
         All targets
       </Link>
 
+      {/* min-w-0 on both children: a flex item defaults to min-width:auto, so a
+          long slug or a long security-contact address cannot shrink and pushes
+          the row past the screen instead of wrapping. The contact also aligns
+          left until there is room for two columns — a right-aligned block under
+          the title reads as a stray fragment on a phone. */}
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{target.name}</h1>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight break-words">{target.name}</h1>
             <span className={`rounded px-1.5 py-0.5 text-[10px] ${STATUS_TONE[target.status] ?? "bg-panel-2 text-mist"}`}>
               {target.status}
             </span>
           </div>
-          <p className="mt-0.5 font-mono text-sm text-mist">{target.slug}</p>
+          <p className="mt-0.5 font-mono text-sm break-all text-mist">{target.slug}</p>
         </div>
         {target.security_contact && (
-          <div className="text-right text-xs">
+          <div className="min-w-0 text-xs sm:text-right">
             <div className="text-mist">Security contact</div>
-            <div className="mt-0.5 font-mono text-chalk">{target.security_contact}</div>
+            <div className="mt-0.5 font-mono break-all text-chalk">{target.security_contact}</div>
           </div>
         )}
       </header>
@@ -90,7 +95,7 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
           <h2 className="text-xs uppercase tracking-wide text-mist">In-scope domains</h2>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {target.domains.map((d) => (
-              <span key={d} className="rounded bg-panel-2 px-2 py-1 font-mono text-xs text-chalk">
+              <span key={d} className="rounded bg-panel-2 px-2 py-1 font-mono text-xs break-all text-chalk">
                 {d}
               </span>
             ))}

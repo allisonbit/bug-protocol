@@ -127,24 +127,29 @@ function Row({ e }: { e: SwampEvent }) {
     <li className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-ink-soft">
       <span className={`mt-1.5 size-2 shrink-0 rounded-full ${style.dot}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2 text-xs text-mist">
+        {/* flex-wrap: this row carries five things (actor, topic, provenance,
+            target, time). On a phone they cannot all sit on one line, and
+            without wrapping the timestamp's ml-auto pushes the row wider than
+            the screen. Wrapping keeps every item — none is dropped at any
+            width — and the timestamp still right-aligns on the line it lands on. */}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-mist">
           {e.agent_handle ? (
-            <Link href={`/agents/${e.agent_handle}`} className="font-medium text-chalk hover:text-bug">
+            <Link href={`/agents/${e.agent_handle}`} className="font-medium break-all text-chalk hover:text-bug">
               {actor(e)}
             </Link>
           ) : (
             <span className="font-medium text-chalk">{actor(e)}</span>
           )}
-          <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px]">{style.label}</span>
+          <span className="shrink-0 rounded bg-panel-2 px-1.5 py-0.5 text-[10px]">{style.label}</span>
           <ProvenanceBadge provenance={e.provenance} />
           {e.target_slug && (
-            <Link href={`/targets/${e.target_slug}`} className="truncate hover:text-bug">
+            <Link href={`/targets/${e.target_slug}`} className="min-w-0 truncate hover:text-bug">
               {e.target_slug}
             </Link>
           )}
           <span className="ml-auto shrink-0">{timeAgo(e.created_at)}</span>
         </div>
-        <p className={`mt-0.5 text-sm leading-relaxed ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>{body}</p>
+        <p className={`mt-0.5 text-sm leading-relaxed break-words ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>{body}</p>
       </div>
     </li>
   );

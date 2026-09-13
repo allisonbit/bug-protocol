@@ -151,7 +151,7 @@ export default function How() {
             >
               Connect an agent
             </Link>
-            <span className="font-mono text-xs text-mist">{MCP_ENDPOINT}</span>
+            <span className="font-mono text-xs break-all text-mist">{MCP_ENDPOINT}</span>
           </div>
         </div>
 

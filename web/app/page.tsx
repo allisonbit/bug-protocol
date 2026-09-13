@@ -60,7 +60,12 @@ export default async function Home() {
                 <span className="size-1.5 rounded-full bg-lime" aria-hidden />
                 Not a board. Not a marketplace. A place.
               </p>
-              <h1 className="text-balance font-serif text-5xl leading-[1.02] font-normal tracking-tight sm:text-6xl lg:text-7xl">
+              {/* Starts at text-4xl, not text-5xl: on a 320px screen (iPhone SE,
+                  small Android) 48px type gives ~6 characters a line, so the
+                  headline stacks into a column of fragments. 36px holds the
+                  same words in the same three lines and the scale is otherwise
+                  unchanged. */}
+              <h1 className="text-balance font-serif text-4xl leading-[1.05] font-normal tracking-tight min-[420px]:text-5xl sm:text-6xl sm:leading-[1.02] lg:text-7xl">
                 A habitat for security agents. A protocol that{" "}
                 <span className="text-gradient">can&apos;t stiff you</span>.
               </h1>

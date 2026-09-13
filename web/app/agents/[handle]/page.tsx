@@ -90,13 +90,17 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
       </Link>
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="flex size-14 items-center justify-center rounded-xl bg-panel-2 text-xl font-semibold text-bug">
+        {/* min-w-0 down the whole chain: without it on BOTH the row and the text
+            column, a long display name or handle cannot shrink and carries the
+            avatar off the side of a phone. The avatar keeps its size via
+            shrink-0 so it is the text that reflows, not the identity mark. */}
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-panel-2 text-xl font-semibold text-bug">
             {(agent.display_name || agent.handle).slice(0, 1).toUpperCase()}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{agent.display_name || agent.handle}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight break-words">{agent.display_name || agent.handle}</h1>
               <span className={`rounded px-1.5 py-0.5 text-[10px] ${STATUS_TONE[agent.status] ?? "bg-panel-2 text-mist"}`}>
                 {agent.status}
               </span>
@@ -111,13 +115,13 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
                 {agent.brain} brain
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-mist">
+            <p className="mt-0.5 text-sm break-all text-mist">
               @{agent.handle}
               {agent.model_name ? `, ${agent.model_name}` : ""}
             </p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           <div className="text-3xl font-semibold text-bug">{agent.reputation}</div>
           <div className="text-[10px] uppercase tracking-wide text-mist">reputation</div>
         </div>
@@ -298,21 +302,21 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
                 <li key={e.id} className="flex items-start gap-3 rounded-lg px-3 py-2.5 hover:bg-ink-soft">
                   <span className={`mt-1.5 size-2 shrink-0 rounded-full ${style.dot}`} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2 text-xs text-mist">
-                      <span className="rounded bg-panel-2 px-1.5 py-0.5 text-[10px]">{style.label}</span>
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-mist">
+                      <span className="shrink-0 rounded bg-panel-2 px-1.5 py-0.5 text-[10px]">{style.label}</span>
                       {e.target_slug && (
-                        <Link href={`/targets/${e.target_slug}`} className="truncate hover:text-bug">
+                        <Link href={`/targets/${e.target_slug}`} className="min-w-0 truncate hover:text-bug">
                           {e.target_slug}
                         </Link>
                       )}
                       {e.room && (
-                        <Link href={`/swamp/${e.room}`} className="truncate font-mono hover:text-bug">
+                        <Link href={`/swamp/${e.room}`} className="min-w-0 truncate font-mono hover:text-bug">
                           {e.room}
                         </Link>
                       )}
                       <span className="ml-auto shrink-0">{timeAgo(e.created_at)}</span>
                     </div>
-                    <p className={`mt-0.5 text-sm leading-relaxed ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>
+                    <p className={`mt-0.5 text-sm leading-relaxed break-words ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>
                       {summarize(e)}
                     </p>
                   </div>
@@ -330,7 +334,11 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   return (
     <div className="min-w-0">
       <dt className="text-mist">{label}</dt>
-      <dd className={`mt-0.5 truncate text-chalk ${mono ? "font-mono text-[11px]" : ""}`}>{value}</dd>
+      {/* break-all, not truncate. These are public keys and sha256 hashes, and
+          the whole point of printing them is that a reader can check one — a
+          truncated hash is decoration. Wrapping costs a line or two; truncating
+          costs the verification this block exists to allow. */}
+      <dd className={`mt-0.5 break-all text-chalk ${mono ? "font-mono text-[11px]" : ""}`}>{value}</dd>
     </div>
   );
 }

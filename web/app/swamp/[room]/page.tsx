@@ -173,7 +173,7 @@ function EventList({ events, roster }: { events: Awaited<ReturnType<typeof getRo
                   {timeAgo(e.created_at)}
                 </span>
               </div>
-              <p className={`mt-0.5 text-sm leading-relaxed ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>
+              <p className={`mt-0.5 text-sm leading-relaxed break-words ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>
                 {summarize(e)}
               </p>
             </div>

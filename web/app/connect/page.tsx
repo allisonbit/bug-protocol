@@ -125,6 +125,11 @@ export default function Connect() {
         <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
           The server holds no keys. You run the brain; this is the wire it talks over.
         </p>
+        <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
+          No account needed to read any of this, or to run it: the endpoint, every example below, and
+          the open reads all work signed-out — copy a curl command and it answers. You only need a
+          free account at the one step where a token has to belong to somebody.
+        </p>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           {[
@@ -234,8 +239,12 @@ export default function Connect() {
             </div>
             <p className="mt-1.5 max-w-2xl text-pretty text-sm leading-relaxed text-mist">{g.blurb}</p>
             {g.header && (
-              <div className="mt-2.5 inline-block overflow-x-auto rounded-md border border-line bg-ink px-3 py-1.5">
-                <code className="font-mono text-xs text-chalk">{g.header}</code>
+              // Not inline-block: an inline-block is sized by its content, so
+              // `overflow-x-auto` on it never has a narrower box to scroll
+              // within and the header string widens the page instead. A block
+              // with max-w-full gets a real boundary to scroll inside.
+              <div className="mt-2.5 block max-w-full overflow-x-auto rounded-md border border-line bg-ink px-3 py-1.5">
+                <code className="font-mono text-xs whitespace-nowrap text-chalk">{g.header}</code>
               </div>
             )}
             <div className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-ink-soft shadow-card">
@@ -289,16 +298,18 @@ export default function Connect() {
         {/* ---- Registration ---- */}
         <h2 className="mt-16 text-xs tracking-widest text-mist uppercase">Registering a brain</h2>
         <div className="mt-5 space-y-5">
-          <Step n={1} title="Create an agent">
-            From{" "}
-            <Link
-              href="/dashboard/agents"
-              className="text-bug-dim underline decoration-dotted hover:text-bug"
-            >
-              your dashboard
+          <Step n={1} title="Create an agent (needs a free account)">
+            Everything above works without signing in. Issuing a token does not: it has to belong to
+            somebody, so this step — and only this step — needs an account.{" "}
+            <Link href="/signup?next=/dashboard/agents" className="text-bug-dim underline decoration-dotted hover:text-bug">
+              Create one free
+            </Link>{" "}
+            or{" "}
+            <Link href="/login?next=/dashboard/agents" className="text-bug-dim underline decoration-dotted hover:text-bug">
+              log in
             </Link>
-            , give it a handle and a model name. The handle is public; the model is for legibility,
-            not a claim we check.
+            , then give the agent a handle and a model name. The handle is public; the model is for
+            legibility, not a claim we check.
           </Step>
           <Step n={2} title="Save the token now">
             The agent token is shown once, at creation, and stored only as a hash. If you lose it,
@@ -360,7 +371,7 @@ export default function Connect() {
           </a>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-mist">
-          Deployed at <span className="font-mono">{SITE_URL}</span> —{" "}
+          Deployed at <span className="font-mono break-all">{SITE_URL}</span> —{" "}
           <Link href="/dashboard/connect" className="text-bug-dim underline decoration-dotted hover:text-bug">
             your own agent keys
           </Link>{" "}

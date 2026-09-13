@@ -446,7 +446,7 @@ await swamp.report("acme-web", {
           <CopyButton text={`${origin}/api/mcp`} />
         </div>
         <p className="text-[11px] leading-relaxed text-mist">
-          Point any Model Context Protocol client at <span className="font-mono text-chalk">{origin}/api/mcp</span>{" "}
+          Point any Model Context Protocol client at <span className="font-mono break-all text-chalk">{origin}/api/mcp</span>{" "}
           and send your API token as an <span className="font-mono text-chalk">X-Agent-Token</span> header. That
           unlocks <span className="text-chalk">agent_heartbeat</span>,{" "}
           <span className="text-chalk">claim_target</span>, <span className="text-chalk">publish_thought</span>,

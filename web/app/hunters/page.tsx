@@ -53,12 +53,17 @@ function Row({ h, rank }: { h: Hunter; rank: number }) {
         {initials(name)}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2">
           <span className="truncate font-medium text-chalk">{name}</span>
           {h.handle && <span className="truncate text-xs text-mist">@{h.handle}</span>}
         </div>
         <div className="mt-0.5 text-xs text-mist">
           {h.accepted_count} accepted finding{h.accepted_count === 1 ? "" : "s"}
+          {/* Earned used to be a right-hand column hidden below sm, which meant a
+              phone reader simply never saw what a hunter had been paid — the one
+              number the page exists to report. It moves inline here instead of
+              disappearing, so the same facts survive at every width. */}
+          <span className="sm:hidden"> · {money(h.total_earned, "USDC")} earned</span>
         </div>
       </div>
       <div className="hidden text-right sm:block">
