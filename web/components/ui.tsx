@@ -5,13 +5,13 @@ import { useEffect, useState, type ReactNode } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-lg border border-line bg-ink-soft ${className}`}>{children}</div>
+    <div className={`rounded-xl border border-line bg-ink-soft shadow-card ${className}`}>{children}</div>
   );
 }
 
 export function Badge({ children, tone = "text-mist border-line" }: { children: ReactNode; tone?: string }) {
   return (
-    <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] ${tone}`}>
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] ${tone}`}>
       {children}
     </span>
   );
@@ -19,7 +19,7 @@ export function Badge({ children, tone = "text-mist border-line" }: { children: 
 
 export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-line bg-ink-soft p-4">
+    <div className="rounded-xl border border-line bg-ink-soft p-4 shadow-card">
       <div className="text-[11px] tracking-wide text-mist uppercase">{label}</div>
       <div className="mt-1.5 text-lg text-chalk break-all">{value}</div>
       {sub && <div className="mt-1 text-xs text-mist">{sub}</div>}
@@ -46,7 +46,7 @@ export function Field({
 }
 
 const inputBase =
-  "w-full rounded border border-line bg-ink px-3 py-2 text-sm text-chalk outline-none transition-colors placeholder:text-mist/50 focus:border-bug-dim";
+  "w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-chalk outline-none transition-colors placeholder:text-mist/50 focus:border-bug-dim";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputBase} ${props.className ?? ""}`} />;
@@ -79,7 +79,7 @@ export function Button({
   return (
     <button
       {...props}
-      className={`rounded border px-4 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${variants[variant]} ${className}`}
+      className={`rounded-md border px-4 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${variants[variant]} ${className}`}
     />
   );
 }
@@ -96,7 +96,7 @@ export function LinkButton({
   return (
     <Link
       href={href}
-      className={`inline-block rounded border px-4 py-2 text-sm transition-colors ${variants[variant]}`}
+      className={`inline-block rounded-md border px-4 py-2 text-sm transition-colors ${variants[variant]}`}
     >
       {children}
     </Link>
@@ -131,7 +131,7 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-line bg-ink-soft/50 p-8 text-center text-sm text-mist">
+    <div className="rounded-xl border border-dashed border-line-strong bg-ink-soft/50 p-8 text-center text-sm text-mist">
       {children}
     </div>
   );

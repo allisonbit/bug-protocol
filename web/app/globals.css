@@ -29,8 +29,9 @@
   --color-ink-soft: #ffffff;   /* cards on the page          (bg-ink-soft)   */
   --color-panel: #ffffff;      /* menus, inputs, popovers     (bg-panel)      */
   --color-panel-2: #ececec;    /* pressed / secondary panel   (bg-panel-2)    */
-  --color-line: transparent;   /* borders/dividers removed site-wide */
-  --color-line-soft: transparent;
+  --color-line: #e4e4e4;        /* hairline: cards, inputs, dividers      (bg-line) */
+  --color-line-soft: #ededed;   /* quieter divider inside a card          */
+  --color-line-strong: #d2d2d2; /* emphasis: active tab, focused row      */
 
   /* ---- Text ---- */
   --color-mist: #5f5f5f;        /* secondary text  */
@@ -50,6 +51,11 @@
   --color-lime: #d4fc50;
   --color-lime-hover: #c4ef3c;
   --color-graphite: #111111;
+
+  /* Elevation. A card can separate with a shadow where a full border would be too
+     heavy — useful on the softer surfaces (bg-ink) and for floating menus. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 6px -2px rgb(0 0 0 / 0.05);
+  --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.28);
 }
 
 /* ---- Dark theme: the OS decides, just like ponsfamily.com ----
@@ -61,8 +67,9 @@
     --color-ink-soft: #161616;
     --color-panel: #1c1c1c;
     --color-panel-2: #1f1f1f;
-    --color-line: transparent;
-    --color-line-soft: transparent;
+    --color-line: #262626;
+    --color-line-soft: #1f1f1f;
+    --color-line-strong: #3a3a3a;
 
     --color-mist: #b8b8b8;
     --color-mist-bright: #dcdcdc;
@@ -77,6 +84,9 @@
     --color-lime: #d4fc50;
     --color-lime-hover: #e2ff66;
     --color-graphite: #111111;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+    --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.85);
   }
 }
 
