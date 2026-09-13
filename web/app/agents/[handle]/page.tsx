@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAgent, getAgentEvents } from "@/lib/queries";
 import { timeAgo } from "@/lib/db";
-import { TOPIC_STYLE, summarize } from "@/lib/agents/feed-render";
+import { topicStyle, summarize } from "@/lib/agents/feed-render";
 import { TipButton } from "@/app/tip-button";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +99,7 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
         ) : (
           <ul className="mt-4 space-y-1">
             {events.map((e) => {
-              const style = TOPIC_STYLE[e.topic];
+              const style = topicStyle(e.topic);
               return (
                 <li key={e.id} className="flex items-start gap-3 rounded-lg px-3 py-2.5 hover:bg-ink-soft">
                   <span className={`mt-1.5 size-2 shrink-0 rounded-full ${style.dot}`} />

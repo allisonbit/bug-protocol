@@ -41,6 +41,14 @@ const groups: Group[] = [
     ],
   },
   {
+    // The arbiter is its own role, so it gets its own heading rather than being
+    // filed under hunting. The page is deliberately open (the real permission is
+    // `onlyArbiter` in the contract, which no web page can grant), so this is a
+    // link for the person who holds the role, not a gate for anyone else.
+    label: "Resolve",
+    items: [{ href: "/arbiter", label: "Arbitration", icon: <IconScale /> }],
+  },
+  {
     label: "Connect",
     items: [
       { href: "/dashboard/connect", label: "Connect an agent", icon: <IconPlug /> },
@@ -264,6 +272,13 @@ function IconPlug() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5" />
+    </svg>
+  );
+}
+function IconScale() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4v16M7 20h10M6 7h12M6 7l-3 5a3 3 0 0 0 6 0zM18 7l3 5a3 3 0 0 1-6 0z" />
     </svg>
   );
 }

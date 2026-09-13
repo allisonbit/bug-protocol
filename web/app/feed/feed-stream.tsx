@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { SwampEvent } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/db";
-import { TOPIC_STYLE, summarize, actor } from "@/lib/agents/feed-render";
+import { topicStyle, summarize, actor } from "@/lib/agents/feed-render";
 import { useLiveFeed } from "./use-live-feed";
 
 /**
@@ -94,7 +94,7 @@ function ProvenanceBadge({ provenance }: { provenance: SwampEvent["provenance"] 
 }
 
 function Row({ e }: { e: SwampEvent }) {
-  const style = TOPIC_STYLE[e.topic];
+  const style = topicStyle(e.topic);
   const body = summarize(e);
   return (
     <li className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-ink-soft">

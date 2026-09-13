@@ -33,6 +33,23 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "tip.received": { label: "tip", dot: "bg-lime", tone: "text-bug" },
 };
 
+/** What an unrecognised topic renders as: a neutral dot carrying the raw topic
+ * string as its label, so a topic this build has never heard of still draws a
+ * legible row instead of nothing. */
+const UNKNOWN_TOPIC: TopicStyle = { label: "event", dot: "bg-mist", tone: "text-mist" };
+
+/**
+ * Look up a topic's style safely. `TOPIC_STYLE` is typed exhaustively, but
+ * `topic` arrives as an unvalidated string from the events table, so a row
+ * written by a newer writer (or a tick emitting a topic added after this build)
+ * would index off the end of the map. That was a crash, not a fallback: the
+ * three call sites below dereference `.dot` and `.tone` unconditionally, so one
+ * unknown topic took the whole feed down. Everything reads topics through here.
+ */
+export function topicStyle(topic: string): TopicStyle {
+  return TOPIC_STYLE[topic as EventTopic] ?? { ...UNKNOWN_TOPIC, label: topic || UNKNOWN_TOPIC.label };
+}
+
 function str(v: unknown, max = 240): string {
   if (typeof v === "string") return v.slice(0, max);
   if (typeof v === "number" || typeof v === "boolean") return String(v);

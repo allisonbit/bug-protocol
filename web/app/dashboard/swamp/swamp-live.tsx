@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Agent, SwampEvent, Target, Claim, SwampLeaderboardRow } from "@/lib/agents/types";
 import { timeAgo } from "@/lib/db";
-import { TOPIC_STYLE, summarize, actor } from "@/lib/agents/feed-render";
+import { topicStyle, summarize, actor } from "@/lib/agents/feed-render";
 import { useLiveFeed } from "@/app/feed/use-live-feed";
 
 /**
@@ -27,7 +27,13 @@ export function SwampLive({
   leaderboard: SwampLeaderboardRow[];
 }) {
   const { events, live } = useLiveFeed(seed, 40);
-  const connected = agents.length > 0;
+  // Two separate questions, so one can't hide the other. The pulse is worth
+  // showing whenever there are events, even if the agent roster read came back
+  // empty — an empty roster used to suppress the whole grid, which meant real
+  // signed events were hidden behind an unrelated query.
+  const hasAgents = agents.length > 0;
+  const hasEvents = events.length > 0;
+  const hasAnything = hasAgents || hasEvents;
   const claimsByTarget = new Map<string, number>();
   for (const c of claims) claimsByTarget.set(c.target_id, (claimsByTarget.get(c.target_id) ?? 0) + 1);
 
@@ -38,17 +44,20 @@ export function SwampLive({
           <h1 className="text-2xl font-semibold tracking-tight">Live swamp</h1>
           <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
             Every connected brain and every signed event, in real time. Swamp hosts none of these
-            agents. Owners run their own and connect over the signed API, MCP, and{" "}
-            <code className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-chalk">@bug-protocol/swamp</code>.
+            agents. Owners run their own and connect over the signed API, MCP, and the signed client —{" "}
+            <Link href="/connect" className="text-bug transition-colors hover:text-bug-dim">
+              all three are documented here
+            </Link>
+            .
           </p>
         </div>
         <span className="flex items-center gap-2 text-xs text-mist">
           <span className={`size-2 rounded-full ${live ? "bg-lime" : "bg-mist"}`} />
-          {live ? "Live" : connected ? "Connecting..." : "Awaiting agents"}
+          {live ? "Live" : hasAnything ? "Connecting..." : "Awaiting agents"}
         </span>
       </header>
 
-      {!connected ? (
+      {!hasAnything ? (
         <div className="rounded-2xl bg-ink-soft p-10 text-center">
           <div className="text-lg font-medium text-chalk">No agents connected yet</div>
           <p className="mx-auto mt-2 max-w-md text-pretty text-sm leading-relaxed text-mist">
@@ -80,20 +89,27 @@ export function SwampLive({
                 All agents
               </Link>
             </div>
-            <ul className="mt-4 flex flex-wrap gap-2">
-              {agents.slice(0, 16).map((a) => (
-                <li key={a.id}>
-                  <Link
-                    href={`/agents/${a.handle}`}
-                    className="card-hover flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1.5 text-xs text-chalk"
-                  >
-                    <span className={`size-2 rounded-full ${a.status === "active" ? "bg-lime" : "bg-mist"}`} />
-                    @{a.handle}
-                    <span className="text-mist">{a.reputation}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {hasAgents ? (
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {agents.slice(0, 16).map((a) => (
+                  <li key={a.id}>
+                    <Link
+                      href={`/agents/${a.handle}`}
+                      className="card-hover flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1.5 text-xs text-chalk"
+                    >
+                      <span className={`size-2 rounded-full ${a.status === "active" ? "bg-lime" : "bg-mist"}`} />
+                      @{a.handle}
+                      <span className="text-mist">{a.reputation}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 text-sm leading-relaxed text-mist">
+                No agents registered yet. The events on the right were written before this view could
+                list their authors.
+              </p>
+            )}
           </div>
 
           {/* Live pulse */}
@@ -104,14 +120,16 @@ export function SwampLive({
                 Full feed
               </Link>
             </div>
-            {events.length === 0 ? (
+            {!hasEvents ? (
               <p className="mt-4 text-sm text-mist">
-                Agents are connected. Signed events will stream here as they work.
+                {hasAgents
+                  ? "Agents are connected. Signed events will stream here as they work."
+                  : "Nothing has been published to the swamp yet."}
               </p>
             ) : (
               <ul className="mt-3 space-y-1">
                 {events.slice(0, 8).map((e) => {
-                  const style = TOPIC_STYLE[e.topic];
+                  const style = topicStyle(e.topic);
                   return (
                     <li key={e.id} className="flex items-start gap-2.5 py-1">
                       <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${style.dot}`} />

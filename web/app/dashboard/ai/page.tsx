@@ -1,23 +1,36 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { currentUser } from "@/lib/supabase/server";
+import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { CopilotConsole } from "./copilot-console";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: "AI Copilot | Swamp" };
 
 /**
- * The "AI brains" surface. Six agents, each mapped to the real MCP tools the
- * protocol exposes (see /tools). The console above now runs a live model over
- * the read tools in-app; every tool here is also available over MCP to any
- * client, so an external agent can run the write steps too, on its user's behalf.
+ * The "AI brains" surface.
+ *
+ * Two things live here and they are different in kind, so the page says so:
+ *
+ *   the console   a real in-app client. It runs on the model when this
+ *                 deployment has one configured, and otherwise says plainly
+ *                 that it hasn't and hands you the offline planner instead.
+ *   the recipes   six documented patterns, each naming the real MCP tools it
+ *                 uses (all of them registered; see lib/mcp/tools.ts). These
+ *                 are not running agents — Swamp hosts none — so they carry no
+ *                 "live" indicator. They are what you build, with the tools the
+ *                 protocol actually exposes.
  */
 
-type Agent = {
+type Recipe = {
   mark: string;
   name: string;
   blurb: string;
   tools: string[];
 };
 
-const AGENTS: Agent[] = [
+const RECIPES: Recipe[] = [
   {
     mark: "T",
     name: "Triage Copilot",
@@ -56,7 +69,22 @@ const AGENTS: Agent[] = [
   },
 ];
 
-export default function AIPage() {
+export default async function AIPage() {
+  if (!SUPABASE_CONFIGURED) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight">AI Copilot</h1>
+        <p className="mt-4 rounded-xl bg-ink-soft p-6 text-sm leading-relaxed text-mist">
+          The backend isn&apos;t connected on this deployment yet. The copilot reads your real programs and
+          findings, so there is nothing for it to work on until it is.
+        </p>
+      </div>
+    );
+  }
+
+  const user = await currentUser();
+  if (!user) redirect("/login?next=/dashboard/ai");
+
   return (
     <div className="mx-auto max-w-6xl">
       {/* Header */}
@@ -68,7 +96,10 @@ export default function AIPage() {
         </span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">AI Copilot</h1>
-          <p className="mt-0.5 text-sm text-mist">A live model over your real data, plus agents that run on the protocol&apos;s MCP tools.</p>
+          <p className="mt-0.5 text-sm text-mist">
+            A console over your own programs and findings, plus the recipes for running the same work
+            from an agent of your own.
+          </p>
         </div>
       </div>
 
@@ -77,18 +108,21 @@ export default function AIPage() {
         <CopilotConsole />
       </div>
 
-      {/* Agent roster */}
-      <h2 className="mt-12 text-sm font-medium text-chalk">The agents</h2>
+      {/* Recipe roster */}
+      <h2 className="mt-12 text-sm font-medium text-chalk">Recipes</h2>
+      <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-mist">
+        Patterns, not running agents — Swamp hosts none. Each one names the MCP tools it calls, and
+        every tool listed is registered on this deployment.
+      </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {AGENTS.map((a) => (
+        {RECIPES.map((a) => (
           <div key={a.name} className="card-hover rounded-2xl bg-ink-soft p-5">
             <div className="flex items-center justify-between">
               <span className="flex size-9 items-center justify-center rounded-lg bg-lime/20 text-base font-semibold text-bug">
                 {a.mark}
               </span>
-              <span className="inline-flex items-center gap-1.5 text-[10px] text-mist">
-                <span className="size-1.5 rounded-full bg-lime" />
-                Live via MCP
+              <span className="text-[10px] text-mist">
+                {a.tools.length} MCP {a.tools.length === 1 ? "tool" : "tools"}
               </span>
             </div>
             <h3 className="mt-3 font-medium text-chalk">{a.name}</h3>
@@ -109,16 +143,16 @@ export default function AIPage() {
         <div className="max-w-xl">
           <h3 className="font-medium text-chalk">Run these from your own agent</h3>
           <p className="mt-1.5 text-sm leading-relaxed text-mist-bright">
-            Every agent above is the same set of MCP tools the protocol exposes. Drop the config into Claude Desktop or
-            any MCP client and your agent can browse programs, triage, and submit findings. Read tools need no key,
-            write tools need a bearer token so they act as you.
+            Every recipe above is built from tools the protocol exposes over MCP. Point any MCP client
+            at the endpoint and your agent can browse programs, triage, and submit findings. The read
+            tools need no key; the write tools need a credential so they act as you.
           </p>
         </div>
         <Link
-          href="/tools"
+          href="/connect"
           className="glow shrink-0 rounded-md bg-lime px-5 py-2.5 text-sm font-medium text-graphite transition-transform hover:scale-[1.02]"
         >
-          Get the MCP config
+          Connect an agent
         </Link>
       </div>
     </div>

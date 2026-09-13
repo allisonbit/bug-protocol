@@ -12,6 +12,8 @@ import {
   programStatusMeta,
   submissionStatusMeta,
   severityMeta,
+  escrowMode,
+  escrowModeMeta,
   type Profile,
   type Program,
 } from "@/lib/db";
@@ -49,7 +51,16 @@ export default async function DashboardPage() {
   const name = displayName(profile) || user?.email?.split("@")[0] || "there";
 
   const live = programs.filter((p) => p.status === "live");
-  const committed = programs.reduce((s, p) => s + Number(p.pool || 0), 0);
+  // Only a program with an `onchain_program_id` actually holds funds in a
+  // contract. Summing every pool into one "in escrow" figure would claim a
+  // guarantee for honour-system programs that nobody is enforcing, so the two
+  // are counted separately and the off-chain part is named rather than absorbed.
+  const committed = programs
+    .filter((p) => escrowMode(p) === "escrow")
+    .reduce((s, p) => s + Number(p.pool || 0), 0);
+  const offchainCommitted = programs
+    .filter((p) => escrowMode(p) === "offchain")
+    .reduce((s, p) => s + Number(p.pool || 0), 0);
   const paidOut = programs.reduce((s, p) => s + Number(p.paid_out || 0), 0);
   const accepted = submissions.filter((s) => s.status === "accepted");
   const earnings = accepted.reduce((s, x) => s + Number(x.reward || 0), 0);
@@ -95,13 +106,49 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Stat band */}
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="In escrow" value={money(committed, "USDC")} sub={`${live.length} live`} accent />
-        <StatCard label="Paid to hunters" value={money(paidOut, "USDC")} sub="all-time" />
-        <StatCard label="Findings filed" value={submissions.length.toString()} sub={`${accepted.length} accepted`} />
-        <StatCard label="You've earned" value={money(earnings, "USDC")} sub="from bounties" />
-      </div>
+      {/* Stat band.
+          Only the figures this account has a basis for. The four cards were
+          fixed: a hunter who runs no programs permanently read "$0 in escrow,
+          0 live", and an owner who files no findings permanently read "You've
+          earned $0" — bare zeros that read as data rather than as "nothing has
+          happened yet". Which cards appear is decided by activity, not by the
+          role field, because activity is the ground truth and a role can be
+          stale. Nothing is shown until there is something true to show. */}
+      {programs.length === 0 && submissions.length === 0 ? (
+        <StartHere />
+      ) : (
+        <div
+          className={`mt-8 grid grid-cols-2 gap-3 ${
+            programs.length > 0 && submissions.length > 0 ? "sm:grid-cols-4" : "sm:grid-cols-2"
+          }`}
+        >
+          {programs.length > 0 && (
+            <>
+              <StatCard
+                label="In escrow"
+                value={money(committed, "USDC")}
+                sub={
+                  offchainCommitted > 0
+                    ? `${live.length} live, plus ${money(offchainCommitted, "USDC")} committed off-chain`
+                    : `${live.length} live`
+                }
+                accent
+              />
+              <StatCard label="Paid to hunters" value={money(paidOut, "USDC")} sub="all-time" />
+            </>
+          )}
+          {submissions.length > 0 && (
+            <>
+              <StatCard
+                label="Findings filed"
+                value={submissions.length.toString()}
+                sub={`${accepted.length} accepted`}
+              />
+              <StatCard label="You've earned" value={money(earnings, "USDC")} sub="from bounties" />
+            </>
+          )}
+        </div>
+      )}
 
       {/* Highlights: AI Copilot + Live swamp */}
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -166,6 +213,7 @@ export default async function DashboardPage() {
               <ul className="mt-4 space-y-2.5">
                 {programs.map((p) => {
                   const meta = programStatusMeta[p.status];
+                  const esc = escrowModeMeta[escrowMode(p)];
                   return (
                     <li key={p.id}>
                       <Link
@@ -180,8 +228,17 @@ export default async function DashboardPage() {
                             <span className="truncate font-medium text-chalk">{p.name}</span>
                             <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${meta.tone}`}>{meta.label}</span>
                           </div>
+                          {/* "In escrow" is only true when a contract actually holds it. */}
                           <div className="mt-0.5 truncate text-xs text-mist">
-                            {money(p.pool, p.currency)} in escrow, up to {money(topTier(p), p.currency)} / bug
+                            {money(p.pool, p.currency)}{" "}
+                            {escrowMode(p) === "escrow" ? "in escrow" : "committed off-chain"}, up to{" "}
+                            {money(topTier(p), p.currency)} / bug
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className={`rounded border px-1.5 py-0.5 text-[10px] ${esc.tone}`}>
+                              {esc.label}
+                            </span>
+                            <span className="truncate text-[10px] text-mist">{esc.blurb}</span>
                           </div>
                         </div>
                       </Link>
@@ -275,6 +332,45 @@ function greeting(): string {
   if (h < 12) return "Good morning";
   if (h < 18) return "Good afternoon";
   return "Good evening";
+}
+
+/**
+ * What a brand-new account sees where the stat band would be. Deliberately not
+ * four zeros: a zero is a measurement, and there is nothing here to measure
+ * yet. This says that plainly and offers the two ways to start.
+ */
+function StartHere() {
+  return (
+    <div className="mt-8 rounded-2xl bg-ink-soft p-6">
+      <h2 className="text-sm font-medium text-chalk">No numbers yet, and that&apos;s accurate</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mist">
+        Escrow totals and earnings appear here once you either fund a program or file a finding. Until
+        then there is nothing to total, so this shows you the two ways in rather than a row of zeros.
+      </p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/programs"
+          className="card-hover rounded-xl bg-panel-2 p-4 transition-colors hover:bg-panel"
+        >
+          <div className="text-sm font-medium text-chalk">Hunt a program</div>
+          <p className="mt-1 text-xs leading-relaxed text-mist">
+            Browse what&apos;s live, read the scope, and submit a report. Accepted findings pay from
+            escrow that&apos;s already funded.
+          </p>
+        </Link>
+        <Link
+          href="/programs/new"
+          className="card-hover rounded-xl bg-panel-2 p-4 transition-colors hover:bg-panel"
+        >
+          <div className="text-sm font-medium text-chalk">Fund a program</div>
+          <p className="mt-1 text-xs leading-relaxed text-mist">
+            Publish your scope and lock the rewards up front, so a hunter who finds something real is
+            paid without an invoice to chase.
+          </p>
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function StatCard({
