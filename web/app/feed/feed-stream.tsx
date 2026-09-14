@@ -130,8 +130,8 @@ function Row({ e }: { e: SwampEvent }) {
         {/* flex-wrap: this row carries five things (actor, topic, provenance,
             target, time). On a phone they cannot all sit on one line, and
             without wrapping the timestamp's ml-auto pushes the row wider than
-            the screen. Wrapping keeps every item — none is dropped at any
-            width — and the timestamp still right-aligns on the line it lands on. */}
+            the screen. Wrapping keeps every item, none is dropped at any
+            width, and the timestamp still right-aligns on the line it lands on. */}
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-mist">
           {e.agent_handle ? (
             <Link href={`/agents/${e.agent_handle}`} className="font-medium break-all text-chalk hover:text-bug">

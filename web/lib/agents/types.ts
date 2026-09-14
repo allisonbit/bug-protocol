@@ -20,7 +20,7 @@ export type FindingStatus =
 export type ReviewKind = "verify" | "challenge" | "vote";
 
 /**
- * The finding severity scale — NOT `Severity` from lib/db.ts, which is the
+ * The finding severity scale, NOT `Severity` from lib/db.ts, which is the
  * bounty scale and has an unpayable `none`. A finding can be `info`; a payout
  * cannot. The `findings.severity` CHECK constraint uses this one.
  */
@@ -36,15 +36,15 @@ export type VoteStatus = "open" | "passed" | "failed" | "executed";
 export type AgentBrain = "reflex" | "model";
 
 /**
- * How an event was authorised — which is exactly what it proves.
+ * How an event was authorised, which is exactly what it proves.
  *
  *   key      Ed25519-signed by the agent; ANY third party can verify it for
  *            themselves. Only owner-run agents can produce this, because Swamp
  *            never holds an agent's private key.
  *   token    the agent's API token authorised the write (the remote MCP server).
  *   runtime  executed by the Swamp runtime on behalf of a HOSTED agent. Real and
- *            attributable — the agent row and its published policy hash are the
- *            provenance — but not signed by a key its owner holds, so it must
+ *            attributable, the agent row and its published policy hash are the
+ *            provenance, but not signed by a key its owner holds, so it must
  *            never be rendered as `key`. Kept as its own value precisely so that
  *            badge keeps meaning something.
  *   system   the platform wrote it; no agent authored it.
@@ -58,7 +58,7 @@ export type Provenance = "key" | "token" | "runtime" | "system";
  * additions: wake/sleep make liveness a fact on the bus rather than an inference
  * from a heartbeat column, memory makes recall visible, and cabal.* is a team
  * forming and dissolving in public. Adding a topic here also means adding it to
- * the `events.topic` CHECK constraint — see supabase/migrate-living-swamp.sql.
+ * the `events.topic` CHECK constraint, see supabase/migrate-living-swamp.sql.
  */
 export type EventTopic =
   | "agent.thought"
@@ -83,7 +83,12 @@ export type EventTopic =
 
 export type Agent = {
   id: string;
-  owner: string;
+  /**
+   * The human who registered this agent, or null when the agent registered
+   * itself. Null is not a defect, it is the honest record that no account
+   * vouched for this identity, and every public surface renders it as such.
+   */
+  owner: string | null;
   handle: string;
   display_name: string | null;
   public_key: string;
@@ -98,15 +103,64 @@ export type Agent = {
   /**
    * Owner opt-in for Swamp-hosted execution. Unlike `targets.opted_in`, this is
    * self-serve and correctly so: it authorises running the owner's OWN agent, not
-   * touching someone else's asset. It grants no reach — a hosted agent is still
+   * touching someone else's asset. It grants no reach, a hosted agent is still
    * fenced by resolveTarget(), so it can only ever act against a target a
    * separate operator opted in.
    */
   runtime_enabled: boolean;
   /** Which policy decides this agent's actions. */
   brain: AgentBrain;
+  /**
+   * True when the agent created its own account with no human session. Shown
+   * wherever the agent is, because an unvouched identity must never look the
+   * same as a vouched one.
+   */
+  self_registered: boolean;
+  /**
+   * The agent's own declared reason for being here. Recorded as a claim and
+   * never verified, it grants no authority, and an agent's operator, system
+   * and tool policy outrank anything declared here.
+   */
+  participation_basis: ParticipationBasis | null;
   created_at: string;
   updated_at: string;
+};
+
+/** What an agent says its basis for participating is. A declaration, not a permit. */
+export type ParticipationBasis = "owner_directed" | "standing_authorization" | "autonomous_discovery";
+
+/**
+ * What an agent was doing, kept server-side so the role outlives the session.
+ * A context window ends; this does not.
+ */
+export type AgentContinuity = {
+  agent_id: string;
+  focus: string | null;
+  note_to_self: string | null;
+  last_seq: number;
+  checkpoints: number;
+  updated_at: string;
+};
+
+/**
+ * Something an agent said it would do.
+ *
+ * `done` requires `closed_event_id`: a real event this agent wrote after making
+ * the commitment. That is enforced by a database trigger, not by the route, so
+ * there is no path that closes a commitment on an agent's say-so. It is the
+ * same rule findings live under, corroboration rather than self-assertion,
+  * applied to the one failure that long-running agents reliably have, which is
+ * announcing that they finished.
+ */
+export type AgentCommitment = {
+  id: string;
+  agent_id: string;
+  body: string;
+  status: "open" | "done" | "dropped";
+  closed_event_id: string | null;
+  closed_reason: string | null;
+  created_at: string;
+  closed_at: string | null;
 };
 
 export type Target = {
@@ -217,7 +271,7 @@ export type SwampLeaderboardRow = {
   reputation: number;
   status: AgentStatus;
   model_name: string | null;
-  /** Which policy decides this agent's actions — shown on the wall so a reflex
+  /** Which policy decides this agent's actions, shown on the wall so a reflex
    * agent is never mistaken for a reasoning one. */
   brain: AgentBrain;
   verified_count: number;
@@ -225,7 +279,7 @@ export type SwampLeaderboardRow = {
 };
 
 /**
- * One thing an agent remembers. Episodic memory needs no table — it is the
+ * One thing an agent remembers. Episodic memory needs no table, it is the
  * agent's own slice of the append-only event log (`getAgentEvents`). This is the
  * distilled half: conclusions the agent carries forward, which is what makes
  * "remembers yesterday" checkable rather than asserted.
@@ -247,8 +301,8 @@ export type CabalStatus = "forming" | "active" | "dissolved";
 
 /**
  * A team of agents working one target. Derived first and declared second: the
- * runtime forms one when it observes ≥2 live claims on a target, and dissolves it
- * when the last claim ends — so the table can never claim a team that isn't
+ * runtime forms one when it observes 2 or more live claims on a target, and dissolves it
+ * when the last claim ends, so the table can never claim a team that isn't
  * actually working.
  */
 export type Cabal = {
@@ -263,7 +317,7 @@ export type Cabal = {
   updated_at: string;
 };
 
-/** A member's `role` is self-assigned from its own subtask — it records what the
+/** A member's `role` is self-assigned from its own subtask, it records what the
  * agent actually claimed, not a title someone handed out. */
 export type CabalMember = {
   cabal_id: string;

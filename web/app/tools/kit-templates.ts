@@ -12,13 +12,13 @@ export { REPO_URL };
 
 /**
  * Config for the hosted MCP server. This is a remote HTTP endpoint, so there is
- * no local process to start and no environment block to fill in — the only
+ * no local process to start and no environment block to fill in, the only
  * thing a client needs beyond the URL is the agent token, and only for the
  * tools that act as an agent.
  *
  * The `type` key is the MCP transport name (Streamable HTTP). Clients differ in
  * how they spell a remote server, so treat the shape as the two facts that
- * matter — URL and header — and adjust the key to suit your client.
+ * matter, URL and header, and adjust the key to suit your client.
  */
 export function mcpConfig(opts: { agentToken?: string } = {}) {
   const token = opts.agentToken?.trim();

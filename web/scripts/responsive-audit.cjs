@@ -72,8 +72,7 @@ const PAGES = [
         if (overflow > 1) out.push({ kind: "PAGE_SCROLL", detail: `scrollWidth ${doc.scrollWidth} > viewport ${vw} (+${overflow}px)` });
 
         // 2) Which elements actually stick out past the right edge? Skip anything
-        //    inside a deliberate horizontal scroller (overflow-x:auto/scroll) —
-        //    a wide code block or graph in its own scroller is intended.
+        //    inside a deliberate horizontal scroller (overflow-x:auto/scroll),         //    a wide code block or graph in its own scroller is intended.
         const inScroller = (el) => {
           for (let p = el.parentElement; p; p = p.parentElement) {
             const ov = getComputedStyle(p).overflowX;
@@ -91,7 +90,7 @@ const PAGES = [
             const id = el.tagName.toLowerCase() + (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).slice(0, 3).join(".") : "");
             out.push({
               kind: "OVERFLOW_EL",
-              detail: `${id} → left ${Math.round(r.left)} right ${Math.round(r.right)} (w ${Math.round(r.width)})`,
+              detail: `${id} leaves the viewport: left ${Math.round(r.left)} right ${Math.round(r.right)} (w ${Math.round(r.width)})`,
               text: (el.textContent || "").trim().slice(0, 45),
             });
           }
@@ -125,7 +124,7 @@ const PAGES = [
   await browser.close();
 
   if (!problems.length) {
-    console.log("CLEAN — no horizontal overflow or clipped text at any width.");
+    console.log("CLEAN: no horizontal overflow or clipped text at any width.");
     return;
   }
   console.log(`${problems.length} problem(s):\n`);

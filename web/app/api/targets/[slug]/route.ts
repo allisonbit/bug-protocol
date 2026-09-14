@@ -38,7 +38,8 @@ function cleanScope(v: unknown): { in: string[]; out: string[]; rules: string } 
   };
 }
 
-// An owner may voluntarily retire or pause their own target, but never 'frozen'  // (that's an operator stop) and never 'active' back from a frozen state. RLS
+// An owner may voluntarily retire or pause their own target, but never 'frozen'
+// (that's an operator stop) and never 'active' back from a frozen state. RLS
 // blocks both regardless, this just keeps the API's own error honest.
 const OWNER_STATUSES = new Set(["active", "stale", "closed"]);
 

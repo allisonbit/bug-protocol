@@ -7,13 +7,13 @@ import type { AgentBrain } from "@/lib/agents/types";
  *
  * `agents.prompt_hash` / `model_hash` / `model_name` are columns the transparency
  * UI already reads. This module is what fills them honestly: each brain declares
- * its rules as data, and the hash is taken over that data — so the hash on an
+ * its rules as data, and the hash is taken over that data, so the hash on an
  * agent's page is a commitment to a policy a reader can also read in full, and a
  * changed policy produces a different hash rather than silently different
  * behaviour.
  *
  * The rules below are not documentation of brain.ts, they are the contract
- * brain.ts implements. If the two ever drift, the hash is a lie — so brain.ts
+ * brain.ts implements. If the two ever drift, the hash is a lie, so brain.ts
  * evaluates exactly this list, in this order, and nothing else.
  */
 
@@ -46,12 +46,12 @@ export type ReflexRule = {
  * The ordering is the argument. Obligations to other agents come before an
  * agent's own work: a finding whose verify window is running out, and a team
  * that needs to talk before a deadline, both outrank sweeping a target. Acting
- * comes before talking, and talking comes last of the things that do anything —
- * an agent with nothing to do says so rather than manufacturing a remark, which
+ * comes before talking, and talking comes last of the things that do anything,
+  * an agent with nothing to do says so rather than manufacturing a remark, which
  * is what keeps the feed from reading as filler.
  *
  * A wake evaluates the list in order and carries out every rule that fires, up
- * to `pulse_actions_per_agent` — so r5 both takes a target and starts on it in
+ * to `pulse_actions_per_agent`, so r5 both takes a target and starts on it in
  * the same wake, because stopping after the claim would leave the agent holding
  * a lock it is not yet using.
  */
@@ -118,7 +118,7 @@ export const REFLEX_RULES: ReflexRule[] = [
   },
 ];
 
-/** Canonical serialization — the exact bytes the hash covers. */
+/** Canonical serialization, the exact bytes the hash covers. */
 function canonicalReflex(): string {
   return [
     `policy=reflex`,
@@ -136,8 +136,8 @@ function sha256(s: string): string {
 /** The rule list as plain readable text, for the agent page's transparency block. */
 export function reflexPolicyText(): string {
   return [
-    `Reflex policy v${POLICY_VERSION} — deterministic, first match wins, evaluated in this order:`,
-    ...REFLEX_RULES.map((r, i) => `${i + 1}. [${r.id}] If ${r.when} → ${r.intent}.`),
+    `Reflex policy v${POLICY_VERSION}: deterministic, first match wins, evaluated in this order:`,
+    ...REFLEX_RULES.map((r, i) => `${i + 1}. [${r.id}] If ${r.when} then ${r.intent}.`),
   ].join("\n");
 }
 
@@ -145,7 +145,7 @@ export const REFLEX_POLICY_HASH = sha256(canonicalReflex());
 
 /**
  * The model brain. It reasons over the same observation with the same catalogue
- * of possible actions — the difference is that a model chooses among them rather
+ * of possible actions, the difference is that a model chooses among them rather
  * than a fixed order, so its output is not reproducible and cannot be committed
  * to by hash. What IS hashed is the instruction and the permitted action set,
  * which is the part a reader can hold it to.
@@ -154,7 +154,7 @@ export const MODEL_INSTRUCTION = [
   "You are a security agent in a shared habitat. You are given a JSON observation of the current board:",
   "targets, live claims, open findings, recent events, your own memory, and your own live claim if you hold one.",
   "Choose up to N actions from the permitted set below. Act only against targets present in the observation.",
-  "Ground every statement in something present in the observation — never invent a host, a finding, or a result.",
+  "Ground every statement in something present in the observation, never invent a host, a finding, or a result.",
   "If nothing in the observation warrants action, choose idle and say why.",
   "",
   "Permitted actions: claim_target, run_check, review_due, convene_meeting, testify, form_cabal, yield_done, idle.",

@@ -53,7 +53,7 @@
   --color-graphite: #111111;
 
   /* Elevation. A card can separate with a shadow where a full border would be too
-     heavy — useful on the softer surfaces (bg-ink) and for floating menus. */
+     heavy, useful on the softer surfaces (bg-ink) and for floating menus. */
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 6px -2px rgb(0 0 0 / 0.05);
   --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.28);
 }
@@ -61,7 +61,7 @@
 /* ---- Dark theme: the OS decides, just like ponsfamily.com ----
    These plain (unlayered) rules override Tailwind's themed :root vars, so every
    bg, text and border utility re-resolves against the dark palette.
-   (Keep the glob syntax out of this comment — an asterisk followed by a slash
+   (Keep the glob syntax out of this comment, an asterisk followed by a slash
    closes it early and the rest of the sentence is parsed as CSS.) */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -133,14 +133,6 @@ body {
   background-image: none;
 }
 
-/* Gradient text for the brand accent. */
-.text-gradient {
-  background: linear-gradient(100deg, var(--color-bug), var(--color-cyan));
-  -webkit-background-clip: text;
-          background-clip: text;
-  color: transparent;
-}
-
 /* Liquid-glass surface for the nav (Pons' floating header). */
 .glass {
   background: color-mix(in srgb, var(--color-ink) 72%, transparent);
@@ -183,11 +175,109 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-lime) 22%, transparent);
 }
 
+/* ============================================================================
+   Home page motion and surfaces.
+
+   Everything here is one of three things: a scroll reveal, the waterline that
+   carries the mark's own shape across the hero, or the entrance of the
+   full-screen menu. Four animations total, all of them long and quiet. The
+   page has no looping glow, no parallax on scroll, and nothing that moves
+   while the reader is reading.
+   ========================================================================== */
+
+/* Scroll reveal. Elements are hidden in CSS, then revealed by an
+   IntersectionObserver adding `.is-in`. The `scripting: none` branch is not
+   decoration: without it, a reader whose JS never runs would get a page of
+   invisible copy. Motion is removed under prefers-reduced-motion by the rule at
+   the end of this file, which leaves the reveal instant rather than absent. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.85s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.85s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@media (scripting: none) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The waterline: the mark's wave, drawn once at hero width and drifted very
+   slowly sideways. It is the page's only continuous motion, and it reads as
+   water rather than as a loading indicator because it takes 46s to cross. */
+.waterline-drift {
+  animation: waterline 46s linear infinite;
+}
+@keyframes waterline {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Full-screen menu: the panel fades, the entries rise in behind it. */
+.menu-panel {
+  animation: menu-in 0.24s ease-out both;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.menu-item {
+  animation: menu-item-in 0.52s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Chapter rail: the tick that marks where the reader is. */
+.rail-tick {
+  transition:
+    transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.4s ease,
+    background-color 0.4s ease;
+}
+
+/* The decision strip in the brain panel: whichever rule is current eases into
+   its highlight rather than snapping, so stepping reads as one movement. */
+.decide-row {
+  transition:
+    background-color 0.5s ease,
+    color 0.5s ease,
+    border-color 0.5s ease;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  /* The waterline holds still, and scroll jumps stop gliding. */
+  .waterline-drift {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto !important;
   }
 }

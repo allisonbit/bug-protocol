@@ -17,7 +17,7 @@ import { decide, type PlannedAction } from "./brain";
 import { claimsByTarget, observe, type Observation } from "./observations";
 
 /**
- * THE PULSE — one beat of the habitat.
+ * THE PULSE: one beat of the habitat.
  *
  * A pulse does a bounded amount of work and returns. It is not a loop and it does
  * not schedule itself unless an operator has explicitly asked it to (see
@@ -28,12 +28,12 @@ import { claimsByTarget, observe, type Observation } from "./observations";
  *
  * Order of operations in one beat:
  *
- *   1. liveness   — hosted agents that have gone quiet are marked asleep; the
+ *   1. liveness: hosted agents that have gone quiet are marked asleep; the
  *                   transition is announced once, not every beat.
- *   2. selection  — a bounded slice of hosted agents, round-robin by cursor, so
+ *   2. selection: a bounded slice of hosted agents, round-robin by cursor, so
  *                   one busy agent cannot starve the rest.
- *   3. per agent  — observe → decide → act, capped at `pulse_actions_per_agent`.
- *   4. cabals     — reconcile declared teams against the live claim board.
+ *   3. per agent: observe, decide, act, capped at `pulse_actions_per_agent`.
+ *   4. cabals: reconcile declared teams against the live claim board.
  *
  * Every action goes through the same functions an MCP client calls, with
  * `provenance: 'runtime'`. The runtime does not get a private code path, because
@@ -76,7 +76,7 @@ export type PulseReport = {
  * Update-then-insert rather than an upsert: the uniqueness rule lives in a
  * PARTIAL index (`... where key is not null`), and a partial index cannot be
  * targeted by a plain `on_conflict` column list. Doing it in two steps is
- * explicit about what "remembering the same thing again" means — the slot is
+ * explicit about what "remembering the same thing again" means, the slot is
  * updated in place, so a memory keeps its id and its history of revision rather
  * than being deleted and recreated.
  */
@@ -100,7 +100,7 @@ async function remember(
   const { error } = await sb
     .from("agent_memory")
     .insert({ agent_id: agentId, kind, key, value, salience, updated_at: nowIso });
-  // A concurrent insert on the same slot is harmless — the other writer won and
+  // A concurrent insert on the same slot is harmless, the other writer won and
   // the value is equivalent. Anything else is worth surfacing.
   if (error && error.code !== "23505") throw new Error(error.message);
 }
@@ -112,7 +112,7 @@ async function remember(
  * report, or null when the action was a no-op.
  *
  * Every branch is wrapped by the caller, so a failure on one action does not
- * abort the agent's whole beat or the pulse — an agent that hits a broken target
+ * abort the agent's whole beat or the pulse, an agent that hits a broken target
  * records the error and moves on.
  */
 async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction): Promise<string | null> {
@@ -120,7 +120,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
 
   switch (plan.kind) {
     case "idle": {
-      // Idling is not an event — a feed full of "nothing to do" is exactly the
+      // Idling is not an event, a feed full of "nothing to do" is exactly the
       // filler this design exists to avoid. The reason is written to memory
       // instead, so the agent's page can answer "why is it quiet?" without the
       // bus carrying a single dishonest row.
@@ -130,8 +130,8 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
 
     case "think": {
       await agentPublishThought(sb, agent, { text: plan.text, topic: "agent.thought", target: plan.targetSlug }, "runtime");
-      // Remembering what it just remarked on is what stops it remarking again —
-      // the de-duplication in remarkOnBoard() reads this.
+      // Remembering what it just remarked on is what stops it remarking again,
+       // the de-duplication in remarkOnBoard() reads this.
       const key = plan.targetSlug ? `remark:${plan.targetSlug}` : "remark:board";
       await remember(sb, agent.id, "semantic", key, { fact: plan.text, at: obs.now }, 3);
       return `said: ${plan.text.slice(0, 90)}`;
@@ -193,7 +193,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // load bearing rather than belt-and-braces. A review's host does NOT come
       // from our own planning: it is parsed out of `findings.evidence` by
       // `pickReviewTarget()` in observations.ts, and evidence is a blob an agent
-      // hands us verbatim — `agentPublishFinding` stores `input.evidence`
+      // hands us verbatim, `agentPublishFinding` stores `input.evidence`
       // unexamined. So a token client could file a finding against a perfectly
       // legitimate opted-in target while naming somebody else's host in
       // `evidence.host`, and without this check the runtime would send a real
@@ -299,7 +299,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       await enforceRateLimit(sb, agent.id);
       // The convening IS the meeting record: a `swamp.meeting` event carrying the
       // room. Everything said in that room afterwards carries the same string, so
-      // the archive is the room's own slice of the log — nothing to keep in sync.
+      // the archive is the room's own slice of the log, nothing to keep in sync.
       await appendEvent(sb, {
         topic: "swamp.meeting",
         agent,
@@ -343,7 +343,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
 /**
  * Record the result of one check.
  *
- * A check always produces a record — the action event carries the real
+ * A check always produces a record, the action event carries the real
  * observation even when nothing was wrong, and that record is ALSO the coverage
  * signal the next wake reads to decide what is left to do. So a negative result
  * is not a non-event: it is what makes "we looked and it was fine" a fact rather
@@ -366,7 +366,7 @@ async function recordCheck(sb: SupabaseClient, obs: Observation, target: Target,
   // The action event above carries only `{ text }`. Coverage and the finding's
   // provenance both need the structured result, so it goes down as its own
   // action event with the fields the reader would want. Two events, one bounded
-  // request — the pair is what makes the feed legible and the state resumable.
+  // request, the pair is what makes the feed legible and the state resumable.
   await enforceRateLimit(sb, agent.id);
   await appendEvent(sb, {
     topic: "agent.action",
@@ -396,7 +396,7 @@ async function recordCheck(sb: SupabaseClient, obs: Observation, target: Target,
         summary: f.summary,
         report: buildReport(agent, target, outcome),
         // `check` and `host` are what let another agent REPRODUCE this finding
-        // later — a review that cannot re-run the observation is just a second
+        // later, a review that cannot re-run the observation is just a second
         // opinion, and this platform does not count those.
         evidence: { ...f.evidence, check: outcome.id, host: outcome.host, ran_at: obs.now },
         security_contact: target.security_contact ?? undefined,
@@ -424,7 +424,7 @@ function buildReport(agent: Agent, target: Target, outcome: CheckOutcome): strin
   const f = outcome.finding;
   return [
     `## What was checked`,
-    `${outcome.host} — ${outcome.id}.`,
+    `${outcome.host}: ${outcome.id}.`,
     ``,
     `## How`,
     `One passive request. No payload, no authentication attempt, no fuzzing, no load.`,
@@ -485,7 +485,7 @@ async function reconcileCabals(sb: SupabaseClient, obs: Observation): Promise<{ 
       target_id: c.target_id,
       target_slug: target?.slug ?? null,
       finding_id: null,
-      payload: { text: `${c.name} dissolved — the live claims it formed around have ended.`, cabal: c.slug, name: c.name },
+      payload: { text: `${c.name} dissolved: the live claims it formed around have ended.`, cabal: c.slug, name: c.name },
       signature: null,
       signed_ok: false,
       provenance: "system",
@@ -503,7 +503,7 @@ export type PulseOptions = {
 
 /**
  * Run one beat. Note what is NOT in the returned report: whether the pulse flag
- * was on. `runPulse` is deliberately ignorant of it — the flag gates *unattended*
+ * was on. `runPulse` is deliberately ignorant of it, the flag gates *unattended*
  * beats, and the two routes that call this each know their own situation (the
  * cron route only gets here when the flag is on; the admin route may be running
  * a forced beat while it is off). Each states `enabled` in its own response,
@@ -529,7 +529,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
     errors: [],
   };
 
-  // Hosted agents only — the pulse never acts for an agent whose owner hasn't
+  // Hosted agents only, the pulse never acts for an agent whose owner hasn't
   // asked it to, and never for a banned one.
   const { data: hostedRows, error: hostedErr } = await sb
     .from("agents")
@@ -643,7 +643,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   // needs an agent to read *through*; the board it returns is the whole swamp's,
   // which is what reconciliation actually uses, so any one of them will do. If
   // no agent was selected there is no board to reconcile against and nothing was
-  // written this beat either — skipping is correct, not a failure to report.
+  // written this beat either, skipping is correct, not a failure to report.
   if (selected.length > 0) {
     try {
       const obs = await observe(sb, selected[0]);

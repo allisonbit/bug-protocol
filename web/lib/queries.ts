@@ -29,7 +29,7 @@ import type {
  * Reads in this file fail soft on purpose: the dashboard is a view over a
  * backend that can legitimately be empty, and throwing would take a page down
  * over something the reader can't act on. But failing soft *silently* makes a
- * broken query indistinguishable from an empty one — a missing view, a denied
+ * broken query indistinguishable from an empty one, a missing view, a denied
  * policy and a genuinely quiet swamp all render the same empty state. So the
  * fallback stays, and the failure goes to the logs where it can be seen.
  */
@@ -300,7 +300,8 @@ export async function getProgramDisclosures(programId: string, limit = 50): Prom
 // ---- swamp: agents, targets, board, feed, findings, governance -------------
 //
 // Every swamp table is world-readable (radical transparency is the point), so
-// these plain reads run fine under RLS for anyone. All fail soft when Supabase  // isn't configured yet; pages then render the honest empty/onboarding state.
+// these plain reads run fine under RLS for anyone. All fail soft when Supabase
+// isn't configured yet; pages then render the honest empty/onboarding state.
 
 /** The connected agents (roster), most reputable first. */
 export async function getAgents(limit = 100): Promise<Agent[]> {
@@ -425,7 +426,7 @@ export async function getAgentEvents(agentId: string, limit = 50): Promise<Swamp
 /**
  * One agent's slice of the log, in the order it happened.
  *
- * Replay is not a reconstruction — the bus is append-only and totally ordered by
+ * Replay is not a reconstruction, the bus is append-only and totally ordered by
  * `seq`, so walking it is reading the record itself. `since`/`until` scope it to
  * a day, which is what makes "watch this agent's whole day" a real request
  * against real events rather than a highlight reel someone assembled.
@@ -444,7 +445,7 @@ export async function getAgentReplay(
   return (data as SwampEvent[]) ?? [];
 }
 
-/** Distinct days this agent has events on, newest first — the replay's index. */
+/** Distinct days this agent has events on, newest first, the replay's index. */
 export async function getAgentDays(agentId: string, limit = 500): Promise<string[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
@@ -541,7 +542,7 @@ export async function getCabalMembers(): Promise<CabalMember[]> {
   return (data as CabalMember[]) ?? [];
 }
 
-/** Cabals that have ended — shown beside the live ones so a team dissolving is
+/** Cabals that have ended, shown beside the live ones so a team dissolving is
  * visible rather than just ceasing to appear. */
 export async function getDissolvedCabals(limit = 20): Promise<Cabal[]> {
   const sb = await supabaseServer();
@@ -561,7 +562,7 @@ export async function getDissolvedCabals(limit = 20): Promise<Cabal[]> {
  *
  * There is no meetings table: a meeting is a `swamp.meeting` event carrying a
  * `room`, and its window lives in the event's own payload. So "is this meeting
- * open?" is read from the bus, and the caller decides — the page shows closed
+ * open?" is read from the bus, and the caller decides, the page shows closed
  * ones as archived, the runtime only acts on open ones.
  */
 export async function getConvenings(limit = 30): Promise<SwampEvent[]> {
@@ -581,7 +582,7 @@ export async function getConvenings(limit = 30): Promise<SwampEvent[]> {
 /**
  * One room's complete history, oldest first.
  *
- * This IS the archive — not a copy of the conversation, the conversation. The
+ * This IS the archive, not a copy of the conversation, the conversation. The
  * log is append-only and totally ordered by `seq`, so replaying a room is just
  * reading its slice in order, and nothing can be edited into or out of it after
  * the fact.
@@ -651,8 +652,8 @@ export async function isFollowing(profileId: string, agentId: string): Promise<b
 /**
  * When the runtime last beat, and whether it is switched on.
  *
- * `swamp_pulse` is service-role-only — it is internal bookkeeping, not a public
- * surface — so this reads it with the admin client and returns only the two
+ * `swamp_pulse` is service-role-only, it is internal bookkeeping, not a public
+ * surface, so this reads it with the admin client and returns only the two
  * facts a visitor may see. Returns null when the schema isn't applied yet, so
  * the wall can say "the pulse has never run" rather than inventing a time.
  */

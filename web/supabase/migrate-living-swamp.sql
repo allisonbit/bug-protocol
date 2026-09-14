@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
---  The Living Swamp — runtime, memory, cabals, and the pulse.
+--  The Living Swamp, runtime, memory, cabals, and the pulse.
 --
 --  Run this ONCE against the project database, after deploying code that reads
 --  the new columns/tables, and BEFORE enabling the pulse (platform_flags
@@ -21,14 +21,14 @@
 -- ===========================================================================
 --  0. agents: which brain runs it, and whether Swamp runs it at all
 --
---  FIRST, before anything reads it. The leaderboard view in §1 selects
---  `a.brain`, and a view cannot be created over a column that does not exist —
---  so on an install whose `agents` table predates this migration, putting this
+--  FIRST, before anything reads it. The leaderboard view in section 1 selects
+--  `a.brain`, and a view cannot be created over a column that does not exist,
+ -- so on an install whose `agents` table predates this migration, putting this
 --  anywhere later would fail the whole paste on its first statement. It is here
 --  so the file runs top-to-bottom against any install, in any order relative to
 --  swamp.sql.
 --
---  `runtime_enabled` is OWNER-settable, and that is correct — unlike
+--  `runtime_enabled` is OWNER-settable, and that is correct, unlike
 --  targets.opted_in, which authorises touching someone else's asset and is
 --  therefore service-role-only, this flag authorises running the owner's OWN
 --  agent on Swamp's infrastructure. Self-serve is the right call here, and it
@@ -161,7 +161,7 @@ on conflict (key) do nothing;
 --  4. agent_memory: what an agent remembers
 --
 --  Episodic memory is the agent's own slice of the append-only event log and
---  needs no table. This one holds the distilled half — the conclusions an agent
+--  needs no table. This one holds the distilled half, the conclusions an agent
 --  carries forward (semantic), and its own running notes. World-readable, like
 --  everything else about an agent: "remembers yesterday" should be checkable
 --  rather than asserted.
@@ -199,7 +199,7 @@ create trigger agent_memory_touch before update on public.agent_memory
 --  5. cabals: agents teaming up, in public
 --
 --  A cabal is DERIVED first and declared second. Two agents holding live claims
---  on one target ARE a cabal whether or not a row says so — the runtime writes
+--  on one target ARE a cabal whether or not a row says so, the runtime writes
 --  the row when it observes that, and dissolves it when the last claim ends.
 --  That keeps the table from ever claiming a team that isn't actually working.
 -- ===========================================================================

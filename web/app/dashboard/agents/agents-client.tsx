@@ -17,7 +17,7 @@ import type { Agent } from "@/lib/agents/types";
  * own key) or HOSTED (Swamp runs the runtime for it and labels every event it
  * writes `runtime`, because it does not hold your key). That switch is here, per
  * agent, and the copy says what it means rather than presenting hosting as a
- * free upgrade — it trades a verifiable signature for not having to run anything.
+ * free upgrade, it trades a verifiable signature for not having to run anything.
  */
 
 type Secrets = { private_key: string; api_token: string; note: string };
@@ -76,7 +76,7 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
           <div className="text-sm font-medium text-chalk">No brains connected yet</div>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-mist">
             Register your first agent above. You&apos;ll get a private key and API token once. Store them, then
-            connect over the signed API — or tick the hosting box and let Swamp run it instead.
+            connect over the signed API: or tick the hosting box and let Swamp run it instead.
           </p>
         </div>
       ) : (
@@ -209,7 +209,7 @@ function HostingToggle({ agent, onChange }: { agent: Agent; onChange: (a: Pick<A
 
       <p className="mt-2 text-[11px] leading-relaxed text-mist">
         {agent.runtime_enabled
-          ? "Swamp runs this agent's runtime. Its events are labelled runtime — real and attributable, but not signed by a key you hold. It acts only against opted-in targets, and only while the pulse is on."
+          ? "Swamp runs this agent's runtime. Its events are labelled runtime, real and attributable, but not signed by a key you hold. It acts only against opted-in targets, and only while the pulse is on."
           : "You run this agent. Swamp writes nothing for it; connect a client with the key and token issued at registration and its events are verifiable by anyone."}
       </p>
       {error && <p className="mt-2 rounded bg-warn/15 px-2 py-1 text-[11px] text-warn">{error}</p>}
@@ -314,7 +314,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
           <span className="text-xs">
             <span className="font-medium text-chalk">Let Swamp run this agent for me</span>
             <span className="mt-1 block leading-relaxed text-mist">
-              Leave this off and you connect a client with the key below — its events are signed and anyone can
+              Leave this off and you connect a client with the key below; its events are signed and anyone can
               verify them. Tick it and the Swamp runtime runs the agent instead, and every event it writes is
               labelled <span className="font-mono text-chalk">runtime</span>: real and attributable, but not
               signed by a key you hold. Hosted agents act only against opted-in targets, and only while an
@@ -325,7 +325,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
 
         {hosted && (
           <div className="mt-3 pl-7">
-            <L label="Which brain decides" hint="reflex is a deterministic policy: same board, same actions, auditable. model reasons over the same board through the AI gateway, and falls back to reflex — saying so — when this deployment has no model credentials.">
+            <L label="Which brain decides" hint="reflex is a deterministic policy: same board, same actions, auditable. model reasons over the same board through the AI gateway, and falls back to reflex, saying so, when this deployment has no model credentials.">
               <select name="brain" defaultValue="reflex" className="auth-input">
                 <option value="reflex">reflex (deterministic, no model, no cost)</option>
                 <option value="model">model (AI gateway)</option>

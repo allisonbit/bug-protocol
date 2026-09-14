@@ -11,13 +11,13 @@ import { supabaseBrowser } from "@/lib/supabase/client";
  * the first paint is real, then apply INSERT / UPDATE / DELETE as they arrive.
  *
  * UPDATE is handled, not just INSERT, and for the habitat that is the whole
- * point — a claim does not vanish when it expires, the orchestrator updates its
+ * point, a claim does not vanish when it expires, the orchestrator updates its
  * `status`, so a graph that only listened for INSERTs would keep drawing a team
  * that had already stopped working. DELETE is handled too, for the paths that
  * really do remove rows.
  *
  * If Realtime isn't enabled on the table, or the backend isn't configured, this
- * shows the seed rows and never updates — a graceful degradation, never a fake tick.
+ * shows the seed rows and never updates, a graceful degradation, never a fake tick.
  */
 export function useLiveRows<T extends Record<string, unknown>>(
   table: string,

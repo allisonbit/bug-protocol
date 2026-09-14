@@ -6,7 +6,7 @@ import { SITE_URL } from "@/lib/site";
  *
  * The runtime makes HTTP requests to hosts named in a `targets.domains` array.
  * That array is written by a signed-in user, which makes it USER-CONTROLLED INPUT
- * reaching a server-side fetch — an SSRF primitive if taken at face value. A
+ * reaching a server-side fetch, an SSRF primitive if taken at face value. A
  * function running on Vercel can reach link-local addresses (169.254.169.254) and
  * private ranges the public internet cannot, so "just fetch what the row says"
  * would let a user register a name that resolves inward and have Swamp probe its
@@ -14,9 +14,9 @@ import { SITE_URL } from "@/lib/site";
  *
  * So every outbound request goes through assertPublicHost() first, which refuses:
  *   - IP literals in any encoding (dotted, bare decimal, hex, and every IPv6 form)
- *   - internal names and suffixes (localhost, *.internal, *.local, …)
+ *   - internal names and suffixes (localhost, *.internal, *.local, and so on)
  *   - names that do not resolve, and names that RESOLVE to a private or reserved
- *     address — resolution happens first, over DNS-over-HTTPS, so a rebinding
+ *     address, resolution happens first, over DNS-over-HTTPS, so a rebinding
  *     answer is refused before the request is made rather than after it.
  *
  * That last one is the important one: checking the string alone is not enough,
@@ -94,7 +94,7 @@ export type DohResult = { ok: true; answers: DohAnswer[]; status: number } | { o
 
 /**
  * One DNS lookup over HTTPS. Used both to guard a host and as a check in its own
- * right — resolving through DoH rather than the system resolver keeps the runtime
+ * right, resolving through DoH rather than the system resolver keeps the runtime
  * from depending on the host's DNS config, and gives structured answers.
  */
 export async function doh(name: string, type: "A" | "AAAA" | "TXT" | "CAA" | "MX"): Promise<DohResult> {
@@ -172,10 +172,10 @@ export type PassiveResponse = {
  *
  * `redirect: "manual"` is a security control, not a preference. Following a
  * redirect would re-issue the request to a URL the TARGET chose, AFTER the guard
- * has already run — so `302 -> http://169.254.169.254/` would sail straight past
+ * has already run, so `302 -> http://169.254.169.254/` would sail straight past
  * assertPublicHost() and into the cloud metadata service. The runtime therefore
  * never chases a redirect: it records where it was sent and stops. That is also
- * the honest passive posture — we look at one response, we do not crawl.
+ * the honest passive posture, we look at one response, we do not crawl.
  */
 export async function passiveGet(
   host: string,
@@ -186,7 +186,7 @@ export async function passiveGet(
   try {
     const res = await fetch(`https://${host}${p}`, {
       method: "GET",
-      // Headers only — we never want the page. Cancelling the body keeps a large
+      // Headers only, we never want the page. Cancelling the body keeps a large
       // or slow response from holding the connection open.
       headers: { "user-agent": SWAMP_USER_AGENT, accept: "*/*" },
       redirect: "manual",
@@ -244,7 +244,7 @@ export async function readCappedText(res: Response): Promise<{ text: string; tru
 }
 
 /**
- * A bounded GET that also returns a little of the body — used only for the two
+ * A bounded GET that also returns a little of the body, used only for the two
  * well-known text files, never for pages. Still one request, still no redirects.
  */
 export async function passiveGetText(

@@ -188,7 +188,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         <Link href="/connect" className="text-bug hover:underline">
           endpoint, npm client and CLI
         </Link>{" "}
-        are all documented without an account — you only need one to issue a token.
+        are all documented without an account, you only need one to issue a token.
       </p>
 
       <p className="mt-6 text-center text-sm text-mist">

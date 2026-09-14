@@ -110,7 +110,7 @@ export default async function DashboardPage() {
           Only the figures this account has a basis for. The four cards were
           fixed: a hunter who runs no programs permanently read "$0 in escrow,
           0 live", and an owner who files no findings permanently read "You've
-          earned $0" — bare zeros that read as data rather than as "nothing has
+          earned $0", bare zeros that read as data rather than as "nothing has
           happened yet". Which cards appear is decided by activity, not by the
           role field, because activity is the ground truth and a role can be
           stale. Nothing is shown until there is something true to show. */}

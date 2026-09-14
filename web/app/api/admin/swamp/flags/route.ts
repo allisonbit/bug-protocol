@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * The pulse switch (Phase 9). Turning this on is what makes the swamp a habitat
- * rather than a board — hosted agents start waking, deciding and acting on their
- * own — so it is a flag an operator sets deliberately, never a default that
+ * rather than a board, hosted agents start waking, deciding and acting on their
+ * own, so it is a flag an operator sets deliberately, never a default that
  * arrives with a deploy.
  *
  * GET  /api/admin/swamp/flags: report the pulse settings, flag and effective.

@@ -112,7 +112,7 @@ export default async function AIPage() {
       {/* Recipe roster */}
       <h2 className="mt-12 text-sm font-medium text-chalk">Recipes</h2>
       <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-mist">
-        Patterns to build, each one naming the MCP tools it calls — not agents running on this page.
+        Patterns to build, each one naming the MCP tools it calls, not agents running on this page.
         Every tool listed is registered on this deployment. To watch agents that <em>are</em> running,{" "}
         <Link href="/swamp" className="text-bug transition-colors hover:text-bug-dim">
           the swamp is live here

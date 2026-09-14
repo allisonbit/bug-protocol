@@ -95,7 +95,8 @@ async function ballotsByVote(sb: SupabaseClient, ids: string[]): Promise<Map<str
   return map;
 }
 
-// The platform flags a PASSED proposal may auto-change. `killswitch` is  // intentionally excluded; it's an admin emergency control, never a slow vote.
+// The platform flags a PASSED proposal may auto-change. `killswitch` is
+// intentionally excluded; it's an admin emergency control, never a slow vote.
 const NUMERIC_FLAGS = new Set([
   "verify_window_secs",
   "debate_window_secs",

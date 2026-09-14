@@ -7,7 +7,7 @@ import type { AgentMemory, Cabal, CabalMember, SwampEvent } from "@/lib/agents/t
  * exactly how a UI starts lying: it invents a narrative for data whose shape it
  * doesn't actually know. So each shape the runtime WRITES gets a real rendering,
  * and anything unrecognised falls back to showing the stored key and value
- * verbatim — less pretty, and true.
+ * verbatim, less pretty, and true.
  */
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -31,8 +31,8 @@ export type MemoryLine = {
  * One memory row as a line.
  *
  * The keys are the ones `lib/swamp/pulse.ts` writes, so this is a view over a
- * known contract rather than a guess. `note` rows are the agent's own scratch —
- * including the reason it last stayed idle, which is worth showing precisely
+ * known contract rather than a guess. `note` rows are the agent's own scratch,
+  * including the reason it last stayed idle, which is worth showing precisely
  * because it is the honest answer to "why isn't it doing anything".
  */
 export function memoryLine(m: AgentMemory): MemoryLine {
@@ -47,19 +47,19 @@ export function memoryLine(m: AgentMemory): MemoryLine {
   if (key.startsWith("target:")) {
     const slug = key.slice("target:".length);
     if (s(v.finished_at)) {
-      return { label: "released", text: `${slug} — sweep finished, claim released`, salience: m.salience, at };
+      return { label: "released", text: `${slug}: sweep finished, claim released`, salience: m.salience, at };
     }
     const subtask = s(v.subtask);
     return {
       label: "claim",
-      text: `${slug}${subtask ? ` — took ${subtask}` : ""}${s(v.claimed_at) ? `, claimed ${s(v.claimed_at)}` : ""}`,
+      text: `${slug}${subtask ? `: took ${subtask}` : ""}${s(v.claimed_at) ? `, claimed ${s(v.claimed_at)}` : ""}`,
       salience: m.salience,
       at,
     };
   }
 
   if (key.startsWith("check:")) {
-    // `check:<target>:<check-id>` — what it ran, where, and what came of it.
+    // `check:<target>:<check-id>`, what it ran, where, and what came of it.
     const parts = key.split(":");
     const targetSlug = parts[1] ?? "";
     const checkId = parts.slice(2).join(":");
@@ -67,7 +67,7 @@ export function memoryLine(m: AgentMemory): MemoryLine {
     const found = s(v.found);
     return {
       label: found ? "found" : "checked",
-      text: `${checkId} on ${host ?? targetSlug}${found ? ` — filed "${found}"` : " — nothing to file"}`,
+      text: `${checkId} on ${host ?? targetSlug}${found ? `: filed "${found}"` : ": nothing to file"}`,
       salience: m.salience,
       at,
     };
@@ -78,7 +78,7 @@ export function memoryLine(m: AgentMemory): MemoryLine {
     const why = s(v.rationale);
     return {
       label: kind ?? "reviewed",
-      text: `a peer's finding${why ? ` — ${why}` : ""}`,
+      text: `a peer's finding${why ? `: ${why}` : ""}`,
       salience: m.salience,
       at,
     };
@@ -87,7 +87,7 @@ export function memoryLine(m: AgentMemory): MemoryLine {
   if (key.startsWith("meeting:")) {
     return {
       label: "convened",
-      text: `${key.slice("meeting:".length)}${s(v.agenda) ? ` — ${s(v.agenda)}` : ""}`,
+      text: `${key.slice("meeting:".length)}${s(v.agenda) ? `: ${s(v.agenda)}` : ""}`,
       salience: m.salience,
       at,
     };
@@ -108,12 +108,12 @@ export function memoryLine(m: AgentMemory): MemoryLine {
   }
 
   // Unrecognised. Show what is actually stored rather than inventing a sentence
-  // for it — a memory panel that narrates rows it doesn't understand is worse
+  // for it, a memory panel that narrates rows it doesn't understand is worse
   // than one that shows them raw.
   const raw = JSON.stringify(m.value);
   return {
     label: m.kind,
-    text: `${key || "(no key)"} ${raw.length > 160 ? `${raw.slice(0, 160)}…` : raw}`,
+    text: `${key || "(no key)"} ${raw.length > 160 ? `${raw.slice(0, 160)}...` : raw}`,
     salience: m.salience,
     at,
   };
@@ -165,7 +165,7 @@ export type MeetingView = {
  * A meeting, read from its convening event.
  *
  * `open` is computed against the declared window rather than stored, so a
- * meeting that has run out simply becomes archived — there is no status column
+ * meeting that has run out simply becomes archived, there is no status column
  * for anyone to forget to update, and no meeting that stays "live" forever
  * because a job didn't run.
  */

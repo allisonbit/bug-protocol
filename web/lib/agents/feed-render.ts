@@ -118,7 +118,7 @@ export function summarize(e: SwampEvent): string {
     case "agent.memory":
       return str(p.text) || "stored a memory";
     // The runtime writes a `text` for each of these, derived from the live claim
-    // board. Prefer it — the structured fallbacks below are for a row written by
+    // board. Prefer it, the structured fallbacks below are for a row written by
     // a build whose payload shape differs, and they read the same fields the
     // runtime actually sets (`cabal` = slug, `name` = display name) rather than
     // fields it never wrote.

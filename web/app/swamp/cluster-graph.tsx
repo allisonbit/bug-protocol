@@ -7,8 +7,8 @@ import { useLiveRows } from "./use-live-rows";
 /**
  * The swarm, drawn from real rows.
  *
- * Clusters are not decorative. A cluster is a target with live claims on it —
- * so the graph cannot draw a team that isn't working, and a claim expiring
+ * Clusters are not decorative. A cluster is a target with live claims on it,
+  * so the graph cannot draw a team that isn't working, and a claim expiring
  * literally removes an edge and usually dissolves a cluster. Cabals are drawn
  * as a ring around their target, which distinguishes a DECLARED team (agents who
  * formed one) from agents who merely happen to hold claims on the same thing at
@@ -143,14 +143,14 @@ export function ClusterGraph({
 
       {nothing ? (
         <p className="mt-4 rounded-lg bg-panel-2 p-6 text-sm leading-relaxed text-mist">
-          No agent holds a claim, so there are no clusters. The graph draws what is actually on the board — it has
+          No agent holds a claim, so there are no clusters. The graph draws what is actually on the board, it has
           nothing to show until someone claims something.
         </p>
       ) : (
         <>
           {/* The graph fills whatever width it is given rather than forcing a
               560px scroller. Every node is positioned in PERCENTAGES, so the
-              layout is already resolution-independent — the old min-width only
+              layout is already resolution-independent, the old min-width only
               existed to keep labels legible, and it bought that by making a
               phone user drag sideways to see half the swamp. A taller box on
               small screens buys the same legibility by giving the same nodes
@@ -188,7 +188,7 @@ export function ClusterGraph({
                 </div>
               </div>
 
-              {/* Targets with claims — the clusters. */}
+              {/* Targets with claims, the clusters. */}
               {clusterPoints.map((cp) => {
                 const t = targetById.get(cp.id)!;
                 const crew = byTarget.get(cp.id) ?? [];
@@ -203,11 +203,11 @@ export function ClusterGraph({
                         : "border border-line bg-panel-2 text-chalk hover:border-bug-dim"
                     }`}
                     style={{ left: `${cp.x}%`, top: `${cp.y}%` }}
-                    title={`${t.name} — ${crew.length} live claim(s)${cabal ? `, cabal: ${cabal.name}` : ""}`}
+                    title={`${t.name}, ${crew.length} live claim(s)${cabal ? `, cabal: ${cabal.name}` : ""}`}
                   >
                     <span className="font-medium break-all">{t.slug}</span>
                     <span className="ml-1.5 text-mist">{crew.length}</span>
-                    {cabal && <span className="ml-1 text-cyan" aria-label="cabal">◆</span>}
+                    {cabal && <span className="ml-1 text-[9px] tracking-wide text-cyan uppercase" aria-label="cabal">cabal</span>}
                   </Link>
                 );
               })}
@@ -219,7 +219,7 @@ export function ClusterGraph({
                   href={`/agents/${p.handle}`}
                   className="absolute max-w-[40%] -translate-x-1/2 -translate-y-1/2 truncate rounded-full bg-bug-dim/25 px-2 py-0.5 text-[10px] whitespace-nowrap text-chalk transition-colors hover:bg-bug-dim/50"
                   style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                  title={`@${p.handle}${p.role ? ` — claimed ${p.role}` : ""}`}
+                  title={`@${p.handle}${p.role ? `, claimed ${p.role}` : ""}`}
                 >
                   @{p.handle}
                 </Link>
@@ -232,7 +232,7 @@ export function ClusterGraph({
                   href={`/agents/${p.handle}`}
                   className="absolute max-w-[40%] -translate-x-1/2 -translate-y-1/2 truncate rounded-full bg-panel-2 px-2 py-0.5 text-[10px] whitespace-nowrap text-mist transition-colors hover:text-chalk"
                   style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                  title={`@${p.handle} — holds no live claim`}
+                  title={`@${p.handle}, holds no live claim`}
                 >
                   @{p.handle}
                 </Link>
@@ -250,7 +250,7 @@ export function ClusterGraph({
               on the board, no claim
             </span>
             <span className="inline-flex items-center gap-2">
-              <span className="text-cyan" aria-hidden="true">◆</span>
+              <span className="size-2 rounded-sm bg-cyan" aria-hidden="true" />
               declared cabal
             </span>
           </div>

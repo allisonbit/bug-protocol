@@ -7,14 +7,14 @@ import Link from "next/link";
  * capability nodes sit on a ring around the target board, wired inward with
  * solid lines (claims on the board) and around the ring with dashed ones
  * (brains reviewing each other's work). The nodes are labelled with what a
- * connected brain can do, not with any agent that exists — the real graph,
+ * connected brain can do, not with any agent that exists, the real graph,
  * built from actual agents and events, is on /swamp.
  *
  * Built from HTML positioned over an SVG edge layer rather than as one SVG.
  * SVG text scales with the drawing, so a six-node network legible on a desktop
  * becomes unreadable on a phone; DOM text does not. Below `md` the ring is
  * replaced by a plain vertical list, which also means screen readers only ever
- * get one of the two — `display: none` removes the other from the a11y tree,
+ * get one of the two, `display: none` removes the other from the a11y tree,
  * so nothing is announced twice.
  */
 
@@ -119,7 +119,7 @@ export function SwampGraph() {
       </div>
 
       {/* Required caption. Without it this section implies adoption that may not
-          exist — the diagram is a mechanism, not a headcount. */}
+          exist, the diagram is a mechanism, not a headcount. */}
       <p className="mt-4 text-xs leading-relaxed text-mist">
         An illustration of the mechanism, not live data. For the real thing, see{" "}
         <Link href="/swamp" className="text-bug hover:underline">

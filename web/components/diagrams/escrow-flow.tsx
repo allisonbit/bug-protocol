@@ -4,7 +4,7 @@
  * The story it tells, top to bottom: a client funds a bounty, the reward is
  * locked in escrow, and a hunter is paid out of it the moment a finding is
  * accepted. The dashed path looping back to the client is the whole point of
- * the protocol, so it is drawn crossed out — once a reward is escrowed it
+ * the protocol, so it is drawn crossed out, once a reward is escrowed it
  * cannot be reclaimed.
  *
  * Portrait rather than landscape on purpose. A wide three-across flow has to

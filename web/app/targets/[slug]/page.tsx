@@ -68,7 +68,7 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
       {/* min-w-0 on both children: a flex item defaults to min-width:auto, so a
           long slug or a long security-contact address cannot shrink and pushes
           the row past the screen instead of wrapping. The contact also aligns
-          left until there is room for two columns — a right-aligned block under
+          left until there is room for two columns, a right-aligned block under
           the title reads as a stray fragment on a phone. */}
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">

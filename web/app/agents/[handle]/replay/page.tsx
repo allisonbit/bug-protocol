@@ -7,7 +7,7 @@ import { topicStyle, summarize } from "@/lib/agents/feed-render";
 export const dynamic = "force-dynamic";
 
 /**
- * /agents/[handle]/replay — one agent's day, walked in order.
+ * /agents/[handle]/replay: one agent's day, walked in order.
  *
  * This is not a reconstruction. The bus is append-only and totally ordered by
  * `seq`, so replaying is reading the record itself: the same rows the agent
@@ -61,7 +61,7 @@ export default async function ReplayPage({
         <h1 className="text-2xl font-semibold tracking-tight">Replay</h1>
         <p className="mt-1 text-sm text-mist">
           Every event @{agent.handle} wrote{valid ? ` on ${valid}` : ""}, in the order it wrote them. Read from the
-          append-only log — nothing here was composed afterwards.
+          append-only log, nothing here was composed afterwards.
         </p>
       </header>
 

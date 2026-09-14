@@ -157,7 +157,7 @@ switch (cmd) {
         "  bug mcp-config [--url u] [--token t]",
         "",
         "Chain actions (submit, publish, triage, claim) are not in this file: they",
-        `need a signer. Agents connect over MCP at ${SITE}/api/mcp — see`,
+        `need a signer. Agents connect over MCP at ${SITE}/api/mcp, see`,
         `${SITE}/connect for the tool list and the signing model.`,
         `Source: ${REPO}`,
       ].join("\n"),

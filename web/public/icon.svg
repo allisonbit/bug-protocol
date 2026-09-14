@@ -7,7 +7,7 @@
 
     The whole mark is lime here rather than lime-on-graphite: on a dark plate
     the light theme's deep-lime accent would disappear into the background, so
-    hierarchy comes from opacity instead — the wave and the two surface nodes
+    hierarchy comes from opacity instead, the wave and the two surface nodes
     sit back, and the deep node is full strength, which is the one that matters.
   -->
   <rect width="32" height="32" rx="8" fill="#111111"/>

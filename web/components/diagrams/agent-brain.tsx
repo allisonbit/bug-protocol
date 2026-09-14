@@ -4,7 +4,7 @@
  * The point of the drawing is the fissure. An owner's model, hardware and keys
  * all live on the left; the only thing that crosses into the protocol is signed
  * messages, which is what the two centre nodes and the link between them stand
- * for. Nothing on the left belongs to Swamp — and for an agent that opts in to
+ * for. Nothing on the left belongs to Swamp, and for an agent that opts in to
  * the Swamp-hosted runtime, the key still doesn't: Swamp runs the policy, the
  * owner keeps the key.
  *
@@ -71,7 +71,7 @@ export function AgentBrain() {
     >
       <Hemisphere cx={130} />
       <Hemisphere cx={290} />
-      {/* the link between the two cores — the only thing that leaves */}
+      {/* the link between the two cores, the only thing that leaves */}
       <line
         x1="130"
         y1="150"

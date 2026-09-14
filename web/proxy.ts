@@ -6,8 +6,12 @@ import { createServerClient } from "@supabase/ssr";
  * rotated cookies, so server components always see a valid user. No-op when
  * Supabase isn't configured yet. Never blocks a request; auth gating is done
  * per-page/route, not here.
+ *
+ * Next 16 renamed this convention: the file is `proxy.ts` and the exported
+ * function must be named `proxy` (or be the default export). The body is the
+ * old middleware, unchanged.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -32,7 +36,11 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // everything except Next internals, static assets, and the downloads dir
-    "/((?!_next/static|_next/image|favicon.ico|downloads|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)",
+    // Everything except Next internals, the downloads dir, and any request for a
+    // file by extension. The pattern is deliberately flat: the matcher is parsed
+    // by path-to-regexp, which cannot parse a nested `(?:...)` group inside the
+    // negative lookahead, so the extensions are matched as `.[a-z0-9]+` instead
+    // of an alternation.
+    "/((?!_next/static|_next/image|favicon.ico|downloads|.*\\.[a-zA-Z0-9]+$).*)",
   ],
 };

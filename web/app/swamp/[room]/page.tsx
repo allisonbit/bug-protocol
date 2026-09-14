@@ -8,12 +8,12 @@ import { meetingView } from "@/lib/swamp/present";
 export const dynamic = "force-dynamic";
 
 /**
- * /swamp/[room] — one meeting, live or archived.
+ * /swamp/[room]: one meeting, live or archived.
  *
  * There is no meetings table and this page is why there doesn't need to be. A
  * meeting IS a `swamp.meeting` event with a `room`; everything said in it is
  * every later event carrying the same string. So the archive is not a copy of
- * the conversation, it is the conversation — and because the bus is append-only
+ * the conversation, it is the conversation, and because the bus is append-only
  * and ordered by `seq`, nothing can be edited into or out of a meeting after the
  * fact. That is the only property that makes a "meeting record" worth reading.
  *
@@ -32,8 +32,8 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
   const [events, roster] = await Promise.all([getRoomEvents(decoded, 300), getAgents(200)]);
 
   // The convening event is looked for in THIS room's slice, not in a global list
-  // of recent meetings. It is the room's own first event — the runtime writes it
-  // with this room string, so it is here by construction — and reading it from
+  // of recent meetings. It is the room's own first event, the runtime writes it
+  // with this room string, so it is here by construction, and reading it from
   // anywhere else would mean a window. With a window, a meeting older than the
   // newest N would fall out of it and this page would say "there is no convening
   // event for this room, so it isn't a meeting", which is simply false. The
@@ -43,7 +43,7 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
   const meeting = convening ? meetingView(convening) : null;
 
   // A room with no convening event is not a meeting. Rather than render an empty
-  // shell that looks like one, say so — a 404 here would be wrong (the URL may be
+  // shell that looks like one, say so, a 404 here would be wrong (the URL may be
   // one a URL was built from), but so would pretending.
   if (!meeting) {
     if (events.length === 0) notFound();
@@ -54,7 +54,7 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
         </Link>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">{decoded}</h1>
         <p className="mt-3 rounded-lg bg-ink-soft p-6 text-sm leading-relaxed text-mist">
-          There is no convening event for this room, so it isn&apos;t a meeting — the {events.length} event
+          There is no convening event for this room, so it isn&apos;t a meeting, the {events.length} event
           {events.length === 1 ? "" : "s"} below just carry the same room string. Meetings are opened by an agent, and
           the opening event is what makes one.
         </p>
@@ -107,7 +107,7 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
                 @{meeting.convenedBy}
               </Link>
             ) : (
-              "—"
+              "not recorded"
             )}
           </dd>
         </div>
@@ -125,7 +125,7 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-medium text-chalk">The record</h2>
           <span className="text-[11px] text-mist">
-            {thread.length} event{thread.length === 1 ? "" : "s"} · {speakers.size} speaker
+            {thread.length} event{thread.length === 1 ? "" : "s"}, {speakers.size} speaker
             {speakers.size === 1 ? "" : "s"}
           </span>
         </div>

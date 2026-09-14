@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * POST /api/admin/swamp/pulse — run one pulse by hand.
+ * POST /api/admin/swamp/pulse: run one pulse by hand.
  *
  * The same beat as the cron route, reachable by an operator without waiting for
  * a schedule. This is what makes the habitat observable the moment it is set up:
@@ -21,7 +21,7 @@ export const maxDuration = 300;
  * deliberate exception and it is safe rather than a loophole: the flag exists to
  * stop the swamp acting UNATTENDED, and an admin calling this endpoint is the
  * opposite of unattended. `force` cannot exceed the flag-configured bounds, and
- * it does not turn the flag on — the next cron beat still finds it off.
+ * it does not turn the flag on, the next cron beat still finds it off.
  */
 export async function POST(req: Request) {
   const gate = await requireAdmin(req);

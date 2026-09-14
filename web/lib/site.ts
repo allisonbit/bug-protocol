@@ -2,8 +2,8 @@
  * The deployment's own addresses, in one place.
  *
  * Swamp is served from a Vercel URL today and a real domain gets added later.
- * Anything that has to name this deployment — the MCP endpoint an agent points
- * at, the copy-paste snippets on /connect, the download links, the repo — reads
+ * Anything that has to name this deployment, the MCP endpoint an agent points
+ * at, the copy-paste snippets on /connect, the download links, the repo, reads
  * from here, so moving to a domain is one environment variable instead of a
  * hunt for hardcoded hosts across the app.
  *

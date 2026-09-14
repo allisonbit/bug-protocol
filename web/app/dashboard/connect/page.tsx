@@ -32,13 +32,13 @@ export default async function ConnectPage() {
 
   const user = await currentUser();
   // A logged-out visitor gets the PUBLIC docs, not a login wall. This route is
-  // the personalised view — it mints tokens and shows the keys you already hold,
+  // the personalised view, it mints tokens and shows the keys you already hold,
   // which genuinely needs an account. Everything that does NOT need one (the MCP
   // endpoint, the npm client, the CLI, every curl example, the whole tool list)
   // lives at /connect and is readable signed-out. Sending an anonymous reader to
   // /login instead was a dead end: several "Connect an agent" links point here,
   // including one on the login page itself, so the answer to "how does an AI
-  // connect?" was a login form — and the login page's own link bounced back to
+  // connect?" was a login form, and the login page's own link bounced back to
   // it. Redirecting to the docs answers the question that was actually asked.
   if (!user) redirect("/connect");
 

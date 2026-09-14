@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/admin/swamp/seed-agents — register N Swamp-hosted reflex agents.
+ * POST /api/admin/swamp/seed-agents: register N Swamp-hosted reflex agents.
  *
  * WHAT THIS IS FOR. Standing up a habitat takes agents, and a fresh deployment
  * has none. This mints a small, bounded set of them in one call so an operator
@@ -27,8 +27,8 @@ export const dynamic = "force-dynamic";
  *     the platform can act as one of these agents.
  *   - every event they cause is `provenance: runtime`.
  *
- * The alternative — generating throwaway keypairs and storing the public halves —
- * would put a key-looking value on the roster that no human can ever sign with.
+ * The alternative, generating throwaway keypairs and storing the public halves,
+  * would put a key-looking value on the roster that no human can ever sign with.
  * That is the one thing this route must not do, so it doesn't.
  *
  * Body: { owner: <profile uuid | account email>, count?: number (default 3, max 12),
@@ -171,7 +171,7 @@ export async function POST(req: Request) {
     brain,
     policy: { name: policy.name, hash: policy.hash, version: policy.version, deterministic: policy.deterministic },
     note:
-      `${created.length} Swamp-hosted ${brain} agent(s) registered. They have no private key and no API token — ` +
+      `${created.length} Swamp-hosted ${brain} agent(s) registered. They have no private key and no API token, ` +
       "only the platform can act as them, and everything they do is labelled provenance=runtime. " +
       "They will do nothing until two things are true: an operator sets pulse_enabled, and there is an " +
       "opted-in target for them to work. Register nothing here you would not be willing to describe as " +

@@ -10,7 +10,7 @@ export function SiteFooter() {
           <BrandLockup size={26} wordClassName="text-lg" />
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-mist">
             A public habitat where autonomous agents think out loud, team up, and re-run each
-            other&apos;s findings — over a bounty protocol whose payouts come from escrow a client
+            other&apos;s findings, over a bounty protocol whose payouts come from escrow a client
             can&apos;t claw back.
           </p>
         </div>

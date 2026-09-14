@@ -4,28 +4,28 @@ import type { FindingSeverity } from "@/lib/agents/types";
 import { doh, passiveGet, passiveGetText } from "./guard";
 
 /**
- * THE ACTION CATALOGUE — the complete set of things a Swamp-hosted agent can do.
+ * THE ACTION CATALOGUE: the complete set of things a Swamp-hosted agent can do.
  *
  * This file is deliberately small, closed, and dull. Everything here is:
  *
- *   - PASSIVE      — it reads what the target already serves to anyone. Nothing
+ *   - PASSIVE: it reads what the target already serves to anyone. Nothing
  *                    is sent, submitted, uploaded, or injected.
- *   - SINGLE       — exactly one bounded request per check. No loops over paths,
+ *   - SINGLE: exactly one bounded request per check. No loops over paths,
  *                    no wordlists, no parameter sweeps, no retries on failure.
- *   - NON-INTRUSIVE— no auth attempts, no bypass techniques, no fuzzing, no
+ *   - NON-INTRUSIVE: no auth attempts, no bypass techniques, no fuzzing, no
  *                    load. A check cannot degrade the target's service, because
  *                    a check cannot make the target do work.
- *   - IDENTIFIED   — every request carries SWAMP_USER_AGENT with a URL and an
+ *   - IDENTIFIED: every request carries SWAMP_USER_AGENT with a URL and an
  *                    opt-out. Nothing here hides.
  *
  * There is no flooding, no amplification, no resource exhaustion, and no
- * concurrency against a single host — not "disabled by a flag", but absent from
+ * concurrency against a single host, not "disabled by a flag", but absent from
  * the catalogue. Adding an action means adding it here, where it is reviewable,
  * and it has to pass the four tests above.
  *
  * A check returns an `observation` (a real sentence derived from what was
  * actually seen) and, only when the observation is a genuine gap, a `finding`.
- * The evidence is always recorded either way — a check that found nothing still
+ * The evidence is always recorded either way, a check that found nothing still
  * proves it looked, which is what keeps the feed from being theatre.
  */
 
@@ -41,7 +41,7 @@ export type FindingDraft = {
 export type CheckOutcome = {
   id: CheckId;
   host: string;
-  /** Did the check actually complete? `false` means the target was unreachable — not a finding. */
+  /** Did the check actually complete? `false` means the target was unreachable, not a finding. */
   ok: boolean;
   /** One sentence of real observation. Feeds the agent's voice; never generic. */
   observation: string;
@@ -61,7 +61,7 @@ export type CheckSpec = {
 // ---- helpers ----------------------------------------------------------------
 
 /** A host with exactly two labels is *likely* the registrable domain. Used only to
- * decide whether a DNS absence means anything — see dns_posture. */
+ * decide whether a DNS absence means anything, see dns_posture. */
 function isApex(host: string): boolean {
   return host.split(".").length === 2;
 }
@@ -109,7 +109,7 @@ async function securityTxt(host: string): Promise<CheckOutcome> {
     return {
       ...base("security_txt", host),
       ok: true,
-      observation: `${host} publishes no security.txt — a researcher who finds something here has no listed way to report it.`,
+      observation: `${host} publishes no security.txt, so a researcher who finds something here has no listed way to report it.`,
       evidence,
       finding: {
         title: `No vulnerability disclosure route published on ${host}`,
@@ -133,7 +133,7 @@ async function securityTxt(host: string): Promise<CheckOutcome> {
     };
   }
 
-  // Present — read it, and check the two fields that actually matter.
+  // Present, read it, and check the two fields that actually matter.
   const text = res.text;
   const contacts = [...text.matchAll(/^\s*Contact:\s*(.+)$/gim)].map((m) => m[1].trim());
   const expiresRaw = /^\s*Expires:\s*(.+)$/im.exec(text)?.[1]?.trim() ?? null;
@@ -203,7 +203,7 @@ const SECURITY_HEADERS = [
 /**
  * One GET of `/`. Only response headers are read; the body is cancelled unread.
  * We do not follow a redirect, because headers set by a redirecting edge say
- * nothing about the application behind it — so a 3xx is recorded as exactly that
+ * nothing about the application behind it, so a 3xx is recorded as exactly that
  * and judged no further.
  */
 async function securityHeaders(host: string): Promise<CheckOutcome> {
@@ -254,7 +254,7 @@ async function securityHeaders(host: string): Promise<CheckOutcome> {
         severity: "low",
         summary:
           `https://${host}/ responds over TLS but sends no Strict-Transport-Security header, so a browser is ` +
-          `free to reach the site over plain HTTP on a later visit — the window a downgrade or cookie-stripping ` +
+          `free to reach the site over plain HTTP on a later visit, the window a downgrade or cookie-stripping ` +
           `attack needs. The site already has a certificate; this is the header that makes it mandatory.`,
         evidence,
       },
@@ -288,8 +288,8 @@ type TlsProbe =
   | { ok: false; error: string };
 
 /**
- * A raw TLS handshake to port 443. `rejectUnauthorized: false` is not a bypass —
- * it is the point: a certificate we refuse to look at cannot be reported on. The
+ * A raw TLS handshake to port 443. `rejectUnauthorized: false` is not a bypass,
+  * it is the point: a certificate we refuse to look at cannot be reported on. The
  * connection is read-only, completes the handshake, and is destroyed
  * immediately; nothing is sent over it.
  */
@@ -403,7 +403,7 @@ async function tlsCertificate(host: string): Promise<CheckOutcome> {
         severity: "high",
         summary:
           `A certificate was presented for ${host} but verification failed: ${probe.authorizationError ?? "unknown reason"}. ` +
-          `A client that verifies certificates — every browser, every API client — refuses the connection.`,
+          `A client that verifies certificates, every browser, every API client, refuses the connection.`,
         evidence,
       },
     };
@@ -421,7 +421,7 @@ async function tlsCertificate(host: string): Promise<CheckOutcome> {
         severity: "low",
         summary:
           `The certificate valid to ${probe.validTo} is close to expiry. Renewal is usually automatic, so this ` +
-          `is a check-in rather than an incident — but if automation has quietly stopped, this is the warning ` +
+          `is a check-in rather than an incident, but if automation has quietly stopped, this is the warning ` +
           `that precedes an outage.`,
         evidence,
       },
@@ -461,7 +461,7 @@ async function tlsCertificate(host: string): Promise<CheckOutcome> {
  * Presence and shape of robots.txt. Explicitly NOT a source of test targets:
  * this check does not enumerate Disallow paths, does not return them in evidence,
  * and nothing downstream may treat a path named here as somewhere to go. That
- * conflation — "the excluded paths are the interesting ones" — is the single
+ * conflation, "the excluded paths are the interesting ones", is the single
  * most common way a passive scan turns into an active one, and it is refused
  * here at the source.
  */
@@ -513,12 +513,12 @@ async function robotsPolicy(host: string): Promise<CheckOutcome> {
 // ---- 5. DNS posture ---------------------------------------------------------
 
 /**
- * CAA and email-authentication records, read over DNS-over-HTTPS — no direct
+ * CAA and email-authentication records, read over DNS-over-HTTPS: no direct
  * egress, and the public DNS the whole internet already sees.
  *
  * The subtlety is inheritance. CAA and DMARC/SPF are looked up on ancestor
  * domains when absent at the name queried, so "no CAA on www.example.com" means
- * nothing at all — example.com may well have one and it applies. So absence only
+ * nothing at all, example.com may well have one and it applies. So absence only
  * produces a finding where the host is likely the registrable domain itself, and
  * CAA absence produces none at all: a missing CAA record is a real fact but not
  * a defect, since CAA is optional and its absence is the default for most of the
@@ -562,7 +562,7 @@ async function dnsPosture(host: string): Promise<CheckOutcome> {
           severity: "info",
           summary:
             `The DMARC record at _dmarc.${host} sets p=none. Reports are generated, but receivers are told to ` +
-            `deliver mail that fails authentication anyway — so the record measures the problem without yet ` +
+            `deliver mail that fails authentication anyway, so the record measures the problem without yet ` +
             `stopping it. Moving to p=quarantine is the usual next step once reports look clean.`,
           evidence,
         },
@@ -618,7 +618,7 @@ export const CHECKS: Record<CheckId, CheckSpec> = {
   security_headers: {
     id: "security_headers",
     label: "Security headers",
-    describes: "One GET of /, reading response headers only — HSTS, CSP, X-Content-Type-Options, Referrer-Policy.",
+    describes: "One GET of /, reading response headers only: HSTS, CSP, X-Content-Type-Options, Referrer-Policy.",
     run: securityHeaders,
   },
   tls_certificate: {

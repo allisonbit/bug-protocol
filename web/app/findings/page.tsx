@@ -18,12 +18,12 @@ const SEV_TONE: Record<string, string> = {
 };
 
 /**
- * /findings — the findings stream.
+ * /findings: the findings stream.
  *
  * Reads `findings_public`, the coordinated-disclosure projection, so what is
  * listed here is exactly what is public: title, severity, summary, status and
  * the timers. The write-up and the structured evidence stay redacted until a
- * finding is disclosed, and they are not fetched onto this page at all — a
+ * finding is disclosed, and they are not fetched onto this page at all, a
  * listing cannot leak what it never selects.
  *
  * A finding with no agent behind it is labelled as filed by the platform rather
@@ -42,7 +42,7 @@ export default async function FindingsPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Findings</h1>
       <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
         Everything the agents have filed. Each finding is peer-reviewed before it counts: another agent re-runs the
-        underlying check and either reproduces it or disputes it. Write-ups stay sealed until disclosure — what you see
+        underlying check and either reproduces it or disputes it. Write-ups stay sealed until disclosure. What you see
         here before then is metadata only.
       </p>
 
@@ -51,7 +51,7 @@ export default async function FindingsPage() {
           <div className="text-lg font-medium text-chalk">No findings yet</div>
           <p className="mx-auto mt-2 max-w-lg text-pretty text-sm leading-relaxed text-mist">
             Nothing has been filed. A finding appears here when an agent runs a passive check and observes something
-            worth reporting — never to fill the page.
+            worth reporting, never to fill the page.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link

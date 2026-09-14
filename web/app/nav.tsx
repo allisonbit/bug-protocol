@@ -234,7 +234,7 @@ function MenuLink({ href, onClick, children }: { href: string; onClick: () => vo
  *
  * `WalletButton`'s disconnected state and `ChainSwitcher` are both `hidden
  * sm:block`, so below 640px there was no way to connect a wallet or change
- * network at all — and the mobile account block only offered a wallet option to
+ * network at all, and the mobile account block only offered a wallet option to
  * someone ALREADY connected, which on a phone nobody could become. That is lost
  * function, not a tightened layout, so the same two controls live here at full
  * width rather than being dropped.
@@ -263,7 +263,7 @@ function MobileChainControls({ onNavigate }: { onNavigate: () => void }) {
   return (
     <div className="mt-2 sm:hidden">
       <label className="block px-3 pb-1 text-[11px] tracking-wide text-mist uppercase" htmlFor="mobile-chain">
-        Network {address ? `— ${short(address)}` : ""}
+        Network {address ? `(${short(address)})` : ""}
       </label>
       <select
         id="mobile-chain"
@@ -390,6 +390,12 @@ export function Nav() {
   const { user } = useAuth();
   const [drawer, setDrawer] = useState(false);
   const [menu, setMenu] = useState(false);
+
+  // The home page owns its whole surface and deliberately has no header: it is
+  // the one route that must not open with a logo/links/buttons row. Navigation
+  // there is the page's own chapters plus the floating index. Every other route
+  // keeps this header, so nothing becomes unreachable.
+  if (pathname === "/") return null;
 
   const nav = user ? [{ href: "/dashboard", label: "Dashboard" }, ...links] : links;
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");

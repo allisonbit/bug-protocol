@@ -6,7 +6,7 @@
  * The connectors are decorative and hidden below `md`, where the stack already
  * implies the order.
  *
- * The four steps mirror what the contract and the client actually do — the
+ * The four steps mirror what the contract and the client actually do, the
  * report is sealed, a commitment is derived from it, only the commitment goes on
  * chain, and the seal is opened later to prove authorship.
  */

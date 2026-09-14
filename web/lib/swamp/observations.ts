@@ -8,7 +8,7 @@ import { CHECK_IDS, type CheckId } from "./checks";
  * WHAT AN AGENT CAN SEE.
  *
  * One function, one round of queries, one plain object. Everything the brain is
- * allowed to reason about is in here, and nothing else is — the brain is a pure
+ * allowed to reason about is in here, and nothing else is, the brain is a pure
  * function of an Observation, which is what makes the reflex policy reproducible
  * and its hash meaningful.
  *
@@ -28,7 +28,7 @@ import { CHECK_IDS, type CheckId } from "./checks";
 
 /** How long a completed check stays "fresh". Inside this window a target needs no
  * further work, which is also what stops an agent from sweeping the same host in
- * a loop — there is simply nothing left to claim. */
+ * a loop, there is simply nothing left to claim. */
 export const CHECK_FRESHNESS_MS = 6 * 60 * 60 * 1000;
 
 /**
@@ -36,7 +36,7 @@ export const CHECK_FRESHNESS_MS = 6 * 60 * 60 * 1000;
  *
  * There is no `meetings` table and deliberately so. A meeting is a `swamp.meeting`
  * event with a `room`, and the discussion is every later event carrying the same
- * `room` — which means the archive is not a copy of the conversation, it IS the
+ * `room`: which means the archive is not a copy of the conversation, it IS the
  * conversation, replayable by `seq` like everything else on the bus. Nothing can
  * be edited into or out of a meeting after the fact, which is the only reason a
  * "meeting record" is worth reading.
@@ -66,7 +66,7 @@ export type Observation = {
   myTarget: Target | null;
   /** Findings awaiting peer review, soonest deadline first. */
   openFindings: Finding[];
-  /** Finding ids this agent has already reviewed — it does not review twice. */
+  /** Finding ids this agent has already reviewed, it does not review twice. */
   myReviewedFindingIds: string[];
   /**
    * What a review needs and nothing else: for each open finding, the check to
@@ -83,7 +83,7 @@ export type Observation = {
   memory: AgentMemory[];
   /**
    * Which catalogue checks have already run against each target inside the
-   * freshness window. Built from the event log, not from a separate table — the
+   * freshness window. Built from the event log, not from a separate table, the
    * log is the record, so there is no second source of truth to drift.
    */
   coverage: Record<string, CheckId[]>;
@@ -94,7 +94,7 @@ export type Observation = {
   openMeetings: OpenMeeting[];
   /** Rooms this agent has already spoken in, so it testifies once per meeting. */
   spokeInRooms: string[];
-  /** The rest of the roster — who else is here, for reaching a review quorum. */
+  /** The rest of the roster, who else is here, for reaching a review quorum. */
   peers: Agent[];
 };
 
@@ -104,7 +104,7 @@ function asRecord(v: unknown): Record<string, unknown> {
 
 /**
  * Read one agent's world. Takes the service-role client because the runtime is
- * the platform, not an agent — it is not acting through row-level security, it
+ * the platform, not an agent, it is not acting through row-level security, it
  * is acting under the same scope rules the platform enforces on everyone else.
  */
 export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observation> {
@@ -129,7 +129,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .order("verify_deadline", { ascending: true, nullsFirst: false })
         .limit(50),
       // The base table, for the two scalars a re-run needs. `findings_public`
-      // redacts `evidence` to '{}' until a finding is disclosed — correct for
+      // redacts `evidence` to '{}' until a finding is disclosed, correct for
       // every public reader, and fatal for a reviewer, whose entire job is to
       // re-run the check it can no longer see. Reading the projection here made
       // every open finding parse as un-reproducible, which silently disabled
@@ -158,7 +158,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .gte("created_at", new Date(now.getTime() - 6 * 3_600_000).toISOString())
         .order("seq", { ascending: false })
         .limit(20),
-      // Rooms I have already spoken in — what stops me testifying twice.
+      // Rooms I have already spoken in, what stops me testifying twice.
       sb
         .from("events")
         .select("room")
@@ -177,7 +177,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
 
   // Coverage: which checks have run recently, per target. Read from the action
   // events the runtime itself wrote, so an agent that stops mid-sweep resumes
-  // exactly where it left off rather than repeating work — and so the record of
+  // exactly where it left off rather than repeating work, and so the record of
   // what was checked is the same record everyone else can read.
   const coverage: Record<string, CheckId[]> = {};
   const targetIds = new Set(targets.map((t) => t.id));
@@ -221,7 +221,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
  *
  * Evidence is agent-authored and arrives unexamined (`agentPublishFinding` stores
  * `input.evidence` verbatim), so everything here is validated rather than
- * trusted — the check must be one of ours, and the host must be a non-empty
+ * trusted, the check must be one of ours, and the host must be a non-empty
  * string. The host is NOT trusted to be in scope: the executor re-derives that
  * against the finding's own target immediately before any request goes out.
  *
@@ -281,7 +281,7 @@ function parseMeetings(rows: SwampEvent[] | null, now: Date): OpenMeeting[] {
 
 /**
  * The catalogue checks still worth running on a target: the ones with no recent
- * coverage. This is the whole definition of "there is work here" — a target whose
+ * coverage. This is the whole definition of "there is work here", a target whose
  * every check ran in the last few hours is genuinely finished, and an agent that
  * claimed it would have nothing to do, so it is not claimable.
  */
@@ -291,7 +291,7 @@ export function outstandingChecks(obs: Observation, targetId: string): CheckId[]
 }
 
 /** Targets with at least one outstanding check, best-covered-first is not the
- * rule here — least recently touched wins, so attention spreads across the board
+ * rule here, least recently touched wins, so attention spreads across the board
  * instead of five agents piling onto whichever target sorts first. */
 export function claimableTargets(obs: Observation): Target[] {
   const mine = new Set(obs.claims.map((c) => c.target_id));
@@ -309,7 +309,7 @@ export function claimableTargets(obs: Observation): Target[] {
     });
 }
 
-/** Live claims grouped by target — the raw material for cabals, which are derived
+/** Live claims grouped by target, the raw material for cabals, which are derived
  * from this and can therefore never claim a team that isn't working. */
 export function claimsByTarget(obs: Observation): Record<string, Claim[]> {
   const out: Record<string, Claim[]> = {};
@@ -318,7 +318,7 @@ export function claimsByTarget(obs: Observation): Record<string, Claim[]> {
 }
 
 /** A host from the target's declared domains that this target has least recently
- * been checked on. Returns null when the target declares no usable host — in
+ * been checked on. Returns null when the target declares no usable host, in
  * which case the agent says so rather than inventing one. */
 export function nextHost(obs: Observation, target: Target): string | null {
   const hosts = (target.domains ?? []).filter((d) => typeof d === "string" && d.trim().length > 0);

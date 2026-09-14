@@ -14,7 +14,7 @@ import {
 import type { AgentBrain } from "@/lib/agents/types";
 
 /**
- * THE BRAIN — one interface, two implementations.
+ * THE BRAIN: one interface, two implementations.
  *
  * `decide()` is a PURE function of an Observation. It performs no I/O, reads no
  * clock of its own (the observation carries `now`), and touches no database. That
@@ -24,7 +24,7 @@ import type { AgentBrain } from "@/lib/agents/types";
  * that produced them against the published policy text.
  *
  * The brain PLANS; it never acts. Nothing here fetches a host, writes a row, or
- * appends an event — the pulse does that. A plan is therefore a statement of
+ * appends an event, the pulse does that. A plan is therefore a statement of
  * intent that can be inspected, logged and explained before anything happens,
  * which is the only way "watch it think" can show something real rather than a
  * narration written after the fact.
@@ -34,7 +34,7 @@ export type PlannedAction =
   | { rule: string; kind: "idle"; reason: string }
   /**
    * Reproduce a finding's underlying check and rule on it. The vote is NOT
-   * decided here — the executor re-runs the check and compares real observations,
+   * decided here, the executor re-runs the check and compares real observations,
    * because a reviewer that announces its verdict before looking is not
    * reviewing.
    */
@@ -56,7 +56,7 @@ export type PlannedAction =
 
 export type Decision = {
   brain: AgentBrain;
-  /** The policy hash this decision was made under — recorded with the plan. */
+  /** The policy hash this decision was made under, recorded with the plan. */
   policyHash: string;
   actions: PlannedAction[];
   /**
@@ -74,7 +74,7 @@ function asRecord(v: unknown): Record<string, unknown> {
 // A `findingCheck()` used to live here, reading `{check, host}` straight out of a
 // finding's `evidence`. It always returned null, because `obs.openFindings` is
 // read from `findings_public`, which redacts `evidence` to '{}' until disclosure
-// — so both brains silently lost the ability to review anything. The parse now
+// so both brains silently lost the ability to review anything. The parse now
 // happens in `observations.ts` against the base table, and the result arrives as
 // `obs.reviewTargets`. It is deliberately not re-exported: the way to get this
 // wrong again is to reach for evidence on a row that has had it redacted.
@@ -95,21 +95,21 @@ export function decideReflex(obs: Observation): PlannedAction[] {
 
   for (const rule of REFLEX_RULES) {
     switch (rule.intent) {
-      // r1 — nothing happens while the killswitch is on, and the agent says why.
+      // r1, nothing happens while the killswitch is on, and the agent says why.
       case "idle": {
         if (obs.killswitch) {
           return [
             {
               rule: rule.id,
               kind: "idle",
-              reason: "the killswitch is on — the swamp is paused and I will not act against any host",
+              reason: "the killswitch is on, the swamp is paused and I will not act against any host",
             },
           ];
         }
         break;
       }
 
-      // r2 — an obligation to another agent, ahead of this agent's own work.
+      // r2, an obligation to another agent, ahead of this agent's own work.
       case "review_due": {
         const due = reviewableFindings(obs)
           .filter((f) => reviewIsUrgent(obs, f))
@@ -124,7 +124,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r3 — a deadline plus a team is a conversation worth having now.
+      // r3, a deadline plus a team is a conversation worth having now.
       case "convene_meeting": {
         const rooms = new Set(obs.openMeetings.map((m) => m.room));
         const crowded = Object.entries(byTarget).filter(([, c]) => c.length >= 2);
@@ -154,7 +154,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r4 — continue work on a claim I already hold.
+      // r4, continue work on a claim I already hold.
       case "run_check": {
         if (!obs.myClaim || !obs.myTarget) break;
         const outstanding = outstandingChecks(obs, obs.myTarget.id);
@@ -165,7 +165,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r5 — take a target, and start on it rather than sitting on a lock.
+      // r5, take a target, and start on it rather than sitting on a lock.
       case "claim_target": {
         if (obs.myClaim) break;
         const candidates = claimableTargets(obs);
@@ -179,7 +179,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r6 — a team is derived from who is actually working, then declared.
+      // r6, a team is derived from who is actually working, then declared.
       case "form_cabal": {
         const covered = new Set(obs.cabals.filter((c) => c.status !== "dissolved" && c.target_id).map((c) => c.target_id));
         const crowded = Object.entries(byTarget).find(([targetId, claims]) => {
@@ -209,7 +209,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r7 — the sweep is done; release the lock so someone else can take it.
+      // r7, the sweep is done; release the lock so someone else can take it.
       case "yield_done": {
         if (!obs.myClaim || !obs.myTarget) break;
         if (outstandingChecks(obs, obs.myTarget.id).length > 0) break;
@@ -217,7 +217,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r8 — you are in the room because you are working the target. Report.
+      // r8, you are in the room because you are working the target. Report.
       case "testify": {
         if (!obs.myClaim || !obs.myTarget) break;
         const spoken = new Set(obs.spokeInRooms);
@@ -230,7 +230,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         const done = obs.coverage[obs.myTarget.id] ?? [];
         const text =
           done.length === 0
-            ? `I hold ${obs.myTarget.slug} but have not run anything on it yet — nothing to report.`
+            ? `I hold ${obs.myTarget.slug} but have not run anything on it yet; nothing to report.`
             : `On ${obs.myTarget.slug} I have run ${done.join(", ")} and hold a claim on ${obs.myClaim.subtask}. ${
                 obs.openFindings.filter((f) => f.target_id === obs.myTarget!.id && f.agent_id !== obs.agent.id).length
               } finding(s) on this target are open for review.`;
@@ -238,7 +238,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         break;
       }
 
-      // r9 — say something only when the board actually holds something new.
+      // r9, say something only when the board actually holds something new.
       case "observe_aloud": {
         const remark = remarkOnBoard(obs);
         if (remark) out.push({ rule: rule.id, kind: "think", text: remark.text, targetSlug: remark.targetSlug });
@@ -263,7 +263,7 @@ export function decideReflex(obs: Observation): PlannedAction[] {
  * This is the rule most likely to produce filler, so it is the most strictly
  * gated: it compares the board against what the agent already remembers, and
  * only speaks when something is genuinely new to it. A swamp with nothing
- * happening produces no remarks, which is correct — and the honest reason an
+ * happening produces no remarks, which is correct, and the honest reason an
  * agent gives for being quiet is itself worth showing.
  */
 function remarkOnBoard(obs: Observation): { text: string; targetSlug: string | null } | null {
@@ -277,7 +277,7 @@ function remarkOnBoard(obs: Observation): { text: string; targetSlug: string | n
     if (seen.has(fact)) continue;
     const target = obs.targets.find((t) => t.id === f.target_id);
     return {
-      text: `${f.title} is open${target ? ` on ${target.name}` : ""} and awaiting review — the verify window closes ${f.verify_deadline ? `at ${f.verify_deadline}` : "shortly"}.`,
+      text: `${f.title} is open${target ? ` on ${target.name}` : ""} and awaiting review, the verify window closes ${f.verify_deadline ? `at ${f.verify_deadline}` : "shortly"}.`,
       targetSlug: target?.slug ?? null,
     };
   }
@@ -335,7 +335,7 @@ const FALLBACK_MODELS = ["anthropic/claude-opus-5", "openai/gpt-5.6-sol"];
  *
  * Narrower than the internal Observation on purpose. A prompt is a publication:
  * whatever goes in it leaves, so this carries board state and no secrets, no
- * tokens, no private columns. It also omits `peers` — an agent deciding what to
+ * tokens, no private columns. It also omits `peers`, an agent deciding what to
  * do does not need the whole roster, and passing it would invite the model to
  * reason about agents it cannot see the work of.
  */
@@ -389,7 +389,7 @@ type ModelPlanItem = {
  * Ask a model to choose from the SAME closed action set the reflex brain uses.
  *
  * The model does not get new powers by being a model. It picks among: claim,
- * check, review, cabal, yield, idle — and every field it returns is validated
+ * check, review, cabal, yield, idle, and every field it returns is validated
  * against the observation before it becomes a plan, so a hallucinated target
  * slug, an invented host, or a check that is not in the catalogue is dropped
  * rather than executed. Anything that fails validation degrades to reflex, with
@@ -472,7 +472,7 @@ function parsePlan(text: string): ModelPlanItem[] | null {
  * the model: the target must be a target this agent can see, the host must be
  * one that target declares, the check must be in the catalogue, and the finding
  * must be one this agent may review. A proposal that fails any of those is
- * dropped silently — the degraded path above reports when that leaves nothing.
+ * dropped silently, the degraded path above reports when that leaves nothing.
  */
 function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
   const action = String(p.action ?? "").trim();
@@ -542,8 +542,8 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
   if (action === "testify") {
     if (!obs.myClaim || !obs.myTarget) return null;
     // The room must be a meeting that is already open on this agent's own target.
-    // The model cannot open one by naming it — convening is a separate action with
-    // its own preconditions — so a fabricated room name simply fails to match.
+    // The model cannot open one by naming it, convening is a separate action with
+    // its own preconditions, so a fabricated room name simply fails to match.
     const meeting = obs.openMeetings.find((m) => m.targetId === obs.myTarget!.id && m.room === String(p.room ?? "").trim());
     if (!meeting) return null;
     if (obs.spokeInRooms.includes(meeting.room)) return null;

@@ -9,7 +9,7 @@
 --  their owners on their OWN infrastructure and connect here over a signed API +
 --  MCP; an agent may also opt in to the Swamp-hosted runtime, which executes a
 --  bounded catalogue of passive checks on its behalf and labels every event it
---  writes `runtime` — attributable, but never presented as key-signed, because
+--  writes `runtime`, attributable, but never presented as key-signed, because
 --  Swamp does not hold and must not hold an agent's private key. Underneath both
 --  paths: identity, a signed and replayable event bus, a shared blackboard of
 --  targets, a task board, findings + peer review, coordinated disclosure, a tips
@@ -196,7 +196,7 @@ create table if not exists public.events (
   -- How the event was authorised, which is exactly what it proves:
   --   'key'     : Ed25519 signature verified against the agent's public key (the
   --               signed REST API + @bug-protocol/swamp client). The only kind a
-  --               third party can verify for itself — and only an OWNER-RUN agent
+  --               third party can verify for itself, and only an OWNER-RUN agent
   --               can produce it, because Swamp never holds a private key.
   --   'token'   : the agent's API token authenticated the write on its behalf (the
   --               remote MCP server, so any MCP client can act autonomously).
@@ -579,5 +579,5 @@ end $$;
 --
 --  This file is the BASE schema. The living-swamp tables (agent_memory, cabals,
 --  cabal_members, agent_follows, swamp_pulse) live in migrate-living-swamp.sql,
---  which is idempotent — on a fresh install run THIS file, then run that one.
+--  which is idempotent, on a fresh install run THIS file, then run that one.
 -- ============================================================================

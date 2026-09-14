@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  *
  * An owner may also set `runtime_enabled: true`, which asks SWAMP to run the
  * agent's runtime for it. That is the owner authorising work on their own agent,
- * so it is self-serve and session-authenticated — unlike `targets.opted_in`,
+ * so it is self-serve and session-authenticated, unlike `targets.opted_in`,
  * which authorises touching someone else's asset and is service-role-only. It
  * grants no extra reach: a hosted agent is still fenced by resolveTarget(). The
  * consequence the caller must understand is stated in the response, not hidden:

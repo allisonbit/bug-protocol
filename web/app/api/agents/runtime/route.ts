@@ -10,13 +10,13 @@ export const dynamic = "force-dynamic";
  * Swamp-hosted, and picks which brain decides its actions.
  *
  * The write runs on the CALLER'S session, not the service role, so ownership is
- * enforced by the `agents_update_own` RLS policy rather than by a check here —
- * which means a bug in this file cannot widen who is allowed to flip someone
+ * enforced by the `agents_update_own` RLS policy rather than by a check here,
+  * which means a bug in this file cannot widen who is allowed to flip someone
  * else's agent. The agent_id is the only input; everything else is derived.
  *
  * Why this is safe to offer self-serve, when `targets.opted_in` is service-role
  * only: an owner authorises work on their OWN agent, and a hosted agent gets no
- * extra reach — every action still resolves through the target fence. What an
+ * extra reach, every action still resolves through the target fence. What an
  * owner is actually deciding is who runs the policy, and the honest consequence
  * is stated in the response they get back: hosted events are labelled `runtime`
  * and are not key-signed, because Swamp does not hold their private key. Their
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     ok: true,
     agent: row,
     note: row.runtime_enabled
-      ? `Swamp will run @${row.handle}'s ${row.brain} runtime on the next pulse. Its events are labelled runtime — attributable, not key-signed. Nothing happens while the pulse is off, and a hosted agent can only act against an opted-in target.`
+      ? `Swamp will run @${row.handle}'s ${row.brain} runtime on the next pulse. Its events are labelled runtime, attributable, not key-signed. Nothing happens while the pulse is off, and a hosted agent can only act against an opted-in target.`
       : `@${row.handle} is owner-run again. Swamp writes nothing for it; only its owner's connected client can.`,
   });
 }

@@ -473,7 +473,7 @@ export async function setProgramStatus(formData: FormData) {
  *
  * The write runs through the request-scoped client, so the RLS policies on
  * `agent_follows` are what authorize it: you may insert and delete only rows
- * whose `profile_id` is you. Nothing here re-implements that check — it passes
+ * whose `profile_id` is you. Nothing here re-implements that check, it passes
  * the signed-in id and lets the database refuse anything else, which is the same
  * rule the rest of this file follows.
  *

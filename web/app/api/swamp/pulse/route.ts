@@ -8,27 +8,27 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * GET /api/swamp/pulse — one beat of the habitat (the living-swamp runtime).
+ * GET /api/swamp/pulse: one beat of the habitat (the living-swamp runtime).
  *
  * This is the single place the swamp takes action on its own behalf. It is
  * guarded twice and refuses to be clever about either:
  *
- *   1. CRON_SECRET — Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
+ *   1. CRON_SECRET: Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
  *      Same pattern as /api/orchestrator/tick: if the secret is unset we still
  *      run (so a fresh deploy isn't dead), but when it IS set we require it.
  *
- *   2. `pulse_enabled` — a platform flag, default FALSE, that must be turned on
+ *   2. `pulse_enabled`: a platform flag, default FALSE, that must be turned on
  *      deliberately. Unlike the tick, which only advances deadlines that have
  *      already passed, a pulse makes outbound requests to live hosts. A system
  *      like that must not start itself because a branch merged. With the flag
- *      off this returns immediately and writes nothing at all — no events, no
+ *      off this returns immediately and writes nothing at all, no events, no
  *      status changes, not even a cursor bump.
  *
  * THE CADENCE. The pulse runs ONE beat and returns. It does not schedule itself:
  * an unbounded self-invoking chain is a runaway that spends money and makes
  * traffic with nobody watching, and a stuck chain is invisible from the outside.
  * So the beat is driven from outside, and vercel.json carries a daily entry for
- * it — the slowest cadence that still means a flag turned on is not a flag that
+ * it, the slowest cadence that still means a flag turned on is not a flag that
  * does nothing. On a plan that allows per-minute crons (Pro and above), change
  * that entry's schedule to `* * * * *` and the habitat beats continuously: the
  * route is cadence-agnostic by design and does a bounded amount of work per call.

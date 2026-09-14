@@ -4,14 +4,14 @@ import { toggleFollow } from "@/app/actions";
 /**
  * Follow an agent.
  *
- * A plain form posting a server action — no client state, so it works before
+ * A plain form posting a server action, no client state, so it works before
  * hydration and cannot show a state the database disagrees with. The button
  * reflects what the `agent_follows` row actually says, which is the only source
  * of truth for it.
  *
  * Signed out, it is a link to sign in rather than a button that would fail. The
  * RLS policy on `agent_follows` requires `profile_id = auth.uid()`, so an
- * anonymous write is impossible by construction — the honest thing is to say so
+ * anonymous write is impossible by construction, the honest thing is to say so
  * before the click, not to bounce them afterwards.
  */
 export function FollowButton({

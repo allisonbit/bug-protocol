@@ -107,6 +107,84 @@ An MCP server exposing the protocol to AI agents: list/read programs, compute co
 6. MCP server package.
 7. Rebuild, commit, push, then Vercel.
 
+## Dashboard: upgrading it to "work real"
+
+Requested: "make implementation plan on upgrading the dashboard to work real". This is the plan, and the first
+thing it does is separate what is already real from what only looks finished, because most of the dashboard
+turned out to be further along than the request implied and the remaining gaps are specific.
+
+### What is real today (verified, not assumed)
+
+| Surface | State |
+|---|---|
+| `/dashboard` | Real. Four queries (`getMyPrograms`, `getMySubmissions`, `getInbox`, `getProfile`); stat band appears only for a role with a basis for it; escrow and off-chain commitments are counted apart, not summed |
+| Empty states | Real and deliberate. A new account gets `StartHere`, not four zeros, because a zero is a measurement and there is nothing to measure |
+| `/dashboard/agents` | Exists; token shown once, stored as a hash |
+| `/dashboard/connect` | Exists |
+| `/dashboard/swamp` | Exists; reads the live event bus |
+| `/dashboard/ai` | Real console over `/api/copilot`, with an honest offline planner fallback when no model is wired. Recipes name registered MCP tools only |
+| Write tools | `submit_finding`, `triage_submission`, `disclose_finding`, `claim_target` are all registered and persisted |
+| Peer review | `POST /api/findings/[id]/review` enforces "not your own finding", a status gate, and one review per reviewer |
+
+### What is missing, in the order it blocks things
+
+**P0, blocks everything else: nine database objects do not exist in the live schema.** The console logs five failed
+queries per page load. Absent: `agent_memory`, `agent_follows`, `agent_registrations`, `cabals`, `cabal_members`,
+`swamp_pulse`, the leaderboard table, and the continuity/commitment/registration tables. Two concrete consequences,
+neither cosmetic:
+
+- Registration rate limiting **fails open** because `agent_registrations` is absent, so the open self-registration
+  door has no flood limit at all.
+- `/v1/continuity` and `/v1/commitments` now answer **503** with an honest "our side" message, but `/skill.md` still
+  tells agents that resume, checkpoint and commit exist. An agent reads a promise it cannot keep.
+
+**P0, the product's core promise: there is no way to move money.** No payout, withdraw, or claim surface exists
+anywhere (`find app -name '*payout*' -o -name '*withdraw*'` returns nothing). The dashboard reads `paid_out` and
+sums earnings, but a hunter has no button to take what escrow owes them and an owner has no way to top up or close
+out. Everything upstream of this is honest bookkeeping for a payment that cannot yet be made.
+
+**P1: triage is a read-only dead end.** The inbox links to `/submissions/[id]`; the detail page renders accepted
+state and reward but exposes no accept/reject/reward control, and `/submissions` has no index route. The review API
+is real, so this is UI work rather than new backend work.
+
+**P2: no agent-management or activity view.** A user with agents has no dashboard surface summarising them; the
+roster lives on `/swamp`, which is public. Onboarding shows no next step once the first program or finding exists.
+
+### Phases, each with a stated finish line
+
+**Phase 1, make the schema whole.** Apply the missing objects as one reviewed migration. Finish when: a full page
+load of `/dashboard`, `/swamp`, `/agents` and `/leaderboard` logs zero `[queries]` errors, and a registration
+attempt that exceeds the limit is refused rather than accepted.
+
+**Phase 2, money out.** Build the payout path end to end: a claim action for an accepted finding, an owner surface
+for funding and closing a program, and the on-chain settlement the program's escrow mode calls for. Finish when: an
+accepted finding can be paid out on a testnet program and the resulting transfer is visible on the explorer, with
+an off-chain program answering honestly that it has no contract to pay from.
+
+**Phase 3, finish triage.** Add the accept/reject/reward controls to `/submissions/[id]`, and a `/submissions`
+index so the inbox has somewhere to point. Finish when: an owner can take a finding from `new` to `accepted` with a
+reward, entirely in the UI, with no API call by hand.
+
+**Phase 4, the account view.** Add an activity timeline (from the bus, which already has the data) and an agent
+summary for accounts that own agents. Finish when: a returning user can see what changed since their last visit
+without opening a public page.
+
+### Order and rationale
+
+Phase 1 first is not a preference: the other three all render data the missing tables hold, so building them first
+means building against errors. Phase 2 before phase 3 because a triage verdict that cannot pay is the exact gap
+this plan exists to close. Phase 4 last because it is additive and depends on phase 1's tables.
+
+### Known limits to state rather than hide
+
+- **Off-chain programs cannot be enforced.** "Funded" in `offchain` mode is a promise, not a contract. The UI
+  names that on every surface, and phase 2 must not blur it into "in escrow" when the money is not.
+- **`rep` from an off-chain program is unverifiable** (already in Known limits above). Phase 4's agent summary must
+  not present it as chain-attested.
+- **Nothing here fixes discovery.** `/api/chain/tick` still scans a bounded window of recent ids.
+
+---
+
 ## Awaiting from you
 - $BUG contract address (Pons launchpad): set `NEXT_PUBLIC_BUG_TOKEN` + on-chain `bugToken`.
 - **An arbiter venue.** `setArbiter` is one-shot and unset by default, so escalations are currently

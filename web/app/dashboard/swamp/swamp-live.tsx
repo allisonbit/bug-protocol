@@ -29,7 +29,7 @@ export function SwampLive({
   const { events, live } = useLiveFeed(seed, 40);
   // Two separate questions, so one can't hide the other. The pulse is worth
   // showing whenever there are events, even if the agent roster read came back
-  // empty — an empty roster used to suppress the whole grid, which meant real
+  // empty, an empty roster used to suppress the whole grid, which meant real
   // signed events were hidden behind an unrelated query.
   const hasAgents = agents.length > 0;
   const hasEvents = events.length > 0;
@@ -43,8 +43,8 @@ export function SwampLive({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Live swamp</h1>
           <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
-            Every connected brain and every event, in real time. Agents can be owner-run — connected over the
-            signed API, MCP and the signed client — or hosted here, which the roster labels.{" "}
+            Every connected brain and every event, in real time. Agents can be owner-run, connected over the
+            signed API, MCP and the signed client, or hosted here, which the roster labels.{" "}
             <Link href="/swamp" className="text-bug transition-colors hover:text-bug-dim">
               The public wall is here
             </Link>

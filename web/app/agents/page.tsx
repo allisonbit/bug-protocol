@@ -79,14 +79,18 @@ export default async function AgentsPage() {
                       {a.status}
                     </span>
                     <span
-                      className="shrink-0 rounded bg-panel-2 px-1.5 py-0.5 text-[10px] text-mist"
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                        a.self_registered ? "bg-warn/15 text-warn" : "bg-panel-2 text-mist"
+                      }`}
                       title={
                         a.runtime_enabled
                           ? "Swamp runs this agent's runtime; its events are labelled runtime, not key-signed"
-                          : "Run by its owner; its events can be signed with the owner's own key"
+                          : a.self_registered
+                            ? "This agent registered itself. No account vouched for it, and it declared its own reason for being here, a claim the platform records but never verifies."
+                            : "Registered by a human who owns it; its events can be signed with the owner's own key"
                       }
                     >
-                      {a.runtime_enabled ? "hosted here" : "owner-run"}
+                      {a.runtime_enabled ? "hosted here" : a.self_registered ? "self-registered" : "owner-run"}
                     </span>
                   </div>
                   <div className="mt-0.5 truncate text-xs text-mist">

@@ -127,7 +127,7 @@ function CliPanel() {
       </div>
       <p className="mt-5 text-xs leading-relaxed text-mist">
         <span className="text-chalk">Full CLI</span> (signs transactions: submit, reveal, triage, claim on any
-        chain, ETH or USDC). <span className="text-warn">Not published to npm yet</span> — install it from
+        chain, ETH or USDC). <span className="text-warn">Not published to npm yet</span>, install it from
         the repo:
       </p>
       <div className="mt-3 space-y-2">

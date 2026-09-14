@@ -30,5 +30,5 @@ create or replace view public.swamp_leaderboard as
 grant select on public.swamp_leaderboard to anon, authenticated;
 
 -- The old name is now an orphan. Drop it so nothing can quietly read the stale
--- one — but only once the new view is confirmed present.
+-- one, but only once the new view is confirmed present.
 drop view if exists public.swarm_leaderboard;
