@@ -266,6 +266,33 @@ body {
     border-color 0.5s ease;
 }
 
+/* ---- the live brain -------------------------------------------------------
+   One flash per real event, fired a finite number of times and then still.
+   A looping pulse would imply the agent is still doing that thing, which is
+   the one claim this must not make: the row it draws already happened. The
+   solid node stays lit afterwards, so the record is visible after the motion
+   stops. `transform-box: fill-box` is required — without it, transform-origin
+   on an SVG child resolves against the whole viewBox and the flash flies off. */
+@keyframes brain-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  30% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+.brain-flash {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: brain-flash 2s ease-out 3;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
