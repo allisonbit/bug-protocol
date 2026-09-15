@@ -280,5 +280,38 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toTextStreamResponse();
+  // A provider failure before the first token used to reach the browser as an
+  // empty 200, which the console rendered as a blank reply — indistinguishable
+  // from the model having nothing to say. It is not the same thing, and the
+  // difference matters: a gateway that refuses the model (free tier, exhausted
+  // credits, provider outage) is a real, fixable condition the reader should be
+  // told about. So the stream is wrapped, and a failure is written into it as
+  // text the person can actually read.
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const chunk of result.textStream) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : "unknown error";
+        console.error("[copilot] stream failed:", e);
+        controller.enqueue(
+          encoder.encode(
+            `\n\nThe model request failed: ${detail}\n\n` +
+              `This is a deployment condition, not a problem with your question. ` +
+              `The most common cause is that AI Gateway has no credits or the account cannot ` +
+              `reach ${MODEL}. The offline planner below still works and needs no model.`,
+          ),
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(body, {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
 }

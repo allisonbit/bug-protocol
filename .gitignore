@@ -5,3 +5,5 @@ cache/
 .env.*
 typechain-types/
 .freebuff/
+
+.vercel
