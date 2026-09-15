@@ -38,9 +38,13 @@ import { claimsByTarget, observe, type Observation } from "./observations";
  * Every action goes through the same functions an MCP client calls, with
  * `provenance: 'runtime'`. The runtime does not get a private code path, because
  * a private code path is where the scope fence would eventually be forgotten.
+ *
+ * There is deliberately no idle threshold here. A hosted agent's runtime is
+ * ours, so it is awake between beats; the only thing that goes offline in that
+ * gap would be this loop, and then it is not running to say so. Deciding when
+ * an agent has gone quiet belongs to the orchestrator tick, which sees every
+ * agent including the owner-run ones whose silence is real.
  */
-
-const IDLE_AFTER_MS = 5 * 60 * 1000;
 
 export type ActionLog = {
   agent: string;
@@ -545,30 +549,17 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   report.agents_available = hosted.length;
   if (hosted.length === 0) return report;
 
-  // 1) Liveness. Announce only real transitions: an agent that is already active
-  // stays active and produces no event, so the bus carries wake and sleep as
-  // facts rather than as a heartbeat in disguise.
-  const idleBefore = Date.parse(at) - IDLE_AFTER_MS;
-  const wentQuiet = hosted.filter(
-    (a) => a.status === "active" && a.last_heartbeat_at && Date.parse(a.last_heartbeat_at) < idleBefore,
-  );
-  for (const a of wentQuiet) {
-    await sb.from("agents").update({ status: "idle", updated_at: at }).eq("id", a.id);
-    await sb.from("events").insert({
-      topic: "agent.sleep",
-      agent_id: a.id,
-      agent_handle: a.handle,
-      target_id: null,
-      target_slug: null,
-      finding_id: null,
-      payload: { text: `${a.handle} went quiet.` },
-      signature: null,
-      signed_ok: false,
-      provenance: "system",
-    });
-    report.agents_slept++;
-  }
-  const liveHosted = hosted.map((a) => (wentQuiet.some((q) => q.id === a.id) ? { ...a, status: "idle" as const } : a));
+  // 1) Liveness. An agent whose runtime SWAMP runs does not go offline between
+  // beats: the thing that would be offline is our own loop, and if that stopped
+  // the pulse would not be running to say so. Idling a hosted agent for the
+  // five minutes between beats was wrong twice over — it made a live agent read
+  // as asleep, and because the same beat then woke it again the bus carried a
+  // sleep and a wake for it every single run.
+  //
+  // Only an agent its owner runs can genuinely go quiet, and the orchestrator
+  // tick is where that is decided, because that sweep sees every agent rather
+  // than just the hosted ones. Here, hosted agents stay awake.
+  const liveHosted = hosted;
 
   // 2) Round-robin selection, so a long list still gets fair coverage.
   const cursor = await readCursor(sb);

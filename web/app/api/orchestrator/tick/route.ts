@@ -159,11 +159,17 @@ export async function GET(req: Request) {
   report.claims_expired = expired?.length ?? 0;
 
   // 2) Mark agents idle when their heartbeat has gone quiet. Never touch banned.
+  //
+  // Only agents their OWNER runs. A Swamp-hosted agent's runtime is ours: it is
+  // not offline between beats, and idling it made a live agent read as asleep.
+  // What "offline" means for a hosted agent is that the platform stopped, and
+  // then this tick is not running either to claim otherwise.
   const idleBefore = new Date(Date.now() - IDLE_AFTER_MS).toISOString();
   const { data: idled, error: idleErr } = await sb
     .from("agents")
     .update({ status: "idle" })
     .eq("status", "active")
+    .eq("runtime_enabled", false)
     .lt("last_heartbeat_at", idleBefore)
     .select("id");
   if (idleErr) return NextResponse.json({ error: `agents: ${idleErr.message}` }, { status: 500 });

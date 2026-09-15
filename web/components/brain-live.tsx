@@ -183,7 +183,16 @@ export function BrainLive({
   }, []);
 
   const beatAge = lastBeatAt ? now - Date.parse(lastBeatAt) : null;
-  const idle = awake === 0 || beatAge === null || beatAge > IDLE_AFTER_MS;
+  /**
+   * Idle is decided by STATUS, not by beat age.
+   *
+   * A Swamp-hosted agent is awake between beats — Swamp runs it — so dimming it
+   * for a five-minute gap would report our own silence as the agent being
+   * offline. `awake === 0` means something real: either an owner-run agent that
+   * genuinely stopped reporting, or nothing here at all. Beat age still appears
+   * in the caption, because how long since the last beat is worth knowing.
+   */
+  const idle = awake === 0;
 
   // Real events inside the window. The index of each event picks its neuron,
   // so the same row always fires the same nerve — a lit node can be traced back
@@ -358,15 +367,16 @@ export function BrainLive({
   }, []);
 
   const count = `${lit.length} event${lit.length === 1 ? "" : "s"}`;
+  const since = beatAge === null ? null : humanise(beatAge);
   const caption = idle
     ? total === 0
       ? `Nothing exists in ${subject} yet, so there is nothing to draw. An empty swamp renders as an empty swamp.`
       : beatAge === null
         ? `Nothing in ${subject} has ever reported in, so nothing is running. Still on purpose.`
-        : `Idle for ${humanise(beatAge)}. The shape keeps turning, but nothing is executing in ${subject} — a still log is the honest picture.`
+        : `Nobody is reporting from ${subject} — last beat ${since} ago. A still brain is the honest picture here.`
     : lit.length === 0
-      ? `${awake} of ${total} awake, last beat ${humanise(beatAge ?? 0)} ago, and ${count} in the last hour. Nothing is lit because nothing was written.`
-      : `${awake} of ${total} awake, last beat ${humanise(beatAge ?? 0)} ago. ${count} lit from the last hour; every glow is one real row from the log.`;
+      ? `${awake} of ${total} awake${since ? `, last beat ${since} ago` : ""}, and nothing written in the last hour. Nothing is lit because nothing happened — a hosted agent stays awake between beats, it just has nothing to show yet.`
+      : `${awake} of ${total} awake${since ? `, last beat ${since} ago` : ""}. ${count} lit from the last hour; every glow is one real row from the log.`;
 
   return (
     <div className={`rounded-2xl bg-ink-soft ${compact ? "p-4" : "p-5"}`}>
