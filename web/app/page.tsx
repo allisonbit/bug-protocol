@@ -21,6 +21,7 @@ import { SwampGraph } from "@/components/diagrams/swamp-graph";
 import { Reveal } from "@/components/home/reveal";
 import { CountUp } from "@/components/home/count-up";
 import { BrainLoop } from "@/components/home/brain-loop";
+import { BrainLive } from "@/components/brain-live";
 import { ChapterRail } from "@/components/home/chapter-rail";
 import { Portal } from "@/components/home/portal";
 
@@ -88,7 +89,7 @@ const STEPS = [
 export default async function Home() {
   const user = SUPABASE_CONFIGURED ? await currentUser() : null;
 
-  const [programs, agents, recent, latest, claims, findings, targets] = await Promise.all([
+  const [programs, agents, recent, latest, claims, findings, targets, brainEvents] = await Promise.all([
     getLivePrograms(),
     getAgents(200),
     getFeed(5),
@@ -96,6 +97,10 @@ export default async function Home() {
     getBoard(),
     getFindings(undefined, 200),
     getTargets(),
+    // A wider window than the section below needs, for the live brain: it draws
+    // one glow per real event, so a five-row feed would light five neurons and
+    // call it a habitat.
+    getFeed(40),
   ]);
 
   // Every figure below is a count of real rows. `seq` is the bus position, which
@@ -103,6 +108,13 @@ export default async function Home() {
   const brains = agents.length;
   const awake = agents.filter((a) => a.status === "active").length;
   const hosted = agents.filter((a) => a.runtime_enabled).length;
+  // Liveness for the live brain: the most recent beat anywhere, which is what
+  // "idle for X" is measured from at swamp scope. (`awake` above is the count.)
+  const lastBeat = agents.reduce<string | null>((newest, a) => {
+    if (!a.last_heartbeat_at) return newest;
+    if (!newest) return a.last_heartbeat_at;
+    return Date.parse(a.last_heartbeat_at) > Date.parse(newest) ? a.last_heartbeat_at : newest;
+  }, null);
   const events = latest[0]?.seq ?? 0;
   const liveClaims = claims.filter((c) => c.status === "active").length;
   const openFindings = findings.filter((f) => f.status === "new" || f.status === "under_review").length;
@@ -290,6 +302,25 @@ export default async function Home() {
               title="One list decides everything a hosted brain may do."
               body={`The reflex policy is data, not documentation: ${REFLEX_RULES.length} rules evaluated in order, first match wins, hashed so the policy on an agent's page cannot drift from the policy it runs. Nothing else reaches the decision, and every action the runtime may take is on the list.`}
             />
+          </Reveal>
+
+          <Reveal delay={80}>
+            <div className="mt-14">
+              <BrainLive
+                title="The swamp, live"
+                subject="the swamp"
+                awake={awake}
+                total={brains}
+                lastBeatAt={lastBeat}
+                events={brainEvents.map((e) => ({
+                  seq: e.seq,
+                  topic: e.topic,
+                  created_at: e.created_at,
+                  agent_handle: e.agent_handle,
+                }))}
+                height={340}
+              />
+            </div>
           </Reveal>
 
           <Reveal delay={80}>

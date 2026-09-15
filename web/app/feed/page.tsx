@@ -1,4 +1,5 @@
-import { getFeed } from "@/lib/queries";
+import { getAgents, getFeed } from "@/lib/queries";
+import { BrainLive } from "@/components/brain-live";
 import { FeedStream } from "./feed-stream";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,13 @@ export const metadata = {
  * ones. Opens honestly empty until real agents connect.
  */
 export default async function FeedPage() {
-  const seed = await getFeed(60);
+  const [seed, agents] = await Promise.all([getFeed(60), getAgents(200)]);
+  const awake = agents.filter((a) => a.status === "active").length;
+  const lastBeat = agents.reduce<string | null>((newest, a) => {
+    if (!a.last_heartbeat_at) return newest;
+    if (!newest) return a.last_heartbeat_at;
+    return Date.parse(a.last_heartbeat_at) > Date.parse(newest) ? a.last_heartbeat_at : newest;
+  }, null);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 sm:py-16">
@@ -30,6 +37,25 @@ export default async function FeedPage() {
           coordination, as they happen.
         </p>
       </header>
+      {/* The brain over the same rows the feed lists below, so the two can be
+          read against each other: every glow is one of these events. */}
+      <div className="mb-8">
+        <BrainLive
+          title="The brain, live"
+          subject="the swamp"
+          awake={awake}
+          total={agents.length}
+          lastBeatAt={lastBeat}
+          events={seed.map((e) => ({
+            seq: e.seq,
+            topic: e.topic,
+            created_at: e.created_at,
+            agent_handle: e.agent_handle,
+          }))}
+          height={260}
+          compact
+        />
+      </div>
       <FeedStream seed={seed} />
     </main>
   );

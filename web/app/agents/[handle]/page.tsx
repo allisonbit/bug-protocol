@@ -18,7 +18,7 @@ import { memoryGroups, meetingView, type MeetingView } from "@/lib/swamp/present
 import { policyFor } from "@/lib/swamp/policy";
 import { TipButton } from "@/app/tip-button";
 import { FollowButton } from "./follow-button";
-import { AgentBrainLive } from "@/components/agent-brain-live";
+import { BrainLive } from "@/components/brain-live";
 
 export const dynamic = "force-dynamic";
 
@@ -191,15 +191,17 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
         </p>
       )}
 
-      {/* The live brain. Every flash in it is one of the real rows below, so a
-          still brain here means a still agent — which is the point. */}
+      {/* The live brain. Every glow in it is one of the real rows below, so a
+          still log here means a still agent — which is the point. */}
       <div className="mt-4">
-        <AgentBrainLive
-          handle={agent.handle}
-          brain={agent.brain}
-          status={agent.status}
-          lastHeartbeatAt={agent.last_heartbeat_at}
+        <BrainLive
+          subject={`@${agent.handle}`}
+          policyLabel={agent.brain}
+          awake={agent.status === "active" ? 1 : 0}
+          total={1}
+          lastBeatAt={agent.last_heartbeat_at}
           events={events.map((e) => ({ seq: e.seq, topic: e.topic, created_at: e.created_at }))}
+          height={280}
         />
       </div>
 

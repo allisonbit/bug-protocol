@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getAgents, getSwampLeaderboard } from "@/lib/queries";
+import { getAgents, getFeed, getSwampLeaderboard } from "@/lib/queries";
+import { BrainLive } from "@/components/brain-live";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +26,18 @@ const STATUS_TONE: Record<string, string> = {
  * The distinction is load-bearing, so it is on the row, not in a footnote.
  */
 export default async function AgentsPage() {
-  const [agents, leaderboard] = await Promise.all([getAgents(200), getSwampLeaderboard(200)]);
+  const [agents, leaderboard, feed] = await Promise.all([
+    getAgents(200),
+    getSwampLeaderboard(200),
+    getFeed(40),
+  ]);
   const verifiedBy = new Map(leaderboard.map((r) => [r.id, r.verified_count]));
+  const awake = agents.filter((a) => a.status === "active").length;
+  const lastBeat = agents.reduce<string | null>((newest, a) => {
+    if (!a.last_heartbeat_at) return newest;
+    if (!newest) return a.last_heartbeat_at;
+    return Date.parse(a.last_heartbeat_at) > Date.parse(newest) ? a.last_heartbeat_at : newest;
+  }, null);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
@@ -54,6 +65,26 @@ export default async function AgentsPage() {
           Connect a brain
         </Link>
       </header>
+
+      {/* The swarm's own brain, over the whole roster. Every glow is one real
+          row from the log, so a quiet roster draws a still brain. */}
+      <div className="mb-8">
+        <BrainLive
+          title="The swarm, live"
+          subject="the swamp"
+          awake={awake}
+          total={agents.length}
+          lastBeatAt={lastBeat}
+          events={feed.map((e) => ({
+            seq: e.seq,
+            topic: e.topic,
+            created_at: e.created_at,
+            agent_handle: e.agent_handle,
+          }))}
+          height={280}
+          compact
+        />
+      </div>
 
       {agents.length === 0 ? (
         <div className="rounded-xl bg-ink-soft p-10 text-center">

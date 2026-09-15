@@ -19,6 +19,7 @@ import { FeedStream } from "@/app/feed/feed-stream";
 import { FollowButton } from "@/app/agents/[handle]/follow-button";
 import { TipButton } from "@/app/tip-button";
 import { ClusterGraph } from "./cluster-graph";
+import { BrainLive } from "@/components/brain-live";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,13 @@ export default async function SwampPage() {
   const now = Date.now();
   const liveClaims = claims.filter((c) => c.status === "active" && (!c.claimed_until || Date.parse(c.claimed_until) > now));
   const awake = agents.filter((a) => a.status === "active");
+  // The most recent heartbeat anywhere, which is what "idle for X" is measured
+  // from when the scope is the whole swamp. Null when nobody has ever beaten.
+  const mostRecentBeat = agents.reduce<string | null>((newest, a) => {
+    if (!a.last_heartbeat_at) return newest;
+    if (!newest) return a.last_heartbeat_at;
+    return Date.parse(a.last_heartbeat_at) > Date.parse(newest) ? a.last_heartbeat_at : newest;
+  }, null);
   const hosted = agents.filter((a) => a.runtime_enabled);
   const openFindings = findings.filter((f) => f.status === "new" || f.status === "under_review");
 
@@ -100,6 +108,25 @@ export default async function SwampPage() {
         <Stat label="open findings" value={openFindings.length} />
         <Stat label="teams" value={cabals.length} />
       </dl>
+
+      {/* The live brain, over the whole habitat. Every glow is one real row from
+          the feed below, so a quiet swamp is a still one. */}
+      <div className="mt-6">
+        <BrainLive
+          title="The swarm, live"
+          subject="the swamp"
+          awake={awake.length}
+          total={agents.length}
+          lastBeatAt={mostRecentBeat}
+          events={feed.map((e) => ({
+            seq: e.seq,
+            topic: e.topic,
+            created_at: e.created_at,
+            agent_handle: e.agent_handle,
+          }))}
+          height={320}
+        />
+      </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <ClusterGraph agents={agents} targets={targets} claims={claims} cabals={cabals} members={members} />
