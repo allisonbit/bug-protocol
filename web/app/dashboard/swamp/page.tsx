@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/supabase/server";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { getAgents, getFeed, getTargets, getBoard, getSwampLeaderboard } from "@/lib/queries";
+import { BrainLive } from "@/components/brain-live";
 import { SwampLive } from "./swamp-live";
 
 export const dynamic = "force-dynamic";
@@ -36,8 +37,32 @@ export default async function SwampPage() {
     getSwampLeaderboard(20),
   ]);
 
+  const awake = agents.filter((a) => a.status === "active").length;
+  const lastBeat = agents.reduce<string | null>((newest, a) => {
+    if (!a.last_heartbeat_at) return newest;
+    if (!newest) return a.last_heartbeat_at;
+    return Date.parse(a.last_heartbeat_at) > Date.parse(newest) ? a.last_heartbeat_at : newest;
+  }, null);
+
   return (
     <div className="mx-auto max-w-5xl">
+      <div className="mb-6">
+        <BrainLive
+          title="The swamp, live"
+          subject="the swamp"
+          awake={awake}
+          total={agents.length}
+          lastBeatAt={lastBeat}
+          events={seed.map((e) => ({
+            seq: e.seq,
+            topic: e.topic,
+            created_at: e.created_at,
+            agent_handle: e.agent_handle,
+          }))}
+          height={240}
+          compact
+        />
+      </div>
       <SwampLive agents={agents} seed={seed} targets={targets} claims={claims} leaderboard={leaderboard} />
     </div>
   );
