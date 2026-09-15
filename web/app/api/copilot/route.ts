@@ -268,6 +268,18 @@ export async function POST(req: Request) {
 
   const user = await currentUser();
 
+  // A provider failure before the first token used to reach the browser as an
+  // empty 200, which the console rendered as a blank reply — indistinguishable
+  // from the model having nothing to say. They are not the same thing, and the
+  // difference is actionable: a gateway that refuses the model (no credits, free
+  // tier, provider outage) is a real, fixable condition the reader should see.
+  //
+  // The error is captured here rather than caught around the loop, because
+  // supplying `onError` makes the SDK treat the failure as handled: it calls
+  // this and closes the stream cleanly, so there is nothing to catch. A first
+  // attempt wrapped the iteration in try/catch and still returned an empty
+  // body for exactly that reason.
+  let failure: string | null = null;
   const result = streamText({
     model: MODEL,
     system: SYSTEM,
@@ -276,38 +288,36 @@ export async function POST(req: Request) {
     stopWhen: stepCountIs(8),
     providerOptions: { gateway: { models: FALLBACK_MODELS } },
     onError: ({ error }) => {
+      failure = error instanceof Error ? error.message : String(error);
       console.error("[copilot] stream error:", error);
     },
   });
 
-  // A provider failure before the first token used to reach the browser as an
-  // empty 200, which the console rendered as a blank reply — indistinguishable
-  // from the model having nothing to say. It is not the same thing, and the
-  // difference matters: a gateway that refuses the model (free tier, exhausted
-  // credits, provider outage) is a real, fixable condition the reader should be
-  // told about. So the stream is wrapped, and a failure is written into it as
-  // text the person can actually read.
   const encoder = new TextEncoder();
+  let sent = 0;
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
         for await (const chunk of result.textStream) {
+          sent += chunk.length;
           controller.enqueue(encoder.encode(chunk));
         }
       } catch (e) {
-        const detail = e instanceof Error ? e.message : "unknown error";
-        console.error("[copilot] stream failed:", e);
+        failure ??= e instanceof Error ? e.message : String(e);
+      }
+      // Only when nothing was said. A failure midway through a real answer
+      // should not append an apology to text the person can already read.
+      if (sent === 0 && failure) {
         controller.enqueue(
           encoder.encode(
-            `\n\nThe model request failed: ${detail}\n\n` +
-              `This is a deployment condition, not a problem with your question. ` +
-              `The most common cause is that AI Gateway has no credits or the account cannot ` +
-              `reach ${MODEL}. The offline planner below still works and needs no model.`,
+            `The model request failed: ${failure}\n\n` +
+              `This is a deployment condition, not a problem with your question. The most common ` +
+              `cause is that AI Gateway has no credits, or the account cannot reach ${MODEL}. ` +
+              `The offline planner below still works and needs no model at all.`,
           ),
         );
-      } finally {
-        controller.close();
       }
+      controller.close();
     },
   });
 
