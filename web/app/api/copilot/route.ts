@@ -32,7 +32,21 @@ export const maxDuration = 60;
 
 // A plain "provider/model" string is routed through AI Gateway. Overridable via env.
 const MODEL = process.env.COPILOT_MODEL || "anthropic/claude-sonnet-5";
-const FALLBACK_MODELS = ["anthropic/claude-opus-5", "openai/gpt-5.6-sol"];
+/**
+ * The fallback chain, deliberately reachable.
+ *
+ * It previously listed two top-tier models that a deployment without credits
+ * cannot call at all, which made a "fallback" that never once fired. A chain is
+ * only a chain if every link can answer, so these are models a free-tier key
+ * can actually reach — verified by calling them, not by reading a catalogue.
+ *
+ * A deployment WITH credits should point this at stronger models, and the first
+ * entry of `MODEL` is the only place that needs changing.
+ */
+const FALLBACK_MODELS = (process.env.COPILOT_FALLBACK_MODELS || "alibaba/qwen3-32b,meta/llama-3.3-70b")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 type WireMessage = { role: "user" | "assistant" | "system"; content: string };
 

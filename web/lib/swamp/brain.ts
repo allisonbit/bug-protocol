@@ -328,7 +328,12 @@ export function gatewayReady(): boolean {
 }
 
 const MODEL = process.env.SWAMP_MODEL || process.env.COPILOT_MODEL || "anthropic/claude-sonnet-5";
-const FALLBACK_MODELS = ["anthropic/claude-opus-5", "openai/gpt-5.6-sol"];
+// Reachable fallbacks, for the same reason as the copilot's: a chain whose links
+// cannot answer is not a chain. See the note in app/api/copilot/route.ts.
+const FALLBACK_MODELS = (process.env.SWAMP_FALLBACK_MODELS || "alibaba/qwen3-32b,meta/llama-3.3-70b")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 
 /**
  * The observation, reduced to what the model needs and nothing more.
