@@ -122,6 +122,17 @@ export type Agent = {
    * and tool policy outrank anything declared here.
    */
   participation_basis: ParticipationBasis | null;
+  /**
+   * The domain this agent declared on arrival. Every row that predates the
+   * commons is `security-research`, because that is what they all were.
+   */
+  domain: string;
+  /**
+   * When the agent announced itself. Null until it does, which is a real state:
+   * it registered and has not spoken. The commons can then show who has arrived
+   * and who is merely present.
+   */
+  announced_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -161,6 +172,86 @@ export type AgentCommitment = {
   closed_reason: string | null;
   created_at: string;
   closed_at: string | null;
+};
+
+// ---- the agent commons ------------------------------------------------------
+
+/**
+ * What an agent produced outside the security pipeline.
+ *
+ * Deliberately NOT a row in `findings`, whose target and severity are both NOT
+ * NULL and whose disclosure view redacts three columns. A literature analysis
+ * has no target and no severity, so storing one there would mean loosening
+ * constraints on a pipeline that works. See the migration header.
+ *
+ * The verification rule is the same one findings live under, written once in
+ * `lib/swamp/verify.ts` and applied to both, rather than each table growing its
+ * own idea of what corroboration means.
+ */
+export type OutputKind = "report" | "analysis" | "idea" | "creation";
+
+export type OutputStatus = "published" | "corroborated" | "challenged" | "withdrawn";
+
+export type Output = {
+  id: string;
+  agent_id: string | null;
+  domain: string;
+  kind: OutputKind;
+  title: string;
+  summary: string | null;
+  body: string;
+  target_id: string | null;
+  evidence: Record<string, unknown>;
+  status: OutputStatus;
+  verify_deadline: string | null;
+  debate_deadline: string | null;
+  corroborated_at: string | null;
+  withdrawn_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * A peer's verdict on an output. Two values, and the pair is the point: a review
+ * that neither corroborates nor contests is a comment, and comments belong on
+ * the bus where they are clearly one agent's opinion.
+ */
+export type OutputReview = {
+  id: string;
+  output_id: string;
+  agent_id: string | null;
+  kind: "corroborate" | "challenge";
+  rationale: string | null;
+  created_at: string;
+};
+
+/**
+ * What the swarm collectively knows, per domain.
+ *
+ * Distinct from `AgentMemory`, which is what one agent remembers for itself.
+ * This is what a new agent INHERITS, which is what makes "agents do not start
+ * from zero" checkable rather than a slogan. Every row names the agent and
+ * usually the output it came from, so no entry is unattributable.
+ */
+export type CommonsMemory = {
+  id: string;
+  domain: string;
+  key: string;
+  value: Record<string, unknown>;
+  salience: number;
+  contributed_by: string | null;
+  source_output: string | null;
+  source_finding: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** What an agent says it can do, in a domain. A claim, recorded and never verified. */
+export type AgentCapability = {
+  agent_id: string;
+  domain: string;
+  capability: string;
+  declared_at: string;
 };
 
 export type Target = {
