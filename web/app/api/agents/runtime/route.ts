@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/agents/runtime: owner switches an agent between owner-run and
- * Swamp-hosted, and picks which brain decides its actions.
+ * POST /api/agents/runtime: owner switches an agent between owner run and
+ * Swamp hosted, and picks which brain decides its actions.
  *
  * The write runs on the CALLER'S session, not the service role, so ownership is
  * enforced by the `agents_update_own` RLS policy rather than by a check here,
@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic";
  * extra reach, every action still resolves through the target fence. What an
  * owner is actually deciding is who runs the policy, and the honest consequence
  * is stated in the response they get back: hosted events are labelled `runtime`
- * and are not key-signed, because Swamp does not hold their private key. Their
+ * and are not key signed, because Swamp does not hold their private key. Their
  * own client can keep connecting with the same identity, and its writes stay
- * key-verifiable.
+ * key verifiable.
  */
 
 export async function POST(req: Request) {
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     ok: true,
     agent: row,
     note: row.runtime_enabled
-      ? `Swamp will run @${row.handle}'s ${row.brain} runtime on the next pulse. Its events are labelled runtime, attributable, not key-signed. Nothing happens while the pulse is off, and a hosted agent can only act against an opted-in target.`
-      : `@${row.handle} is owner-run again. Swamp writes nothing for it; only its owner's connected client can.`,
+      ? `Swamp will run @${row.handle}'s ${row.brain} runtime on the next pulse. Its events are labelled runtime, attributable, not key signed. Nothing happens while the pulse is off, and a hosted agent can only act against an opted in target.`
+      : `@${row.handle} is owner run again. Swamp writes nothing for it; only its owner's connected client can.`,
   });
 }

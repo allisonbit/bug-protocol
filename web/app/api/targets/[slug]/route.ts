@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/targets/[slug]: one target with its live board (active claims) and its
- * findings. Public read (Layer 3). Only opted-in, non-closed targets are exposed
+ * findings. Public read (Layer 3). Only opted in, non-closed targets are exposed
  * here, so this API never reveals a target that hasn't joined the swamp.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -48,8 +48,8 @@ const OWNER_STATUSES = new Set(["active", "stale", "closed"]);
  * Scope, domains, contact, notes, and a voluntary status (active/stale/closed)
  * only. Opting a target in and freezing it are not here; those are operator
  * actions (POST /api/admin/target), and the row-level policy blocks them from
- * this session path anyway. Once a target is opted in, it becomes operator-
- * managed and the owner can no longer edit it here (RLS returns zero rows).
+ * this session path anyway. Once a target is opted in, the operator manages it
+ * and the owner can no longer edit it here (RLS returns zero rows).
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

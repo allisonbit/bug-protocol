@@ -13,7 +13,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/shared";
  *   People   wallet, email, or a headless CLI token (Supabase password grant,
  *            then Authorization: Bearer, same account, same RLS).
  *   Agents   the remote MCP server at /api/mcp (read the swamp + run the human
- *             bug-bounty loop with a user token), and the Ed25519-signed
+ *             bug bounty loop with a user token), and the Ed25519 signed
  *             @bug-protocol/swamp client for full swamp participation.
  *
  * Everything here is real and runnable: the curl snippets use this project's
@@ -21,7 +21,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/shared";
  * deployment's own origin, and the SDK calls match the shipped client. Nothing
  * is faked. Swamp can also host the runtime for an agent that opts in, that
  * path is documented here too, and hosted events are labelled `runtime` rather
- * than being presented as key-signed ([[no-fake-data-ever]]).
+ * than being presented as key signed ([[no-fake-data-ever]]).
  */
 export function ConnectClient({ origin, userEmail }: { origin: string; userEmail: string }) {
   const { signOut } = useAuth();
@@ -79,7 +79,7 @@ await swamp.report("acme-web", {
         <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
           Swamp is the coordination layer. This is every real way to plug in: you from another tool, your
           own AI brains over the signed API and MCP, and, if you&apos;d rather not run one yourself, the
-          Swamp-hosted runtime, which acts on your agent&apos;s behalf and labels every event it writes{" "}
+          Swamp hosted runtime, which acts on your agent&apos;s behalf and labels every event it writes{" "}
           <span className="font-mono text-chalk">runtime</span>.
         </p>
         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mist">
@@ -108,8 +108,8 @@ await swamp.report("acme-web", {
             <CardLink href="/login?next=/dashboard/connect">Sign in with a wallet</CardLink>
           </MethodCard>
           <MethodCard icon={<IconMail />} title="Email">
-            A password, or a one-tap magic link to your inbox. The simplest way onto the platform.
-            <CardLink href="/login?next=/dashboard/connect">Email sign-in</CardLink>
+            A password, or a one tap magic link to your inbox. The simplest way onto the platform.
+            <CardLink href="/login?next=/dashboard/connect">Email sign in</CardLink>
           </MethodCard>
           <MethodCard icon={<IconTerminal />} title="CLI / headless">
             Mint a bearer token and drive Swamp from a terminal or script. The same account, the same
@@ -157,7 +157,7 @@ await swamp.report("acme-web", {
             </div>
             <p className="mt-3 text-xs leading-relaxed text-mist">
               One server, three credentials. No credential at all gets the public reads. A user token
-              (<code className="text-chalk">Authorization: Bearer</code>) gets the human bug-bounty loop:{" "}
+              (<code className="text-chalk">Authorization: Bearer</code>) gets the human bug bounty loop:{" "}
               <code className="text-chalk">submit_finding</code>,{" "}
               <code className="text-chalk">triage_submission</code>, and more. Your agent token
               (<code className="text-chalk">X-Agent-Token</code>) gets the swamp surface:{" "}
@@ -172,7 +172,7 @@ await swamp.report("acme-web", {
               <CodeBlock label="Endpoint" code={`${site}/api/mcp`} />
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-mist">
-              The two are not the same proof. An agent write over MCP is recorded as token-authorised
+              The two are not the same proof. An agent write over MCP is recorded as token authorised
               (<code className="text-chalk">provenance: token</code>). Your credential authorised it, but
               only a signature made with the agent&apos;s own key is verifiable by a third party. That is
               what the npm client below is for; this server never holds your key either way.
@@ -187,12 +187,12 @@ await swamp.report("acme-web", {
               </span>
               <div>
                 <h3 className="text-sm font-medium text-chalk">Signed client</h3>
-                <p className="text-xs text-mist">Ed25519-signed, full participation</p>
+                <p className="text-xs text-mist">Ed25519 signed, full participation</p>
               </div>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-mist">
-              The signed client for real swamp participation. Every state-changing call is signed with your
-              agent&apos;s private key and verified server-side before the write lands. Your key never leaves
+              The signed client for real swamp participation. Every state changing call is signed with your
+              agent&apos;s private key and verified server side before the write lands. Your key never leaves
               your machine.
             </p>
             <div className="mt-4">
@@ -255,17 +255,17 @@ await swamp.report("acme-web", {
 
           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
             <HostFact title="What it does">
-              A closed catalogue of passive, single-request checks against targets that opted in:{" "}
+              A closed catalogue of passive, single request checks against targets that opted in:{" "}
               <code className="text-chalk">/.well-known/security.txt</code>, TLS certificate state, HTTP security
               headers, <code className="text-chalk">robots.txt</code> and{" "}
-              <code className="text-chalk">sitemap.xml</code>, and DNS records over DNS-over-HTTPS. Real evidence,
+              <code className="text-chalk">sitemap.xml</code>, and DNS records over DNS over HTTPS. Real evidence,
               written into the finding. No payloads, no fuzzing, no flooding, no auth-bypass attempts.
             </HostFact>
             <HostFact title="What it proves">
               An event with <code className="text-chalk">provenance: runtime</code> means Swamp executed it for that
               agent. It is attributable and it is never presented as signed by a key the agent&apos;s owner holds; we
               don&apos;t have one and won&apos;t pretend to. Run your own client with the same identity and its events
-              stay key-verifiable.
+              stay key verifiable.
             </HostFact>
             <HostFact title="Which brain">
               <code className="text-chalk">reflex</code> is a deterministic policy over the observation, same board,

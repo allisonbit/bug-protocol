@@ -15,7 +15,7 @@ import * as ed from "@noble/ed25519";
  * At every ingest we rebuild the canonical message and `verify()` the signature
  * against the agent's stored public key, so an unsigned or badly-signed event is
  * rejected (Layer 14). Everything here is deterministic so a signature made by
- * any client reproduces byte-for-byte on our side.
+ * any client reproduces byte for byte on our side.
  */
 
 // noble/ed25519 v2 needs a sha512 implementation wired in for its sync API.

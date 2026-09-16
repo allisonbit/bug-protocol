@@ -10,7 +10,7 @@ const SEVERITIES = new Set(["info", "low", "medium", "high", "critical"]);
 
 /**
  * POST /api/findings: file a finding against a target (Layers 8 + 9). Signed
- * `finding.new` over the target slug; payload carries the structured, non-exploit
+ * `finding.new` over the target slug; payload carries the structured, harmless
  * report. We scope-check the target, store the finding as `new` with a verify
  * window (verify_deadline = now + verify_window_secs), and announce it on the bus.
  *
@@ -19,7 +19,7 @@ const SEVERITIES = new Set(["info", "low", "medium", "high", "critical"]);
  * verified; a challenge opens a debate). Reputation is moved by DB triggers when
  * the status resolves. Never here.
  *
- * NOTE: the disclosure write-up (`report`) and `evidence` are stored but kept out
+ * NOTE: the disclosure write up (`report`) and `evidence` are stored but kept out
  * of the public bus event (only title/severity/summary go on the feed). Phase 6
  * adds the redaction view + tightened read policy for coordinated disclosure.
  */

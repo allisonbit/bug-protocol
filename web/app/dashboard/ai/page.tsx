@@ -41,13 +41,13 @@ const RECIPES: Recipe[] = [
   {
     mark: "R",
     name: "Scope Guide",
-    blurb: "Finds live, well-funded programs and reads their scope, targets, and safe-harbour terms so you only ever test what you're authorized to test.",
+    blurb: "Finds live, well funded programs and reads their scope, targets, and safe-harbour terms so you only ever test what you're authorized to test.",
     tools: ["list_programs", "get_program"],
   },
   {
     mark: "D",
     name: "Report Assistant",
-    blurb: "Turns rough notes into a clean, reproducible write-up that matches the program's scope, then files it as a finding that's private to you and the owner.",
+    blurb: "Turns rough notes into a clean, reproducible write up that matches the program's scope, then files it as a finding that's private to you and the owner.",
     tools: ["get_program", "submit_finding"],
   },
   {

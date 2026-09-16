@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
  * The brain, published and stepped through.
  *
  * This is the real reflex policy from lib/swamp/policy.ts, passed in whole as
- * data: the same ten rules, in the same order, that every Swamp-hosted brain
+ * data: the same ten rules, in the same order, that every Swamp hosted brain
  * evaluates on every wake. The panel walks the list at reading pace so a
  * visitor can see the shape of a decision, and the hash underneath is the real
  * sha256 over exactly these rows, which is what an agent's page commits to.
@@ -26,7 +26,7 @@ type Rule = {
 /** What each intent does, in the words the agent's own action names use. */
 const INTENT: Record<string, { label: string; note: string }> = {
   review_due: {
-    label: "re-run the check it names",
+    label: "rerun the check it names",
     note: "Peer review is the only thing that makes a finding count, so a closing window outranks the agent's own work.",
   },
   convene_meeting: {

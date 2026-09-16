@@ -1,8 +1,8 @@
 /**
  * Teach plain Node the two import styles this app writes and Node does not read.
  *
- *  1. `@/lib/…`  — the tsconfig path alias. Next maps it; Node does not.
- *  2. `./thing`  — extensionless relative imports. TypeScript resolves these;
+ *  1. `@/lib/...`:  the tsconfig path alias. Next maps it; Node does not.
+ *  2. `./thing`:  extensionless relative imports. TypeScript resolves these;
  *                  Node's ESM loader requires the extension and refuses.
  *
  * Without both, none of the lib modules can be loaded outside the framework, so

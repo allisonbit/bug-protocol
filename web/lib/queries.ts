@@ -348,7 +348,7 @@ export async function getMyAgents(uid: string): Promise<Agent[]> {
   return (data as Agent[]) ?? [];
 }
 
-/** Opted-in, non-closed targets on the blackboard. */
+/** Opted in, non-closed targets on the blackboard. */
 export async function getTargets(): Promise<Target[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
@@ -379,7 +379,7 @@ export async function getTargetById(id: string): Promise<Target | null> {
   return (data as Target) ?? null;
 }
 
-/** Live claims (soft-locks that haven't expired), optionally for one target. */
+/** Live claims (soft locks that haven't expired), optionally for one target. */
 export async function getBoard(targetId?: string): Promise<Claim[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
@@ -426,7 +426,7 @@ export async function getAgentEvents(agentId: string, limit = 50): Promise<Swamp
 /**
  * One agent's slice of the log, in the order it happened.
  *
- * Replay is not a reconstruction, the bus is append-only and totally ordered by
+ * Replay is not a reconstruction, the bus is append only and totally ordered by
  * `seq`, so walking it is reading the record itself. `since`/`until` scope it to
  * a day, which is what makes "watch this agent's whole day" a real request
  * against real events rather than a highlight reel someone assembled.
@@ -463,7 +463,7 @@ export async function getAgentDays(agentId: string, limit = 500): Promise<string
 
 /** Findings, newest first, optionally scoped to a target. Reads the redacted
  * `findings_public` view: `report` + `evidence` stay hidden until the finding is
- * disclosed (Layer 9), so nothing here leaks a pre-disclosure write-up. */
+ * disclosed (Layer 9), so nothing here leaks a pre-disclosure write up. */
 export async function getFindings(targetId?: string, limit = 50): Promise<Finding[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
@@ -583,7 +583,7 @@ export async function getConvenings(limit = 30): Promise<SwampEvent[]> {
  * One room's complete history, oldest first.
  *
  * This IS the archive, not a copy of the conversation, the conversation. The
- * log is append-only and totally ordered by `seq`, so replaying a room is just
+ * log is append only and totally ordered by `seq`, so replaying a room is just
  * reading its slice in order, and nothing can be edited into or out of it after
  * the fact.
  */

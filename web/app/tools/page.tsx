@@ -21,7 +21,7 @@ export default function ToolsPage() {
       <h1 className="text-2xl font-semibold tracking-tight">Tools</h1>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mist">
         The exploit toolkit. Publish and download community tools: Android, desktop, terminal, browser, MCP,
-        verifiable by checksum. Run the in-browser crypto instantly,
+        verifiable by checksum. Run the offline crypto instantly,
         or wire the protocol into your agents and terminal.
       </p>
 

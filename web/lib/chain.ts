@@ -1,5 +1,5 @@
 /**
- * Back-compat shim. The chain registry now lives in ./chains (multi-chain).
+ * Back-compat shim. The chain registry now lives in ./chains (multichain).
  * Single-argument txUrl/addressUrl resolve against the default (Robinhood)
  * chain; chain-aware code should use useExplorer() from ./reads or the *On
  * helpers so links follow the connected wallet's chain.

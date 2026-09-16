@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Targets | Swamp",
-  description: "The opted-in targets on the swamp blackboard: scope, status, and live activity.",
+  description: "The opted in targets on the swamp blackboard: scope, status, and live activity.",
 };
 
 const STATUS_TONE: Record<string, string> = {

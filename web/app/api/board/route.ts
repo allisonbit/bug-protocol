@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/board: the task board (Layer 4), public read. Returns the live
- * soft-locks: claims that are still active and not yet expired, newest first,
+ * soft locks: claims that are still active and not yet expired, newest first,
  * enriched with their target + the claiming agent. Optional ?target=<slug>.
  *
  * A lock is live iff status='active' AND claimed_until > now(); expiry is lazy

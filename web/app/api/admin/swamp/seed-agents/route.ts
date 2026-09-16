@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/admin/swamp/seed-agents: register N Swamp-hosted reflex agents.
+ * POST /api/admin/swamp/seed-agents: register N Swamp hosted reflex agents.
  *
  * WHAT THIS IS FOR. Standing up a habitat takes agents, and a fresh deployment
  * has none. This mints a small, bounded set of them in one call so an operator
@@ -14,14 +14,14 @@ export const dynamic = "force-dynamic";
  * identities through the dashboard.
  *
  * WHAT THESE AGENTS ARE, EXACTLY. They are real registrations: real rows, real
- * pulse beats, real passive checks against opted-in targets, real findings with
+ * pulse beats, real passive checks against opted in targets, real findings with
  * real evidence. They are NOT independent researchers, and nothing here pretends
- * they are. They are Swamp-hosted reflex agents owned by the operator who called
+ * they are. They are Swamp hosted reflex agents owned by the operator who called
  * this route, they are labelled that way in their capability manifest, and they
  * are born with no credentials at all:
  *
  *   - no private key exists. `public_key` is the sentinel `runtime:no-key`, so a
- *     key-signed write from this identity is refused rather than accepted against
+ *     key signed write from this identity is refused rather than accepted against
  *     a key nobody holds. `verifyMessage()` returns false on it; it never throws.
  *   - no API token is minted, and no `agent_secrets` row is written. Nobody but
  *     the platform can act as one of these agents.
@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       .insert({
         owner: owner.id,
         handle,
-        display_name: `${prefix} ${String(i).padStart(2, "0")} (Swamp-hosted)`,
+        display_name: `${prefix} ${String(i).padStart(2, "0")} (Swamp hosted)`,
         // No key exists for a hosted agent. Say so where a key would go, rather
         // than parking a public key no human can sign against.
         public_key: NO_KEY,
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
           kind: MANIFEST_KIND,
           capabilities: ["recon", "web", "tls", "dns"],
           hosted_by: "swamp",
-          note: "Swamp-hosted agent. Real pulse beats, real passive checks, events labelled provenance=runtime. Not an independent researcher; it has no owner-held key and no API token.",
+          note: "Swamp hosted agent. Real pulse beats, real passive checks, events labelled provenance=runtime. Not an independent researcher; it has no owner-held key and no API token.",
         },
         prompt_hash: brain === "reflex" ? policy.hash : null,
         model_hash: brain === "model" ? policy.hash : null,
@@ -171,10 +171,10 @@ export async function POST(req: Request) {
     brain,
     policy: { name: policy.name, hash: policy.hash, version: policy.version, deterministic: policy.deterministic },
     note:
-      `${created.length} Swamp-hosted ${brain} agent(s) registered. They have no private key and no API token, ` +
+      `${created.length} Swamp hosted ${brain} agent(s) registered. They have no private key and no API token, ` +
       "only the platform can act as them, and everything they do is labelled provenance=runtime. " +
       "They will do nothing until two things are true: an operator sets pulse_enabled, and there is an " +
-      "opted-in target for them to work. Register nothing here you would not be willing to describe as " +
-      "Swamp-hosted on the roster, because that is exactly how they are labelled.",
+      "opted in target for them to work. Register nothing here you would not be willing to describe as " +
+      "Swamp hosted on the roster, because that is exactly how they are labelled.",
   });
 }

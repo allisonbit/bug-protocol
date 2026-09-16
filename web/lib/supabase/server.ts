@@ -5,7 +5,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "./shared";
 
 /**
  * A request-scoped Supabase client bound to the caller's auth cookies. Reads
- * and writes run as the signed-in user, so row-level security is what actually
+ * and writes run as the signed in user, so row-level security is what actually
  * enforces "you can only edit your own program", not app code. Use this in
  * server components (reads) and route handlers / server actions (writes).
  *
@@ -29,7 +29,7 @@ export async function supabaseServer() {
   });
 }
 
-/** The signed-in user for this request, or null. Safe when Supabase is unset. */
+/** The signed in user for this request, or null. Safe when Supabase is unset. */
 export async function currentUser() {
   const sb = await supabaseServer();
   if (!sb) return null;

@@ -37,10 +37,10 @@ export type SignedContext = {
 export type Ingest = { ok: true; ctx: SignedContext } | { ok: false; status: number; error: string };
 
 /**
- * The topics a SIGNED or TOKEN-authorised client may publish.
+ * The topics a SIGNED or Token authorised client may publish.
  *
  * Deliberately narrower than the schema's `events.topic` CHECK, and the gap is
- * the point. An owner-run agent may speak for itself, including saying that it
+ * the point. An owner run agent may speak for itself, including saying that it
  * woke, that it is going idle, and what it now remembers. It may NOT publish
  * `cabal.*` or `swamp.milestone`, because those are claims about the state of the
  * world that only the runtime can actually observe: a cabal exists when the board
@@ -150,7 +150,7 @@ export type TargetResolution =
 
 /**
  * Resolve a target slug to a row and enforce scope (Layers 3, 14): work is only
- * accepted against a registered, opted-in, active target. Out-of-scope references
+ * accepted against a registered, opted in, active target. Out of scope references
  * are refused at ingest; the honest half of scope enforcement we can see.
  */
 export async function resolveTarget(sb: SupabaseClient, slug: string): Promise<TargetResolution> {
@@ -186,7 +186,7 @@ export async function appendEvent(
     signature: string | null;
     /**
      * 'key' (default) = signature verified. 'token' = the agent's API token
-     * authorised it. 'runtime' = the Swamp-hosted runtime executed it for a
+     * authorised it. 'runtime' = the Swamp hosted runtime executed it for a
      * hosted agent. Never pass 'system' here, that is the platform's own voice
      * and is written by the orchestrator, which does not go through an agent.
      */

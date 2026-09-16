@@ -14,8 +14,8 @@ import { useEffect, useRef, useState } from "react";
  * as an entrance to the app rather than a menu of marketing links.
  *
  * It also owns the account action, because the header used to: `account` is
- * resolved on the server, so a signed-in reader gets their dashboard and
- * everyone else gets the sign-in door, and nobody sees both.
+ * resolved on the server, so a signed in reader gets their dashboard and
+ * everyone else gets the sign in door, and nobody sees both.
  */
 
 type Surface = { href: string; label: string; note: string; count?: number | null };

@@ -271,7 +271,7 @@ body {
    A looping pulse would imply the agent is still doing that thing, which is
    the one claim this must not make: the row it draws already happened. The
    solid node stays lit afterwards, so the record is visible after the motion
-   stops. `transform-box: fill-box` is required — without it, transform-origin
+   stops. `transform-box: fill-box` is required. Without it, transform-origin
    on an SVG child resolves against the whole viewBox and the flash flies off. */
 @keyframes brain-flash {
   0% {

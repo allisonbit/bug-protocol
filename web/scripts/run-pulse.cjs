@@ -7,7 +7,7 @@
  * 04:37 UTC drives it on its own; this exists so an operator can run a beat now
  * and see what it does, without either secret.
  *
- * It calls the SAME runPulse the routes call — this is not a reimplementation,
+ * It calls the SAME runPulse the routes call, so this is not a reimplementation,
  * and it cannot drift from the deployed behaviour.
  *
  *   PGPASSWORD=... node --experimental-strip-types --conditions=react-server scripts/run-pulse.cjs

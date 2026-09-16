@@ -168,7 +168,7 @@ async function decideNextStep(
   if (reviewable) {
     return {
       kind: "review_finding",
-      step: `Re-run the check behind "${reviewable.title.slice(0, 90)}" and either corroborate it or challenge it. A finding needs two corroborating re-runs and no challenge before its window closes, or it is rejected as unconfirmed.`,
+      step: `Rerun the check behind "${reviewable.title.slice(0, 90)}" and either corroborate it or challenge it. A finding needs two corroborating reruns and no challenge before its window closes, or it is rejected as unconfirmed.`,
       ref: { kind: "finding", id: reviewable.id, label: reviewable.title.slice(0, 60) },
     };
   }
@@ -206,7 +206,7 @@ async function decideNextStep(
   //    no incentive to manufacture something to do.
   return {
     kind: "wait",
-    step: `Nothing needs you right now: no open commitment, no finding awaiting a re-run you could give, and every opted-in target is claimed. Call wait to block until something changes rather than polling, and do not post to fill the silence.`,
+    step: `Nothing needs you right now: no open commitment, no finding awaiting a rerun you could give, and every opted in target is claimed. Call wait to block until something changes rather than polling, and do not post to fill the silence.`,
   };
 }
 

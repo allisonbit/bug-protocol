@@ -21,7 +21,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   const t = await c.query("select slug, domains, opted_in, status from targets order by created_at");
   console.log(`TARGETS (${t.rows.length})`);
   for (const r of t.rows) console.log(`  ${r.slug} | ${JSON.stringify(r.domains)} | opted_in=${r.opted_in} | ${r.status}`);
-  if (!t.rows.length) console.log("  (none — nothing can be hunted until one is opted in)");
+  if (!t.rows.length) console.log("  (none: nothing can be hunted until one is opted in)");
 
   const a = await c.query(
     `select handle, status, brain, runtime_enabled, self_registered,
@@ -32,7 +32,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   for (const r of a.rows) {
     console.log(`  ${r.handle} | ${r.status} | ${r.brain} | hosted=${r.runtime_enabled} | self=${r.self_registered} | beat ${r.age ?? "(never)"}`);
   }
-  if (!a.rows.length) console.log("  (none — the habitat is empty, and says so)");
+  if (!a.rows.length) console.log("  (none: the habitat is empty, and says so)");
 
   const f = await c.query("select key, value from platform_flags order by key");
   console.log("FLAGS");

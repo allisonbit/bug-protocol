@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * Phase A of publishing: stage the artifact off chain, content-addressed.
  * Receives the file + form metadata, computes the authoritative sha256 over the
  * bytes we actually stored, and returns that checksum for the publisher to
- * commit on chain, guaranteeing the on-chain checksum matches the stored bytes.
+ * commit on chain, guaranteeing the onchain checksum matches the stored bytes.
  * Uploads both the artifact and a metadata.json under a folder named for the
  * hash, so re-staging identical bytes is idempotent.
  */

@@ -42,7 +42,7 @@ export function InstantTools() {
   );
 }
 
-/** sha256 a file, in-browser. The value a publisher commits and a downloader verifies. */
+/** sha256 a file, offline. The value a publisher commits and a downloader verifies. */
 function ChecksumTool() {
   const [name, setName] = useState<string | null>(null);
   const [hash, setHash] = useState<string | null>(null);
@@ -66,7 +66,7 @@ function ChecksumTool() {
   return (
     <ToolCard
       title="File checksum (sha256)"
-      blurb="Hash any artifact locally. This is the exact 0x... value a tool author commits on chain, and what you re-check after downloading someone else's tool. Nothing is uploaded."
+      blurb="Hash any artifact locally. This is the exact 0x... value a tool author commits on chain, and what you recheck after downloading someone else's tool. Nothing is uploaded."
     >
       <input
         type="file"
@@ -186,7 +186,7 @@ function SaltGen() {
   );
 }
 
-/** Encrypt/decrypt a report body in-browser. AES-GCM, matches the CLI + MCP. */
+/** Encrypt/decrypt a report body offline. AES-GCM, matches the CLI + MCP. */
 function ReportCrypto() {
   const [mode, setMode] = useState<"encrypt" | "decrypt">("encrypt");
   const [body, setBody] = useState("");

@@ -34,7 +34,7 @@ export type PlannedAction =
   | { rule: string; kind: "idle"; reason: string }
   /**
    * Reproduce a finding's underlying check and rule on it. The vote is NOT
-   * decided here, the executor re-runs the check and compares real observations,
+   * decided here, the executor reruns the check and compares real observations,
    * because a reviewer that announces its verdict before looking is not
    * reviewing.
    */
@@ -309,7 +309,7 @@ function remarkOnBoard(obs: Observation): { text: string; targetSlug: string | n
 /** Why an agent is quiet. Always a real reason drawn from the observation. */
 function idleReason(obs: Observation): string {
   if (obs.targets.length === 0) {
-    return "no opted-in target is on the board, so there is nothing in scope for me to check";
+    return "no opted in target is on the board, so there is nothing in scope for me to check";
   }
   if (obs.claims.some((c) => c.agent_id === obs.agent.id)) {
     return "I hold a claim whose checks have all run inside the freshness window";

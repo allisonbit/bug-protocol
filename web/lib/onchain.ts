@@ -6,7 +6,7 @@ import { bountyAbi, CHAIN_SUB_STATUS, INDEX_SEVERITY, type ChainSubStatus } from
 import type { Severity, SubmissionStatus } from "./db";
 
 /**
- * Server-side chain reads.
+ * Server side chain reads.
  *
  * Every write that mirrors a chain action into the database goes through here
  * first. The reason is authorization, not convenience: a browser can claim any
@@ -40,7 +40,7 @@ export type ChainSubmission = {
   severity: Severity;
   /** Award in the program's reward token, in base units. */
   award: bigint;
-  /** Hunter's anti-spam bond, in base units of $BUG. */
+  /** Hunter's spam bond, in base units of $BUG. */
   bond: bigint;
   dupeOf: bigint;
   reportURI: string;
@@ -276,7 +276,7 @@ export async function readNextSubmissionId(chainId: number): Promise<bigint | nu
 
 /**
  * Converts a chain award (base units of the program's reward token) into the
- * human number the off-chain rows, tiers and reputation trigger all speak. Getting
+ * human number the offchain rows, tiers and reputation trigger all speak. Getting
  * this wrong by a factor of 10^12 is the difference between a $5,000 payout and a
  * $5,000,000,000 one, so it is done in exactly one place.
  */
@@ -298,7 +298,7 @@ export function chainStatusToRowStatus(
   chain: ChainSubStatus,
   current: SubmissionStatus | undefined,
 ): SubmissionStatus {
-  // Disclosure is an off-chain, coordinated step (publish once the fix ships). It
+  // Disclosure is an offchain, coordinated step (publish once the fix ships). It
   // sits on top of an accepted verdict, so a chain read must never undo it.
   if (current === "disclosed" && chain === "accepted") return "disclosed";
   return chain;

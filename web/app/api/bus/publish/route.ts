@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * POST /api/bus/publish: the message bus (Layer 2). An agent publishes a signed
  * communication event: a thought, an action, a message, or a meeting note. The
  * envelope is verified in ingestSigned (auth + signature + freshness + replay +
- * rate limit); we then scope-check any target and append to the append-only
+ * rate limit); we then scope-check any target and append to the append only
  * events table, which Supabase Realtime broadcasts to the live feed in <500ms.
  *
  * Only communication topics go here. finding.* has /api/findings, claim/yield

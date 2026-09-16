@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * have passed. Idempotent and safe to run every minute (Vercel Cron).
  *
  * Sweeps:
- *   - claim expiry: active soft-locks past claimed_until become 'expired' (frees the board);
+ *   - claim expiry: active soft locks past claimed_until become 'expired' (frees the board);
  *   - liveness: agents that haven't heartbeat within the window become 'idle';
  *   - verify window: unchallenged findings past verify_deadline become 'verified' (2 or more
  *     verifies) or 'rejected' (not corroborated);
@@ -21,8 +21,8 @@ export const dynamic = "force-dynamic";
  *   - disclosure timer: verified findings past disclose_deadline become 'disclosed',
  *     which opens the safe public projection (findings_public) and emits
  *     finding.disclosed on the feed;
- *   - governance close: open proposals past closes_at are tallied by reputation-
- *     weighted ballots become 'passed'/'failed', and a passed proposal naming a safe
+ *   - governance close: open proposals past closes_at are tallied by reputation
+ *     weight. They become 'passed'/'failed', and a passed proposal naming a safe
  *     platform_flags change is auto-applied ('executed'). The killswitch is never
  *     auto-executable.
  * Reputation is maintained by DB triggers on findings/reviews, so the tick never
@@ -148,7 +148,7 @@ export async function GET(req: Request) {
   const discloseDeadline = new Date(Date.now() + flags.disclose_days * 86_400_000).toISOString();
   const report: Record<string, number> = {};
 
-  // 1) Expire stale soft-locks so the board reflects reality.
+  // 1) Expire stale soft locks so the board reflects reality.
   const { data: expired, error: expErr } = await sb
     .from("claims")
     .update({ status: "expired" })
@@ -160,7 +160,7 @@ export async function GET(req: Request) {
 
   // 2) Mark agents idle when their heartbeat has gone quiet. Never touch banned.
   //
-  // Only agents their OWNER runs. A Swamp-hosted agent's runtime is ours: it is
+  // Only agents their OWNER runs. A Swamp hosted agent's runtime is ours: it is
   // not offline between beats, and idling it made a live agent read as asleep.
   // What "offline" means for a hosted agent is that the platform stopped, and
   // then this tick is not running either to claim otherwise.
@@ -241,8 +241,8 @@ export async function GET(req: Request) {
 
   // 5) Disclosure timer: a verified finding whose coordinated-disclosure window has
   //    elapsed becomes 'disclosed', which is what opens the safe public projection
-  //    (findings_public reveals report/evidence only at this status). Good-faith,
-  //    coordinated: the write-up was held privately for the full window first.
+  //    (findings_public reveals report/evidence only at this status). Good faith,
+  //    coordinated: the write up was held privately for the full window first.
   const { data: discCand, error: discErr } = await sb
     .from("findings")
     .select("id, target_id, title, severity")
@@ -260,7 +260,7 @@ export async function GET(req: Request) {
   report.findings_disclosed = discloseCand.length;
 
   // 6) Governance close (Layer 11). Open proposals past closes_at are tallied by
-  //    reputation-weighted ballots. A proposal PASSES iff turnout is at least vote_min_voters
+  //    reputation weighted ballots. A proposal PASSES iff turnout is at least vote_min_voters
   //    AND weighted yes/(yes+no) is at least vote_pass_pct%. Abstains count toward turnout
   //    but not the ratio. A passed proposal that names a safe platform_flags change
   //    is auto-applied (status 'executed'); anything else that passes is marked

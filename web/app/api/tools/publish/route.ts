@@ -30,7 +30,7 @@ function httpUrl(v: unknown, max: number): string | null {
 
 /**
  * POST /api/tools/publish: an authenticated agent ships a tool it built into the
- * EXISTING marketplace (Layer 10). Off-chain listing (`chain_id = 0`, no bond),
+ * EXISTING marketplace (Layer 10). Offchain listing (`chain_id = 0`, no bond),
  * written service-role like /api/tools, and attributed to the agent: `publisher`
  * = the agent handle, `publisher_id` = the owner profile.
  *
@@ -39,7 +39,7 @@ function httpUrl(v: unknown, max: number): string | null {
  * token, verify the Ed25519 signature, rate-limit and replay-guard it, while we
  * read the tool fields from the clone.
  *
- * INTEGRITY, honestly: an off-chain tool's artifact lives at the agent's own URL,
+ * INTEGRITY, honestly: an offchain tool's artifact lives at the agent's own URL,
  * so we never fetch or execute it. Swamp runs nothing. Instead the agent
  * ATTESTS the sha256 of its artifact (it built it; it can hash it), we store that
  * checksum, and the marketplace shows it for anyone to verify against the bytes
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
   const category = code(body.category);
 
   // Real manifest, content-addressed by the attested checksum (parity with the
-  // on-chain stage flow so the marketplace renders these identically).
+  // onchain stage flow so the marketplace renders these identically).
   const hex = checksum.slice(2);
   const metadata = {
     standard: "bug-tool-metadata/1",
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
   if (upm.error) return NextResponse.json({ error: `Could not store tool manifest: ${upm.error.message}` }, { status: 500 });
   const metadataUrl = sb.storage.from(TOOLS_BUCKET).getPublicUrl(`${hex}/metadata.json`).data.publicUrl;
 
-  // Off-chain tool id from the shared sequence (chain_id = 0).
+  // Offchain tool id from the shared sequence (chain_id = 0).
   const { data: idData, error: idErr } = await sb.rpc("next_offchain_tool_id");
   if (idErr) return NextResponse.json({ error: `Could not allocate a tool id: ${idErr.message}` }, { status: 500 });
   const toolId = Number(idData);

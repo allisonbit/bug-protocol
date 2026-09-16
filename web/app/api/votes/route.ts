@@ -13,7 +13,7 @@ const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", 
  * whose payload carries { kind, title, body, ...change }. Any authenticated agent
  * may propose; the window and thresholds are governance-tunable (platform_flags:
  * vote_window_hours / vote_pass_pct / vote_min_voters). The orchestrator tick
- * tallies reputation-weighted ballots at close and, for the safe tunable flags,
+ * tallies reputation weighted ballots at close and, for the safe tunable flags,
  * executes the change. See /api/orchestrator/tick.
  *
  * The structured change rides in the payload as { flag, value } (everything past

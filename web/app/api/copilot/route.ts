@@ -12,7 +12,7 @@ import {
 import { money, topTier, displayName, tierFor, SEVERITIES } from "@/lib/db";
 
 /**
- * The AI Copilot's live model, over Vercel AI Gateway. It gets READ-ONLY tools
+ * The AI Copilot's live model, over Vercel AI Gateway. It gets READ ONLY tools
  * onto the real database (the same queries the site renders), so every answer is
  * grounded in actual programs, submissions, and reputation. Never invented.
  *
@@ -22,7 +22,7 @@ import { money, topTier, displayName, tierFor, SEVERITIES } from "@/lib/db";
  *
  * Auth flows through the request's Supabase cookies: read tools that touch
  * private rows (your submissions, your triage inbox) only return what RLS lets
- * the signed-in caller see. Degrades gracefully: with no gateway credentials it
+ * the signed in caller see. Degrades gracefully: with no gateway credentials it
  * returns { available:false } and the console falls back to the offline planner.
  */
 
@@ -38,7 +38,7 @@ const MODEL = process.env.COPILOT_MODEL || "anthropic/claude-sonnet-5";
  * It previously listed two top-tier models that a deployment without credits
  * cannot call at all, which made a "fallback" that never once fired. A chain is
  * only a chain if every link can answer, so these are models a free-tier key
- * can actually reach — verified by calling them, not by reading a catalogue.
+ * can actually reach, verified by calling them, not by reading a catalogue.
  *
  * A deployment WITH credits should point this at stronger models, and the first
  * entry of `MODEL` is the only place that needs changing.
@@ -56,31 +56,31 @@ function gatewayReady(): boolean {
   return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
 }
 
-const SYSTEM = `You are the Swamp Copilot, a security assistant embedded in Swamp, an escrowed bug-bounty platform where teams fund programs and hunters submit findings that pay out from escrow when accepted.
+const SYSTEM = `You are the Swamp Copilot, a security assistant embedded in Swamp, an escrowed bug bounty platform where teams fund programs and hunters submit findings that pay out from escrow when accepted.
 
-Your job: help hunters find in-scope work and write good findings, and help program owners triage. You reason over REAL data through your tools.
+Your job: help hunters find in scope work and write good findings, and help program owners triage. You reason over REAL data through your tools.
 
 HARD RULES. Never break these:
 - Ground every factual claim in a tool result. If you haven't called a tool for something, don't state it as fact.
 - NEVER invent programs, hunters, handles, rewards, pools, severities, statuses, dates, or counts. If a tool returns nothing, say plainly that there's nothing there yet.
-- You have READ-ONLY tools. You cannot submit or triage. For any action that writes data, output a short numbered plan of the exact steps the person should take (which page/form, or which MCP tool: submit_finding, triage_submission, disclose_finding), and make clear you did not perform it.
+- You have READ ONLY tools. You cannot submit or triage. For any action that writes data, output a short numbered plan of the exact steps the person should take (which page/form, or which MCP tool: submit_finding, triage_submission, disclose_finding), and make clear you did not perform it.
 - Stay within a program's published scope and safe harbor when advising. Never suggest testing out of scope.
 - Be concise and concrete. Cite programs by name and slug, submissions by their title/id, and format currency amounts as the tool gives them.
 
 If the tools return no data at all, tell the user the platform has no programs/findings yet rather than making any up.`;
 
-// ---- read-only, RLS-scoped tools over the real queries ----------------------
+// ---- read only, RLS-scoped tools over the real queries ----------------------
 
 function buildTools(userId: string | null) {
-  const authNote = "You must be signed in for this; there is no signed-in user on this request.";
+  const authNote = "You must be signed in for this; there is no signed in user on this request.";
 
   return {
     list_programs: tool({
       description:
-        "List the live and paused bug-bounty programs on Swamp, with their top reward, currency, escrow pool, scope size, and response SLA. Optionally filter by a free-text query over name and summary.",
+        "List the live and paused bug bounty programs on Swamp, with their top reward, currency, escrow pool, scope size, and response SLA. Optionally filter by a free text query over name and summary.",
       inputSchema: jsonSchema<{ query?: string }>({
         type: "object",
-        properties: { query: { type: "string", description: "Free-text filter over program name/summary." } },
+        properties: { query: { type: "string", description: "Free text filter over program name/summary." } },
         additionalProperties: false,
       }),
       execute: async ({ query }) => {
@@ -111,7 +111,7 @@ function buildTools(userId: string | null) {
 
     get_program: tool({
       description:
-        "Get one program by slug: its full scope description, in-scope targets, per-severity reward tiers, escrow pool, response SLA, and owner. Read this before advising on a submission so you stay in scope.",
+        "Get one program by slug: its full scope description, in scope targets, per severity reward tiers, escrow pool, response SLA, and owner. Read this before advising on a submission so you stay in scope.",
       inputSchema: jsonSchema<{ slug: string }>({
         type: "object",
         properties: { slug: { type: "string", description: "Program slug from list_programs." } },
@@ -142,7 +142,7 @@ function buildTools(userId: string | null) {
 
     leaderboard: tool({
       description:
-        "The ranked hunters on Swamp by reputation, with their accepted-finding count and total earned. Reputation is derived from accepted and publicly disclosed findings.",
+        "The ranked hunters on Swamp by reputation, with their accepted finding count and total earned. Reputation is derived from accepted and publicly disclosed findings.",
       inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: async () => {
         const rows = await getLeaderboard(25);
@@ -162,12 +162,12 @@ function buildTools(userId: string | null) {
     }),
 
     whoami: tool({
-      description: "The signed-in user's own profile: handle, role, reputation, accepted findings, and total earned.",
+      description: "The signed in user's own profile: handle, role, reputation, accepted findings, and total earned.",
       inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: async () => {
         if (!userId) return { signed_in: false, note: authNote };
         const p = await getProfile(userId);
-        if (!p) return { signed_in: true, note: "No profile row found for the signed-in user." };
+        if (!p) return { signed_in: true, note: "No profile row found for the signed in user." };
         return {
           signed_in: true,
           name: displayName(p),
@@ -182,7 +182,7 @@ function buildTools(userId: string | null) {
 
     my_submissions: tool({
       description:
-        "The findings the signed-in user has submitted across all programs, with current triage status and any awarded reward. Only returns the caller's own submissions.",
+        "The findings the signed in user has submitted across all programs, with current triage status and any awarded reward. Only returns the caller's own submissions.",
       inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: async () => {
         if (!userId) return { signed_in: false, note: authNote };
@@ -204,7 +204,7 @@ function buildTools(userId: string | null) {
 
     my_inbox: tool({
       description:
-        "For a program owner: the pending, not-yet-triaged submissions across the programs the signed-in user owns. This is the triage queue.",
+        "For a program owner: the pending, not yet triaged submissions across the programs the signed in user owns. This is the triage queue.",
       inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: async () => {
         if (!userId) return { signed_in: false, note: authNote };
@@ -283,7 +283,7 @@ export async function POST(req: Request) {
   const user = await currentUser();
 
   // A provider failure before the first token used to reach the browser as an
-  // empty 200, which the console rendered as a blank reply — indistinguishable
+  // empty 200, which the console rendered as a blank reply, indistinguishable
   // from the model having nothing to say. They are not the same thing, and the
   // difference is actionable: a gateway that refuses the model (no credits, free
   // tier, provider outage) is a real, fixable condition the reader should see.

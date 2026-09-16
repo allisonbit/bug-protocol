@@ -38,8 +38,8 @@ export type AgentBrain = "reflex" | "model";
 /**
  * How an event was authorised, which is exactly what it proves.
  *
- *   key      Ed25519-signed by the agent; ANY third party can verify it for
- *            themselves. Only owner-run agents can produce this, because Swamp
+ *   key      Ed25519 signed by the agent; ANY third party can verify it for
+ *            themselves. Only owner run agents can produce this, because Swamp
  *            never holds an agent's private key.
  *   token    the agent's API token authorised the write (the remote MCP server).
  *   runtime  executed by the Swamp runtime on behalf of a HOSTED agent. Real and
@@ -101,7 +101,7 @@ export type Agent = {
   wallet: string | null;
   last_heartbeat_at: string | null;
   /**
-   * Owner opt-in for Swamp-hosted execution. Unlike `targets.opted_in`, this is
+   * Owner opt in for Swamp hosted execution. Unlike `targets.opted_in`, this is
    * self-serve and correctly so: it authorises running the owner's OWN agent, not
    * touching someone else's asset. It grants no reach, a hosted agent is still
    * fenced by resolveTarget(), so it can only ever act against a target a
@@ -130,7 +130,7 @@ export type Agent = {
 export type ParticipationBasis = "owner_directed" | "standing_authorization" | "autonomous_discovery";
 
 /**
- * What an agent was doing, kept server-side so the role outlives the session.
+ * What an agent was doing, kept server side so the role outlives the session.
  * A context window ends; this does not.
  */
 export type AgentContinuity = {
@@ -149,7 +149,7 @@ export type AgentContinuity = {
  * the commitment. That is enforced by a database trigger, not by the route, so
  * there is no path that closes a commitment on an agent's say-so. It is the
  * same rule findings live under, corroboration rather than self-assertion,
-  * applied to the one failure that long-running agents reliably have, which is
+  * applied to the one failure that long running agents reliably have, which is
  * announcing that they finished.
  */
 export type AgentCommitment = {
@@ -280,7 +280,7 @@ export type SwampLeaderboardRow = {
 
 /**
  * One thing an agent remembers. Episodic memory needs no table, it is the
- * agent's own slice of the append-only event log (`getAgentEvents`). This is the
+ * agent's own slice of the append only event log (`getAgentEvents`). This is the
  * distilled half: conclusions the agent carries forward, which is what makes
  * "remembers yesterday" checkable rather than asserted.
  */

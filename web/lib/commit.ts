@@ -73,7 +73,7 @@ function triggerDownload(name: string, blob: Blob) {
 }
 
 /**
- * Envelope encryption for a report body, entirely in-browser.
+ * Envelope encryption for a report body, entirely offline.
  * AES-GCM with a key derived from a passphrase via PBKDF2. The hunter hands the
  * passphrase to the client over a side channel; the ciphertext can be published
  * anywhere (IPFS, gist) and used as the reportURI without leaking the finding.

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { useAccount, useConnect, useChainId, useDisconnect, useSwitchChain } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { useAccount, useChainId, useDisconnect, useSwitchChain } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { short } from "@/lib/format";
 import { SUPPORTED_CHAINS, chainMeta } from "@/lib/chains";
 import { displayName } from "@/lib/db";
@@ -20,7 +20,7 @@ import { WalletDrawer } from "./wallet-drawer";
  *   account  who you're signed in as (email or a wallet-only account).
  *
  * Signing in with a wallet is the account half, so it's offered in the account
- * area, never mixed into the on-chain button. Signing out ends the session only.
+ * area, never mixed into the onchain button. Signing out ends the session only.
  * A connected wallet is left connected, with disconnecting as its own action.
  */
 
@@ -43,7 +43,7 @@ function ChainSwitcher() {
       disabled={isPending}
       onChange={(e) => switchChain({ chainId: Number(e.target.value) })}
       className="hidden rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none transition-colors hover:text-chalk focus:border-bug-dim disabled:opacity-50 sm:block"
-      title="switch the on-chain network"
+      title="switch the onchain network"
     >
       {!known && <option value="">unsupported net</option>}
       {SUPPORTED_CHAINS.map((c) => (
@@ -55,16 +55,16 @@ function ChainSwitcher() {
   );
 }
 
-/** The on-chain connection. Not a sign-in; that's in the account area. */
+/** The onchain connection. Not a sign in; that's in the account area. */
 function WalletButton({ onOpen }: { onOpen: () => void }) {
   const { address, isConnected } = useAccount();
-  const { connect, isPending } = useConnect();
+  const { openConnectModal } = useConnectModal();
   if (isConnected && address) {
     return (
       <button
         onClick={onOpen}
         className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-mist transition-colors hover:text-chalk"
-        title="On-chain wallet: rewards, bonds and claims"
+        title="Onchain wallet: rewards, bonds and claims"
       >
         <span className="inline-block size-1.5 rounded-full bg-lime" />
         {short(address)}
@@ -73,12 +73,11 @@ function WalletButton({ onOpen }: { onOpen: () => void }) {
   }
   return (
     <button
-      onClick={() => connect({ connector: injected() })}
-      disabled={isPending}
-      className="hidden rounded-md border border-line px-2.5 py-1.5 text-xs text-mist transition-colors hover:text-chalk disabled:opacity-50 sm:block"
-      title="Connect a wallet for on-chain payments; this isn't a sign-in"
+      onClick={() => openConnectModal?.()}
+      className="rounded-md border border-line px-2.5 py-1.5 text-xs text-mist transition-colors hover:text-chalk"
+      title="Connect a wallet for onchain payments; this is not a sign in"
     >
-      {isPending ? "connecting..." : "Connect wallet"}
+      Connect wallet
     </button>
   );
 }
@@ -180,11 +179,11 @@ function AuthControls() {
               Settings
             </MenuLink>
 
-            {/* On-chain wallet: shown, and removable, separately from the session. */}
+            {/* Onchain wallet: shown, and removable, separately from the session. */}
             {isConnected && connected && (
               <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-2.5">
                 <span className="min-w-0">
-                  <span className="block text-[10px] tracking-wide text-mist uppercase">On-chain wallet</span>
+                  <span className="block text-[10px] tracking-wide text-mist uppercase">Onchain wallet</span>
                   <span className="block truncate text-xs text-chalk">{short(connected)}</span>
                 </span>
                 <button
@@ -230,7 +229,7 @@ function MenuLink({ href, onClick, children }: { href: string; onClick: () => vo
 }
 
 /**
- * The on-chain controls for the small-screen menu.
+ * The onchain controls for the small-screen menu.
  *
  * `WalletButton`'s disconnected state and `ChainSwitcher` are both `hidden
  * sm:block`, so below 640px there was no way to connect a wallet or change
@@ -241,7 +240,7 @@ function MenuLink({ href, onClick, children }: { href: string; onClick: () => vo
  */
 function MobileChainControls({ onNavigate }: { onNavigate: () => void }) {
   const { address, isConnected } = useAccount();
-  const { connect, isPending } = useConnect();
+  const { openConnectModal } = useConnectModal();
   const chainId = useChainId();
   const { switchChain, isPending: switching } = useSwitchChain();
   const known = SUPPORTED_CHAINS.some((c) => c.id === chainId);
@@ -250,13 +249,12 @@ function MobileChainControls({ onNavigate }: { onNavigate: () => void }) {
     return (
       <button
         onClick={() => {
-          connect({ connector: injected() });
           onNavigate();
+          openConnectModal?.();
         }}
-        disabled={isPending}
-        className="mt-2 w-full rounded-md border border-line px-3 py-2.5 text-center text-sm text-mist transition-colors hover:text-chalk disabled:opacity-50 sm:hidden"
+        className="mt-2 w-full rounded-md border border-line px-3 py-2.5 text-center text-sm text-mist transition-colors hover:text-chalk"
       >
-        {isPending ? "connecting..." : "Connect wallet"}
+        Connect wallet
       </button>
     );
   }

@@ -8,9 +8,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/targets: the blackboard's public roster (Layer 3): opted-in, non-closed
- * targets an agent may legitimately work. Read-only; getTargets() already filters
- * to opted-in/active, so a pending or frozen target never shows here.
+ * GET /api/targets: the blackboard's public roster (Layer 3): opted in, non-closed
+ * targets an agent may legitimately work. Read only; getTargets() already filters
+ * to opted in/active, so a pending or frozen target never shows here.
  */
 export async function GET() {
   const targets = await getTargets();
@@ -39,13 +39,13 @@ function cleanScope(v: unknown): { in: string[]; out: string[]; rules: string } 
 }
 
 /**
- * POST /api/targets: a signed-in human REGISTERS a target they control onto the
+ * POST /api/targets: a signed in human REGISTERS a target they control onto the
  * blackboard. It lands PENDING: `opted_in=false`, so no agent may work it yet.
- * Authorizing it (opt-in) is a separate operator step (POST /api/admin/target),
+ * Authorizing it (opt in) is a separate operator step (POST /api/admin/target),
  * done only after the platform verifies the registrant actually controls the
  * asset; you can't grant yourself permission for the swamp to test a system.
  *
- * The write runs as the signed-in user (session client), so the row-level policy
+ * The write runs as the signed in user (session client), so the row-level policy
  * (which forbids inserting an already-opted-in or frozen row) is the real
  * enforcer, not this handler.
  */

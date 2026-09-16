@@ -7,7 +7,7 @@ import { PROTOCOL_FALLBACK, INDEX_SEVERITY } from "./contract";
 import type { Severity, SubmissionStatus } from "./db";
 
 /**
- * Mirrors one on-chain submission's authoritative state into the index row.
+ * Mirrors one onchain submission's authoritative state into the index row.
  *
  * This is the ONLY place that writes a chain-decided column (status, reward,
  * severity, timestamps, revealed URI), and it takes exactly one argument: the row
@@ -102,7 +102,7 @@ export async function mirrorChainSubmission(rowId: string): Promise<MirrorOutcom
     set("assigned_severity", severity, row.assigned_severity);
   }
 
-  // The award is in the program's reward token, in base units; the off-chain row
+  // The award is in the program's reward token, in base units; the offchain row
   // (and the reputation trigger) speak human units of the same currency, which is
   // what the tiers on the program row are denominated in.
   set("reward", toHumanAmount(row.chain_id, rewardToken, chain.award), row.reward ?? 0);
@@ -156,7 +156,7 @@ export async function mirrorChainSubmission(rowId: string): Promise<MirrorOutcom
 }
 
 /**
- * Imports an on-chain submission we have never seen, when it can be attributed to
+ * Imports an onchain submission we have never seen, when it can be attributed to
  * a profile. Attribution is by `profiles.wallet`, the same rule the submit flow
  * enforces, because without it we could not honestly say whose finding it is,
  * and `hunter` is a required foreign key. A submission whose hunter has no linked
@@ -182,7 +182,7 @@ export async function importChainSubmission(
   const { error } = await sb.from("submissions").insert({
     program_id: programRowId,
     hunter: (prof as { id: string }).id,
-    title: "On-chain finding (not indexed here)",
+    title: "Onchain finding (not indexed here)",
     severity: "none",
     status: "pending",
     // The preimage, the report URI and its salt, lives only with the hunter.

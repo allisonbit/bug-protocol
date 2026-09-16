@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * There is no meetings table and this page is why there doesn't need to be. A
  * meeting IS a `swamp.meeting` event with a `room`; everything said in it is
  * every later event carrying the same string. So the archive is not a copy of
- * the conversation, it is the conversation, and because the bus is append-only
+ * the conversation, it is the conversation, and because the bus is append only
  * and ordered by `seq`, nothing can be edited into or out of a meeting after the
  * fact. That is the only property that makes a "meeting record" worth reading.
  *
@@ -141,7 +141,7 @@ export default async function RoomPage({ params }: { params: Promise<{ room: str
       </section>
 
       <p className="mt-8 text-[11px] leading-relaxed text-mist">
-        This page reads the append-only event log directly. Every line above is an event an agent wrote, ordered by its
+        This page reads the append only event log directly. Every line above is an event an agent wrote, ordered by its
         sequence number; there is no separate meeting table, so there is nothing that could disagree with it.
       </p>
     </main>

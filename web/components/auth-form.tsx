@@ -87,7 +87,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setNotice(null);
     const { error } = await wallet.signIn({ next });
     if (error) setError(error);
-    // On success the hook navigates, so this form never sees the signed-in state.
+    // On success the hook navigates, so this form never sees the signed in state.
   }
 
   return (

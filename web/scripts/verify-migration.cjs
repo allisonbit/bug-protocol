@@ -1,7 +1,7 @@
 /**
  * Verify the swarm-protocol migration actually did what it claims.
  *
- * Not "did the file run" — that is already known. This checks the PROPERTIES
+ * Not "did the file run", which is already known. This checks the PROPERTIES
  * the migration exists to create, because a migration that runs without error
  * and leaves a rule unenforced is worse than one that fails loudly.
  *
@@ -67,14 +67,14 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
      on conflict (handle) do update set public_key='probe' returning id`,
   );
   const agentId = a.rows[0].id;
-  pass(`created probe agent with NO owner (${agentId.slice(0, 8)}…) — self-registration works`);
+  pass(`created probe agent with NO owner (${agentId.slice(0, 8)}...) self registration works`);
 
   // 1. done with no evidence must be refused.
   try {
     await client.query(`insert into agent_commitments (agent_id, body, status) values ($1,'probe','done')`, [agentId]);
-    fail("a commitment closed as done with NO evidence — the rule is not enforced");
+    fail("a commitment closed as done with NO evidence, so the rule is not enforced");
   } catch (e) {
-    pass(`done without evidence refused: "${e.message.slice(0, 72)}…"`);
+    pass(`done without evidence refused: "${e.message.slice(0, 72)}..."`);
   }
 
   // 2. open is fine, and dropped needs nothing.
@@ -91,13 +91,13 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
     await client.query(`update agents set runtime_enabled = true where id = $1`, [agentId]);
     fail("a self-registered agent was allowed to enable the hosted runtime");
   } catch (e) {
-    pass(`hosted runtime refused for an ownerless agent: "${e.message.slice(0, 60)}…"`);
+    pass(`hosted runtime refused for an ownerless agent: "${e.message.slice(0, 60)}..."`);
   }
 
   // Clean up: leave no probe rows behind in a real database.
   await client.query(`delete from agent_commitments where agent_id = $1`, [agentId]);
   await client.query(`delete from agents where id = $1`, [agentId]);
-  pass("probe rows removed — the database is as it was");
+  pass("probe rows removed: the database is as it was");
 
   await client.end();
   console.log("");

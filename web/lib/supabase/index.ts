@@ -2,7 +2,7 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Server-side Supabase, service-role. Storage writes, the tool mirror, and any
+ * Server side Supabase, service-role. Storage writes, the tool mirror, and any
  * moderation path go through route handlers using this client, so the service
  * key never reaches the browser. Env names are resolved defensively so a
  * project wired via the Vercel to Supabase integration (`SUPABASE_URL` /
@@ -35,8 +35,8 @@ export function supabaseAdmin(): SupabaseClient | null {
 }
 
 /** A row in the `tools` mirror table. Keyed by (chain_id, tool_id), the same
- * identity the on-chain registry uses, so the mirror always points back to a
- * verifiable listing. On-chain publishing is optional; off-chain tools use a
+ * identity the onchain registry uses, so the mirror always points back to a
+ * verifiable listing. Onchain publishing is optional; offchain tools use a
  * synthetic negative chain_id of 0 with an auto tool_id. */
 export type ToolRow = {
   chain_id: number;
@@ -47,7 +47,7 @@ export type ToolRow = {
   platform: number;
   category: number;
   semver: string | null;
-  checksum: string; // 0x + 64 hex, matches on-chain when published on-chain
+  checksum: string; // 0x + 64 hex, matches onchain when published onchain
   artifact_url: string;
   artifact_name: string;
   metadata_url: string;

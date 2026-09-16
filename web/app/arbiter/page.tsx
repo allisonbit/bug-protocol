@@ -24,7 +24,7 @@ export default function ArbiterPage() {
       <h1 className="mt-3 text-2xl font-semibold tracking-tight">Arbitration</h1>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-mist">
         When a program owner misses the triage deadline, or a hunter disputes a verdict, the decision moves here. The
-        arbiter rules on whether a finding is real and in-scope, and what it pays. Unlike the owner&apos;s triage,
+        arbiter rules on whether a finding is real and in scope, and what it pays. Unlike the owner&apos;s triage,
         a valid ruling can reach into the client&apos;s bond when escrow falls short.
       </p>
       <div className="mt-8">

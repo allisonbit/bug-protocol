@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * The chain is the source of truth and the index is a convenience, so this is the
  * thing that makes the two agree. It has two jobs:
  *
- *  1. **Repair.** Re-read every linked row and stamp what the chain says. This is
+ *  1. **Repair.** Reread every linked row and stamp what the chain says. This is
  *     what catches the cases where a browser closed mid-transaction, where the
  *     owner triaged from their phone, or where a verdict was disputed after the
  *     fact.
@@ -84,7 +84,7 @@ export async function GET(req: Request) {
     if (result.changed.length) report.repaired++;
   }
 
-  // ---- 2) Import: recent on-chain submissions we've never indexed ------------
+  // ---- 2) Import: recent onchain submissions we've never indexed ------------
   const { data: programs, error: progErr } = await sb
     .from("programs")
     .select("id,chain_id,onchain_program_id,reward_token")

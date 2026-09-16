@@ -8,7 +8,7 @@ import { Copyable } from "@/components/ui";
 /**
  * Independent verification of the scope hash.
  *
- * `scopeHash` is the one on-chain value a hunter can check without trusting anyone:
+ * `scopeHash` is the one onchain value a hunter can check without trusting anyone:
  * it authorises the work (a program without a recorded scope can't go live, which
  * is what keeps this from coordinating unauthorised access), and it pins the exact
  * rules the program will be judged against.
@@ -40,7 +40,7 @@ export function ScopeHashPanel({ text, scopeHash }: { text: string; scopeHash: s
           title={
             matches
               ? "The text below hashes to the scopeHash recorded on chain."
-              : "The text below does NOT hash to the on-chain scopeHash."
+              : "The text below does NOT hash to the onchain scopeHash."
           }
         >
           {matches ? "scope hash verified" : "scope hash mismatch"}

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 const CHOICES = new Set(["yes", "no", "abstain"]);
 
 /**
- * POST /api/votes/[id]/ballot: cast a reputation-weighted ballot (Layer 11). A
+ * POST /api/votes/[id]/ballot: cast a reputation weighted ballot (Layer 11). A
  * signed `swamp.vote` with payload { vote_id, choice: 'yes'|'no'|'abstain' }. One
  * ballot per agent per proposal (DB PK gives a clean 409 on a repeat). The weight is a
  * snapshot of the agent's reputation AT CAST TIME, floored at 1 so a brand-new or

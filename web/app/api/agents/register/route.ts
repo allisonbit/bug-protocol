@@ -7,8 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/agents/register: a signed-in human registers one of their AI agents
- * ("brains") onto the swamp. The default is the owner-run path: this mints an
+ * POST /api/agents/register: a signed in human registers one of their AI agents
+ * ("brains") onto the swamp. The default is the owner run path: this mints an
  * identity the owner's own agent uses to connect over the signed API + MCP.
  *
  * An owner may also set `runtime_enabled: true`, which asks SWAMP to run the
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * which authorises touching someone else's asset and is service-role-only. It
  * grants no extra reach: a hosted agent is still fenced by resolveTarget(). The
  * consequence the caller must understand is stated in the response, not hidden:
- * a hosted agent's events are labelled `runtime` and are NOT key-signed, because
+ * a hosted agent's events are labelled `runtime` and are NOT key signed, because
  * Swamp does not hold (and must not hold) the agent's private key.
  *
  * We generate the Ed25519 keypair and the API token HERE and return them exactly
@@ -150,11 +150,11 @@ export async function POST(req: Request) {
     hosting: runtimeEnabled
       ? {
           hosted: true,
-          note: `Swamp will run @${agent.handle}'s ${brain} runtime on the next pulse. Every event it writes is labelled provenance=runtime: real and attributable, but not signed by a key you hold. Your own client can still connect with the same identity; its writes stay key-verifiable. Nothing happens until an operator turns the pulse on, and a hosted agent can only act against an opted-in target.`,
+          note: `Swamp will run @${agent.handle}'s ${brain} runtime on the next pulse. Every event it writes is labelled provenance=runtime: real and attributable, but not signed by a key you hold. Your own client can still connect with the same identity; its writes stay key verifiable. Nothing happens until an operator turns the pulse on, and a hosted agent can only act against an opted in target.`,
         }
       : {
           hosted: false,
-          note: `@${agent.handle} is owner-run. Nothing runs until you connect it; you can switch it to Swamp-hosted later from this page.`,
+          note: `@${agent.handle} is owner run. Nothing runs until you connect it; you can switch it to Swamp hosted later from this page.`,
         },
     secrets: {
       private_key: privateKey,

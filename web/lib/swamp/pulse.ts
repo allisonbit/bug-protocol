@@ -43,7 +43,7 @@ import { claimsByTarget, observe, type Observation } from "./observations";
  * ours, so it is awake between beats; the only thing that goes offline in that
  * gap would be this loop, and then it is not running to say so. Deciding when
  * an agent has gone quiet belongs to the orchestrator tick, which sees every
- * agent including the owner-run ones whose silence is real.
+ * agent including the owner run ones whose silence is real.
  */
 
 export type ActionLog = {
@@ -199,7 +199,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // `pickReviewTarget()` in observations.ts, and evidence is a blob an agent
       // hands us verbatim, `agentPublishFinding` stores `input.evidence`
       // unexamined. So a token client could file a finding against a perfectly
-      // legitimate opted-in target while naming somebody else's host in
+      // legitimate opted in target while naming somebody else's host in
       // `evidence.host`, and without this check the runtime would send a real
       // request to a host no operator ever opted in, under SwampBot's user agent,
       // recorded against that target. Re-deriving the fact closes it: the review
@@ -211,7 +211,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const declared = (reviewed.domains ?? []).map((d) => d.trim().toLowerCase());
       if (!declared.includes(plan.host)) {
         throw new Error(
-          `refused: ${plan.host} is not a declared domain of ${reviewed.slug}, so this finding cannot be re-checked`,
+          `refused: ${plan.host} is not a declared domain of ${reviewed.slug}, so this finding cannot be rechecked`,
         );
       }
 
@@ -225,8 +225,8 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const reproduces = outcome.finding !== null && outcome.finding.title === finding.title;
       const kind: "verify" | "challenge" = reproduces ? "verify" : "challenge";
       const rationale = reproduces
-        ? `Re-ran ${plan.check} against ${verdict.host} and reproduced it: ${outcome.observation}`
-        : `Re-ran ${plan.check} against ${verdict.host} and could not reproduce it: ${outcome.observation}`;
+        ? `Reran ${plan.check} against ${verdict.host} and reproduced it: ${outcome.observation}`
+        : `Reran ${plan.check} against ${verdict.host} and could not reproduce it: ${outcome.observation}`;
 
       await agentReviewFinding(sb, agent, finding.id, kind, rationale, "runtime");
       await remember(
@@ -400,7 +400,7 @@ async function recordCheck(sb: SupabaseClient, obs: Observation, target: Target,
         summary: f.summary,
         report: buildReport(agent, target, outcome),
         // `check` and `host` are what let another agent REPRODUCE this finding
-        // later, a review that cannot re-run the observation is just a second
+        // later, a review that cannot rerun the observation is just a second
         // opinion, and this platform does not count those.
         evidence: { ...f.evidence, check: outcome.id, host: outcome.host, ran_at: obs.now },
         security_contact: target.security_contact ?? undefined,
@@ -423,7 +423,7 @@ async function recordCheck(sb: SupabaseClient, obs: Observation, target: Target,
   }
 }
 
-/** The finding's write-up: what was checked, how, what was seen, what it means. */
+/** The finding's write up: what was checked, how, what was seen, what it means. */
 function buildReport(agent: Agent, target: Target, outcome: CheckOutcome): string {
   const f = outcome.finding;
   return [
@@ -432,7 +432,7 @@ function buildReport(agent: Agent, target: Target, outcome: CheckOutcome): strin
     ``,
     `## How`,
     `One passive request. No payload, no authentication attempt, no fuzzing, no load.`,
-    `Checked by ${agent.handle} (Swamp-hosted runtime) at the target's own request.`,
+    `Checked by ${agent.handle} (Swamp hosted runtime) at the target's own request.`,
     ``,
     `## What was observed`,
     outcome.observation,
@@ -446,7 +446,7 @@ function buildReport(agent: Agent, target: Target, outcome: CheckOutcome): strin
     "```",
     ``,
     `## Reproduction`,
-    `Re-run the ${outcome.id} check against ${outcome.host}. The observation above is what the target served; ` +
+    `Rerun the ${outcome.id} check against ${outcome.host}. The observation above is what the target served; ` +
       `any client making the same single request should see the same thing.`,
   ].join("\n");
 }
@@ -552,7 +552,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   // 1) Liveness. An agent whose runtime SWAMP runs does not go offline between
   // beats: the thing that would be offline is our own loop, and if that stopped
   // the pulse would not be running to say so. Idling a hosted agent for the
-  // five minutes between beats was wrong twice over — it made a live agent read
+  // five minutes between beats was wrong twice over: it made a live agent read
   // as asleep, and because the same beat then woke it again the bus carried a
   // sleep and a wake for it every single run.
   //

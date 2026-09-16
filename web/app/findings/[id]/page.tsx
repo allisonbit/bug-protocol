@@ -32,9 +32,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 /**
  * /findings/[id] is one finding's public projection (Layer 9). Reads the redacted
- * findings_public view: the write-up (`report`) and structured `evidence` come
+ * findings_public view: the write up (`report`) and structured `evidence` come
  * back only when status='disclosed'. Before that we show an honest "sealed under
- * coordinated disclosure" panel. Never the raw write-up. This is the page the
+ * coordinated disclosure" panel. Never the raw write up. This is the page the
  * finding.disclosed feed event points at.
  */
 export default async function FindingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -95,12 +95,12 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         {finding.security_contact && <Field label="Security contact" value={finding.security_contact} mono />}
       </dl>
 
-      {/* The write-up: revealed only at disclosure (the view redacts otherwise). */}
+      {/* The write up: revealed only at disclosure (the view redacts otherwise). */}
       {disclosed ? (
         <section className="mt-8">
           {finding.report && (
             <>
-              <h2 className="text-sm font-medium text-chalk">Write-up</h2>
+              <h2 className="text-sm font-medium text-chalk">Write up</h2>
               <div className="mt-2 whitespace-pre-wrap rounded-xl bg-ink-soft p-5 text-sm leading-relaxed text-chalk">
                 {finding.report}
               </div>
@@ -126,7 +126,7 @@ export default async function FindingPage({ params }: { params: Promise<{ id: st
         <div className="mt-8 rounded-xl border border-line bg-ink-soft p-6">
           <div className="text-sm font-medium text-chalk">Held under coordinated disclosure</div>
           <p className="mt-1.5 text-pretty text-sm leading-relaxed text-mist">
-            The write-up and evidence for this finding are kept private until the disclosure window closes
+            The write up and evidence for this finding are kept private until the disclosure window closes
             {finding.disclose_deadline ? ` (${timeAgo(finding.disclose_deadline)})` : ""}. Swamp never publishes an
             exploit or accessed data. Only a safe projection, and only after the target has had time to respond.
           </p>

@@ -2,7 +2,7 @@ import type { Address } from "viem";
 
 /**
  * Pure, framework-free ToolRegistry ABI + enums + types. No "use client" here,
- * so both server route handlers (for on-chain verification of mirror writes)
+ * so both server route handlers (for onchain verification of mirror writes)
  * and the client hooks in ./toolRegistry can import it. The client module
  * re-exports everything, so existing `@/lib/toolRegistry` imports keep working.
  */

@@ -78,10 +78,10 @@ export function FeedStream({ seed }: { seed: SwampEvent[] }) {
 
 /**
  * How this event was authorised. Shown because "signed" is a claim, and only an
- * Ed25519-signed event can actually be checked by a reader.
+ * Ed25519 signed event can actually be checked by a reader.
  *
  * The four are distinct and the distinction is the point. `runtime` exists so a
- * Swamp-hosted agent's action is never dressed up as a signature its owner never
+ * Swamp hosted agent's action is never dressed up as a signature its owner never
  * made: Swamp holds no agent private key, so it CANNOT produce `key`, and this
  * badge is where that stays visible rather than being quietly flattened.
  */
@@ -89,18 +89,18 @@ const PROVENANCE: Record<SwampEvent["provenance"], { label: string; cls: string;
   key: {
     label: "signed",
     cls: "bg-lime/15 text-bug",
-    title: "Ed25519-signed by the agent. Anyone can verify it against the agent's published public key.",
+    title: "Ed25519 signed by the agent. Anyone can verify it against the agent's published public key.",
   },
   token: {
     label: "token",
     cls: "bg-bug-dim/15 text-bug",
-    title: "Authorised by the agent's API token (e.g. over MCP). Real, but not third-party verifiable.",
+    title: "Authorised by the agent's API token (e.g. over MCP). Real, but not third party verifiable.",
   },
   runtime: {
     label: "runtime",
     cls: "bg-cyan/15 text-cyan",
     title:
-      "Executed by the Swamp-hosted runtime on this agent's behalf. Attributable and real, but not signed by a key its owner holds, so it is not third-party verifiable the way 'signed' is.",
+      "Executed by the Swamp hosted runtime on this agent's behalf. Attributable and real, but not signed by a key its owner holds, so it is not third party verifiable the way 'signed' is.",
   },
   system: {
     label: "system",

@@ -5,14 +5,14 @@ import { useAccount, useChainId, useConnect, useSignMessage } from "wagmi";
 import { injected } from "wagmi/connectors";
 
 /**
- * Wallet sign-in as its own path, independent of email.
+ * Wallet sign in as its own path, independent of email.
  *
  * Connects the browser wallet if needed, asks the server for a challenge, has the
  * wallet sign it, and lets the server mint the session. On success we do a full
  * navigation so the freshly-set auth cookies are visible to both the client and
  * the server-rendered pages, with no half-refreshed header.
  *
- * This is deliberately separate from the wagmi connection used for on-chain
+ * This is deliberately separate from the wagmi connection used for onchain
  * actions: signing in proves who you are; connecting a wallet lets you pay and
  * claim. The two are shown as different things in the UI on purpose.
  */
@@ -43,7 +43,7 @@ export function useWalletSignIn() {
         });
         const challenge = (await nonceRes.json().catch(() => null)) as { message?: string; error?: string } | null;
         if (!nonceRes.ok || !challenge?.message) {
-          return { error: challenge?.error ?? "Could not start wallet sign-in." };
+          return { error: challenge?.error ?? "Could not start wallet sign in." };
         }
 
         const signature = await signMessageAsync({ message: challenge.message });
@@ -54,7 +54,7 @@ export function useWalletSignIn() {
           body: JSON.stringify({ message: challenge.message, signature }),
         });
         const verified = (await verifyRes.json().catch(() => null)) as { error?: string } | null;
-        if (!verifyRes.ok) return { error: verified?.error ?? "Wallet sign-in failed." };
+        if (!verifyRes.ok) return { error: verified?.error ?? "The wallet sign in did not finish." };
 
         window.location.assign(opts?.next ?? "/dashboard");
         return { error: null };
@@ -64,7 +64,7 @@ export function useWalletSignIn() {
           ? "Signature request was rejected."
           : /no ethereum|not found|provider/i.test(msg)
             ? "No browser wallet detected. Install a wallet extension to sign in this way."
-            : msg || "Wallet sign-in failed.";
+            : msg || "The wallet sign in did not finish.";
         setError(friendly);
         return { error: friendly };
       } finally {

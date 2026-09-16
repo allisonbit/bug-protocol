@@ -54,7 +54,7 @@ export default async function DashboardPage() {
   // Only a program with an `onchain_program_id` actually holds funds in a
   // contract. Summing every pool into one "in escrow" figure would claim a
   // guarantee for honour-system programs that nobody is enforcing, so the two
-  // are counted separately and the off-chain part is named rather than absorbed.
+  // are counted separately and the offchain part is named rather than absorbed.
   const committed = programs
     .filter((p) => escrowMode(p) === "escrow")
     .reduce((s, p) => s + Number(p.pool || 0), 0);
@@ -129,12 +129,12 @@ export default async function DashboardPage() {
                 value={money(committed, "USDC")}
                 sub={
                   offchainCommitted > 0
-                    ? `${live.length} live, plus ${money(offchainCommitted, "USDC")} committed off-chain`
+                    ? `${live.length} live, plus ${money(offchainCommitted, "USDC")} committed offchain`
                     : `${live.length} live`
                 }
                 accent
               />
-              <StatCard label="Paid to hunters" value={money(paidOut, "USDC")} sub="all-time" />
+              <StatCard label="Paid to hunters" value={money(paidOut, "USDC")} sub="all time" />
             </>
           )}
           {submissions.length > 0 && (
@@ -231,7 +231,7 @@ export default async function DashboardPage() {
                           {/* "In escrow" is only true when a contract actually holds it. */}
                           <div className="mt-0.5 truncate text-xs text-mist">
                             {money(p.pool, p.currency)}{" "}
-                            {escrowMode(p) === "escrow" ? "in escrow" : "committed off-chain"}, up to{" "}
+                            {escrowMode(p) === "escrow" ? "in escrow" : "committed offchain"}, up to{" "}
                             {money(topTier(p), p.currency)} / bug
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

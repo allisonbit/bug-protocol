@@ -9,7 +9,7 @@ import { toolRegistryAbi } from "./toolRegistry.abi";
 export * from "./toolRegistry.abi";
 
 /**
- * ToolRegistry: the on-chain source of truth for the community tool
+ * ToolRegistry: the onchain source of truth for the community tool
  * marketplace. Publisher, checksum, metadata URI, stake and versions live here;
  * a Supabase mirror indexes the same rows for fast search. `address` is null on
  * chains where the registry isn't deployed yet; callers gate on `isDeployed`,

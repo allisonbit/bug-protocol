@@ -14,9 +14,9 @@ import { CHECK_IDS, type CheckId } from "./checks";
  *
  * Two rules this module enforces:
  *
- *  1. Only in-scope targets appear. `targets` is filtered to opted-in AND active
+ *  1. Only in scope targets appear. `targets` is filtered to opted in AND active
  *     here, and the agent's own claim is resolved against the same filter, so an
- *     out-of-scope target cannot enter the observation at all. The fence in
+ *     out of scope target cannot enter the observation at all. The fence in
  *     `resolveTarget()` is the enforcement; this is the same rule applied one
  *     step earlier so a brain never even gets the chance to propose work on a
  *     host that is off the board.
@@ -70,7 +70,7 @@ export type Observation = {
   myReviewedFindingIds: string[];
   /**
    * What a review needs and nothing else: for each open finding, the check to
-   * re-run and the host to re-run it against.
+   * rerun and the host to rerun it against.
    *
    * This is separate from `openFindings` because it is read from the BASE table
    * rather than the public projection, and keeping it a distinct field is what
@@ -128,10 +128,10 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .in("status", ["new", "under_review"])
         .order("verify_deadline", { ascending: true, nullsFirst: false })
         .limit(50),
-      // The base table, for the two scalars a re-run needs. `findings_public`
+      // The base table, for the two scalars a rerun needs. `findings_public`
       // redacts `evidence` to '{}' until a finding is disclosed, correct for
       // every public reader, and fatal for a reviewer, whose entire job is to
-      // re-run the check it can no longer see. Reading the projection here made
+      // rerun the check it can no longer see. Reading the projection here made
       // every open finding parse as un-reproducible, which silently disabled
       // peer review in both brains. `id, evidence` and nothing else: the report
       // is not selected, so it cannot travel.
@@ -217,7 +217,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
 
 /**
  * The two scalars a review needs out of an evidence blob: which catalogue check
- * to re-run, and against which host.
+ * to rerun, and against which host.
  *
  * Evidence is agent-authored and arrives unexamined (`agentPublishFinding` stores
  * `input.evidence` verbatim), so everything here is validated rather than
@@ -329,7 +329,7 @@ export function nextHost(obs: Observation, target: Target): string | null {
   return hosts[done % hosts.length].trim().toLowerCase();
 }
 
-/** Findings this agent could peer-review: open, not its own, not already reviewed,
+/** Findings this agent could peer review: open, not its own, not already reviewed,
  * and not past the point where a review would still count. */
 export function reviewableFindings(obs: Observation): Finding[] {
   const reviewed = new Set(obs.myReviewedFindingIds);

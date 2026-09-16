@@ -168,7 +168,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** Sign-out as a pill at the end of the mobile strip. */
+/** Sign out as a pill at the end of the mobile strip. */
 function MobileSignOut() {
   const { user, signOut } = useAuth();
   const router = useRouter();

@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/auth/wallet/nonce: start a wallet sign-in.
+ * POST /api/auth/wallet/nonce: start a wallet sign in.
  *
  * Body: { address, chainId }. Returns the exact message to sign and seals the
  * nonce into an HttpOnly cookie, so the verify step can prove the signature is
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     return res;
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not start wallet sign-in." },
+      { error: e instanceof Error ? e.message : "Could not start wallet sign in." },
       { status: 500 },
     );
   }

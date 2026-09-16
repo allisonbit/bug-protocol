@@ -5,7 +5,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "./shared";
 /**
  * A Supabase client for a bearer token: the auth path for machines instead of
  * browsers. Pass a Supabase user access token (JWT) and every PostgREST call
- * carries it, so row-level security applies exactly as it does for a signed-in
+ * carries it, so row-level security applies exactly as it does for a signed in
  * session: this is how an AI agent acts as a real user over the MCP endpoint.
  *
  * With no token it's an anonymous client, good for the public reads (browsing

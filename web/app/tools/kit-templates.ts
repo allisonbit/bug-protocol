@@ -3,7 +3,7 @@
  * No "use client". These are just string/JSON builders the client imports.
  * Everything here is content a hunter or AI agent copies or downloads to wire
  * the protocol into their own stack: an MCP config, CLI usage, and a runnable
- * recon + live-triage kit.
+ * recon + live triage kit.
  */
 
 import { MCP_ENDPOINT, REPO_URL } from "@/lib/site";
@@ -51,7 +51,7 @@ export const CLI_ENV = [
 ].join("\n");
 
 /**
- * One self-contained bash installer that writes a runnable recon + live-triage
+ * One self-contained bash installer that writes a runnable recon + live triage
  * kit into ./bug-recon-kit/. It wires the standard ProjectDiscovery pipeline
  * (subfinder, httpx, nuclei), port sweep (naabu), URL harvest (gau) and
  * content fuzzing (ffuf) behind Docker so there's nothing to install but Docker.
@@ -83,7 +83,7 @@ ENTRYPOINT ["/usr/local/bin/recon"]
 `;
 
   const reconSh = `#!/bin/sh
-# $BUG recon + live-triage pipeline. Only run against targets you are
+# $BUG recon + live triage pipeline. Only run against targets you are
 # authorised to test: a live $BUG program's scope is your safe harbour.
 set -eu
 TARGET="\${1:-\${TARGET:-${target}}}"
@@ -122,14 +122,14 @@ services:
       - ./out:/work/out
 `;
 
-  const readme = `# $BUG recon + live-triage kit: ${target}
+  const readme = `# $BUG recon + live triage kit: ${target}
 
-A zero-install ProjectDiscovery pipeline. You only need Docker.
+A no setup ProjectDiscovery pipeline. You only need Docker.
 
 ## Run
     docker compose build
     docker compose run --rm recon ${target}
-    # or against another in-scope host:
+    # or against another in scope host:
     docker compose run --rm recon sub.${target}
 
 Artifacts land in ./out/:
@@ -142,7 +142,7 @@ Artifacts land in ./out/:
 
 ## Authorisation
 Run this **only** against assets a live $BUG program lists in scope. The
-program's on-chain scope hash + safe-harbour text is your authorisation; anything
+program's onchain scope hash + safe-harbour text is your authorisation; anything
 outside it is not covered. When you find something, encrypt the report on the
 /tools page, publish the ciphertext, and submit the commit on chain.
 `;

@@ -103,7 +103,7 @@ function CliPanel() {
   return (
     <Panel title="Terminal / CLI">
       <p className="text-xs leading-relaxed text-mist">
-        <span className="text-chalk">Instant, zero-install:</span> a single Node file for the offline crypto:
+        <span className="text-chalk">Instant, no setup:</span> a single Node file for the offline crypto:
         checksums, commit salts, report encryption. No dependencies, works today.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -138,19 +138,19 @@ function CliPanel() {
   );
 }
 
-/** Generate a runnable recon + live-triage kit for an in-scope target. */
+/** Generate a runnable recon + live triage kit for an in scope target. */
 function ReconPanel() {
   const [target, setTarget] = useState("");
   const script = reconKitInstaller(target);
   return (
-    <Panel title="Recon + live-triage kit">
+    <Panel title="Recon + live triage kit">
       <p className="text-xs leading-relaxed text-mist">
-        A one-file installer that stands up the ProjectDiscovery pipeline in Docker:
+        A one file installer that stands up the ProjectDiscovery pipeline in Docker:
         subfinder, httpx and nuclei, plus naabu, gau and ffuf. Point it at a host a
         live program lists in scope; feed the nuclei output into a report.
       </p>
       <div className="mt-4">
-        <Field label="Target host" hint="Bare hostname. Only test assets covered by a program's on-chain scope + safe harbour.">
+        <Field label="Target host" hint="Bare hostname. Only test assets covered by a program's onchain scope + safe harbour.">
           <Input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="example.com" />
         </Field>
       </div>

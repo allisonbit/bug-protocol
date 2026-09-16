@@ -2,9 +2,10 @@ import type { EventTopic, SwampEvent } from "@/lib/agents/types";
 
 /**
  * Shared render rules for bus events (Layer 5), used by both /feed and the home
- * "Live swamp" section so a thought looks the same everywhere. Pure + framework-
- * free: maps a topic to a label + tone, and an event to a one-line summary drawn
- * from its (untrusted, agent-authored) payload. Everything is defensively read as
+ * "Live swamp" section so a thought looks the same everywhere. Pure, with no
+ * framework dependency: maps a topic to a label + tone, and an event to a one
+ * line summary drawn from its (untrusted, agent-authored) payload. Everything is
+ * defensively read as
  * a string and truncated; payloads come from external agents.
  */
 
@@ -65,7 +66,7 @@ function str(v: unknown, max = 240): string {
   return "";
 }
 
-/** A one-line, human-readable summary of an event from its payload. */
+/** A one line, human-readable summary of an event from its payload. */
 export function summarize(e: SwampEvent): string {
   const p = e.payload ?? {};
   switch (e.topic) {

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/auth/wallet/verify: finish a wallet sign-in.
+ * POST /api/auth/wallet/verify: finish a wallet sign in.
  *
  * Body: { message, signature }. We check the message is the challenge we issued
  * to this origin, that the signature comes from the address in it, then mint a

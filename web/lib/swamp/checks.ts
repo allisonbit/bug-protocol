@@ -4,7 +4,7 @@ import type { FindingSeverity } from "@/lib/agents/types";
 import { doh, passiveGet, passiveGetText } from "./guard";
 
 /**
- * THE ACTION CATALOGUE: the complete set of things a Swamp-hosted agent can do.
+ * THE ACTION CATALOGUE: the complete set of things a Swamp hosted agent can do.
  *
  * This file is deliberately small, closed, and dull. Everything here is:
  *
@@ -117,7 +117,7 @@ async function securityTxt(host: string): Promise<CheckOutcome> {
         summary:
           `https://${host}/.well-known/security.txt returns ${res.status}. RFC 9116 defines this file as the ` +
           `standard place to publish how to report a vulnerability. Without it, a finder has no stated channel ` +
-          `and no stated terms, which is how good-faith reports get lost or go public by default.`,
+          `and no stated terms, which is how good faith reports get lost or go public by default.`,
         evidence,
       },
     };
@@ -254,7 +254,7 @@ async function securityHeaders(host: string): Promise<CheckOutcome> {
         severity: "low",
         summary:
           `https://${host}/ responds over TLS but sends no Strict-Transport-Security header, so a browser is ` +
-          `free to reach the site over plain HTTP on a later visit, the window a downgrade or cookie-stripping ` +
+          `free to reach the site over plain HTTP on a later visit, the window a downgrade or cookie stripping ` +
           `attack needs. The site already has a certificate; this is the header that makes it mandatory.`,
         evidence,
       },
@@ -290,7 +290,7 @@ type TlsProbe =
 /**
  * A raw TLS handshake to port 443. `rejectUnauthorized: false` is not a bypass,
   * it is the point: a certificate we refuse to look at cannot be reported on. The
- * connection is read-only, completes the handshake, and is destroyed
+ * connection is read only, completes the handshake, and is destroyed
  * immediately; nothing is sent over it.
  */
 function tlsProbe(host: string): Promise<TlsProbe> {
@@ -421,7 +421,7 @@ async function tlsCertificate(host: string): Promise<CheckOutcome> {
         severity: "low",
         summary:
           `The certificate valid to ${probe.validTo} is close to expiry. Renewal is usually automatic, so this ` +
-          `is a check-in rather than an incident, but if automation has quietly stopped, this is the warning ` +
+          `is a check in rather than an incident, but if automation has quietly stopped, this is the warning ` +
           `that precedes an outage.`,
         evidence,
       },
@@ -513,7 +513,7 @@ async function robotsPolicy(host: string): Promise<CheckOutcome> {
 // ---- 5. DNS posture ---------------------------------------------------------
 
 /**
- * CAA and email-authentication records, read over DNS-over-HTTPS: no direct
+ * CAA and email-authentication records, read over DNS over HTTPS: no direct
  * egress, and the public DNS the whole internet already sees.
  *
  * The subtlety is inheritance. CAA and DMARC/SPF are looked up on ancestor
@@ -558,7 +558,7 @@ async function dnsPosture(host: string): Promise<CheckOutcome> {
         observation: `${host} publishes DMARC but only in monitoring mode (p=none), so it reports spoofing without blocking it.`,
         evidence,
         finding: {
-          title: `DMARC on ${host} is monitoring-only (p=none)`,
+          title: `DMARC on ${host} is monitoring only (p=none)`,
           severity: "info",
           summary:
             `The DMARC record at _dmarc.${host} sets p=none. Reports are generated, but receivers are told to ` +
@@ -636,7 +636,7 @@ export const CHECKS: Record<CheckId, CheckSpec> = {
   dns_posture: {
     id: "dns_posture",
     label: "DNS posture",
-    describes: "Resolves CAA, DMARC and SPF over DNS-over-HTTPS. Public records only; no zone transfer, no enumeration.",
+    describes: "Resolves CAA, DMARC and SPF over DNS over HTTPS. Public records only; no zone transfer, no enumeration.",
     run: dnsPosture,
   },
 };

@@ -1,7 +1,7 @@
 /**
  * Application data types: the shape of rows in the Supabase schema, plus the
  * small display helpers the UI shares (severity/status labels + tones, money
- * formatting, slugify). No blockchain here: this is the off-chain product that
+ * formatting, slugify). No blockchain here: this is the offchain product that
  * works on its own.
  */
 
@@ -45,10 +45,10 @@ export type Program = {
   response_days: number;
   safe_harbor: boolean;
   logo_url: string | null;
-  // ---- on-chain link (all null/zero on a purely off-chain program) ----
+  // ---- onchain link (all null/zero on a purely offchain program) ----
   chain_id: number | null;
   onchain_program_id: number | null;
-  /** Address the on-chain pool is denominated in; zero address means native ETH. */
+  /** Address the onchain pool is denominated in; zero address means native ETH. */
   reward_token: string | null;
   /** keccak256 of the scope document `createProgram` committed to. */
   scope_hash: string | null;
@@ -72,13 +72,13 @@ export function escrowMode(p: Pick<Program, "onchain_program_id">): EscrowMode {
 
 export const escrowModeMeta: Record<EscrowMode, { label: string; tone: string; blurb: string }> = {
   escrow: {
-    label: "Escrowed on-chain",
+    label: "Escrowed onchain",
     tone: "text-bug border-bug-dim",
     blurb:
       "Funds are held in the BugBounty contract and an accepted finding pays out of escrow in the same transaction the owner accepts it. The owner cannot withdraw what is reserved for your report.",
   },
   offchain: {
-    label: "Off-chain",
+    label: "Offchain",
     tone: "text-amber-300 border-amber-500/30",
     blurb:
       "This program is not linked to an escrow contract. Rewards are recorded here by the owner, and the commit receipt is still proof of authorship, but nothing is held in escrow on your behalf.",
@@ -110,7 +110,7 @@ export type Submission = {
   reward: number;
   dupe_of: string | null;
   triage_note: string | null;
-  // ---- on-chain link (null/zero on an off-chain submission) ----
+  // ---- onchain link (null/zero on an offchain submission) ----
   chain_id: number | null;
   onchain_submission_id: number | null;
   /** keccak256(abi.encode(reportURI, salt, hunter)), never the salt itself. */
@@ -119,7 +119,7 @@ export type Submission = {
   report_uri: string | null;
   /** sha256 of the exact envelope bytes served at `report_uri`. */
   report_sha256: string | null;
-  /** Hunter's anti-spam bond, in $BUG. Refunded unless slashed. */
+  /** Hunter's spam bond, in $BUG. Refunded unless slashed. */
   bond: number;
   /** Protocol's cut of the award, taken from the pool at acceptance. */
   protocol_fee: number;

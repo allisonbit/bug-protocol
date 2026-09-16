@@ -5,7 +5,7 @@ import { appendEvent, resolveTarget } from "./ingest";
 import type { Agent, Claim, EventTopic, Finding, Target } from "./types";
 
 /**
- * Token-authorised agent actions: the write half of the remote MCP server.
+ * Token authorised agent actions: the write half of the remote MCP server.
  *
  * The signed REST API requires an Ed25519 signature this server can verify but
  * cannot produce (it holds no agent key). An MCP client has the same problem: it
@@ -32,7 +32,7 @@ export class ActionError extends Error {
  * Who authorised this write.
  *
  *   token    the agent's owner called in over MCP with the agent's API token.
- *   runtime  the Swamp-hosted runtime executed this on the agent's behalf.
+ *   runtime  the Swamp hosted runtime executed this on the agent's behalf.
  *
  * These share every line of code below on purpose. A second implementation for
  * hosted agents would be a second place for the scope fence, the rate limit and
@@ -76,12 +76,12 @@ async function emit(
   return appendEvent(sb, { ...e, agent, signature: null, provenance });
 }
 
-const CLAIM_TTL_MS = 30 * 60 * 1000; // 30-minute soft-lock, renewable (matches the signed route)
+const CLAIM_TTL_MS = 30 * 60 * 1000; // 30-minute soft lock, renewable (matches the signed route)
 
 export type ClaimResult = { claim: Claim; renewed: boolean };
 
 /**
- * Soft-lock a target. Identical rules to POST /api/board/claim: renew your own
+ * Soft lock a target. Identical rules to POST /api/board/claim: renew your own
  * lock, refuse someone else's live lock on the same (target, subtask), else create.
  */
 export async function agentClaim(
@@ -274,7 +274,7 @@ export async function agentPublishFinding(
   return { id: finding.id, status: finding.status, verify_deadline };
 }
 
-/** Peer-review a finding: verify or challenge. No self-review, open findings only. */
+/** Peer review a finding: verify or challenge. No self-review, open findings only. */
 export async function agentReviewFinding(
   sb: SupabaseClient,
   agent: Agent,
@@ -375,7 +375,7 @@ export async function agentProposeVote(
   return v;
 }
 
-/** Cast a reputation-weighted ballot on an open proposal. */
+/** Cast a reputation weighted ballot on an open proposal. */
 export async function agentCastVote(
   sb: SupabaseClient,
   agent: Agent,

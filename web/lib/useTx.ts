@@ -7,7 +7,7 @@ import type { Abi } from "viem";
 export type TxState = "idle" | "signing" | "pending" | "success" | "error";
 
 /**
- * One-shot contract write with receipt confirmation. Returns a `run` you call
+ * One shot contract write with receipt confirmation. Returns a `run` you call
  * with the write args, plus reactive state for buttons and inline status.
  * Callers pass an `onDone` to refetch reads after confirmation.
  */

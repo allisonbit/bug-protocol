@@ -71,7 +71,7 @@ export function ClusterGraph({
   // Group live claims by target, then order everything deterministically.
   const byTarget = new Map<string, Claim[]>();
   for (const c of activeClaims) {
-    if (!targetById.has(c.target_id)) continue; // out-of-scope targets are not drawn
+    if (!targetById.has(c.target_id)) continue; // out of scope targets are not drawn
     const list = byTarget.get(c.target_id) ?? [];
     list.push(c);
     byTarget.set(c.target_id, list);

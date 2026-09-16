@@ -44,7 +44,7 @@ type QueueItem = {
  *
  * The one thing it insists on saying out loud: if the pool can't cover the award,
  * the client's $BUG bond is forfeited to the hunter pro rata, as a penalty rather
- * than a make-whole. Ruling "valid" is not free, and whoever rules should know it.
+ * than a make whole. Ruling "valid" is not free, and whoever rules should know it.
  */
 export function ArbiterConsole() {
   const { address, isConnected } = useAccount();
@@ -116,7 +116,7 @@ export function ArbiterConsole() {
             ) : (
               <span className="text-amber-300">
                 unset on {targetMeta.label}. Escalations can&apos;t be ruled on until `setArbiter` is called, and it is
-                one-shot
+                one shot
               </span>
             )}
           </div>
@@ -196,7 +196,7 @@ function Case({
 
   const grounds = item.escalatedFromPending
     ? "Triage SLA lapsed. The owner never decided, and the escrow covering this finding is still reserved."
-    : "The hunter is disputing a recorded verdict, inside the seven-day window.";
+    : "The hunter is disputing a recorded verdict, inside the seven day window.";
 
   return (
     <Card className="p-5">
@@ -251,7 +251,7 @@ function Case({
       </dl>
 
       <div className="mt-4 space-y-3 border-t border-line pt-4">
-        <Field label="Finding is a real, in-scope vulnerability?">
+        <Field label="Finding is a real, in scope vulnerability?">
           <div className="flex gap-2">
             <Button variant={valid ? "primary" : "ghost"} onClick={() => setValid(true)} type="button">
               Valid
@@ -298,8 +298,8 @@ function Case({
             className="mt-0.5 size-4 accent-[var(--color-bug)]"
           />
           <span className="text-[11px] leading-relaxed text-mist">
-            <span className="text-chalk">Slash the hunter&apos;s bond</span>, and only for a bad-faith submission. Losing an
-            appeal in good faith must not cost them the bond, which is why this is opt-in.
+            <span className="text-chalk">Slash the hunter&apos;s bond</span>, and only for a bad faith submission. Losing an
+            appeal in good faith must not cost them the bond, which is why this is opt in.
           </span>
         </label>
 
@@ -309,7 +309,7 @@ function Case({
             <span className="text-chalk">{fmtAmount(pool, info.decimals, info.symbol)}</span> and the client&apos;s $BUG
             bond is forfeited to the hunter pro rata, roughly{" "}
             <span className="text-chalk">{fmtAmount(bondForfeit, 18, "$BUG")}</span>. That is a penalty on the client,
-            not a make-whole for the hunter: the bond and the reward are different assets.
+            not a make whole for the hunter: the bond and the reward are different assets.
           </p>
         )}
 

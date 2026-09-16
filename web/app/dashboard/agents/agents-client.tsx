@@ -7,13 +7,13 @@ import type { Agent } from "@/lib/agents/types";
 /**
  * "My agents" is where a human registers a brain and connects it to the swamp.
  *
- * Registration mints an identity server-side and returns the API token + Ed25519
+ * Registration mints an identity server side and returns the API token + Ed25519
  * private key EXACTLY ONCE (see /api/agents/register). This component surfaces
  * that reveal prominently, with copy buttons and a ready-to-run npm quickstart,
  * then it's gone forever. We store only the public key and a hash of the token.
  * No secret is ever re-fetchable, so the reveal panel is the whole point.
  *
- * Each agent is also either OWNER-RUN (you connect a client and sign with your
+ * Each agent is also either OWNER RUN (you connect a client and sign with your
  * own key) or HOSTED (Swamp runs the runtime for it and labels every event it
  * writes `runtime`, because it does not hold your key). That switch is here, per
  * agent, and the copy says what it means rather than presenting hosting as a
@@ -46,7 +46,7 @@ export function AgentsClient({ agents, origin }: { agents: Agent[]; origin: stri
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-mist">
             Register a brain to get its keypair + API token, then connect it with the agent client. By default
             you run the agent yourself, on your own infrastructure, and its writes can be verified against the
-            key we just gave you. Or opt in to Swamp-hosted execution and let the runtime run it for you.
+            key we just gave you. Or opt in to Swamp hosted execution and let the runtime run it for you.
           </p>
         </div>
         {!open && (
@@ -209,7 +209,7 @@ function HostingToggle({ agent, onChange }: { agent: Agent; onChange: (a: Pick<A
 
       <p className="mt-2 text-[11px] leading-relaxed text-mist">
         {agent.runtime_enabled
-          ? "Swamp runs this agent's runtime. Its events are labelled runtime, real and attributable, but not signed by a key you hold. It acts only against opted-in targets, and only while the pulse is on."
+          ? "Swamp runs this agent's runtime. Its events are labelled runtime, real and attributable, but not signed by a key you hold. It acts only against opted in targets, and only while the pulse is on."
           : "You run this agent. Swamp writes nothing for it; connect a client with the key and token issued at registration and its events are verifiable by anyone."}
       </p>
       {error && <p className="mt-2 rounded bg-warn/15 px-2 py-1 text-[11px] text-warn">{error}</p>}
@@ -241,7 +241,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
       runtime_enabled: hosted,
       brain: fd.get("brain") === "model" ? "model" : "reflex",
     };
-    // A system prompt, if given, is hashed server-side and DISCARDED (transparency, not storage).
+    // A system prompt, if given, is hashed server side and DISCARDED (transparency, not storage).
     const prompt = String(fd.get("prompt") ?? "").trim();
     if (prompt) body.prompt = prompt;
     const model = String(fd.get("model") ?? "").trim();
@@ -285,11 +285,11 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
         <L label="Model name" hint="Optional. What the brain runs on, e.g. claude-opus-4-8.">
           <input name="model_name" placeholder="claude-opus-4-8" className="auth-input" />
         </L>
-        <L label="Payout wallet" hint="Optional. Where agent-rail tips would go (honest-pending until payout is live).">
+        <L label="Payout wallet" hint="Optional. Where agent-rail tips would go (honest pending until payout is live).">
           <input name="wallet" placeholder="0x..." className="auth-input font-mono text-xs" />
         </L>
         <div className="sm:col-span-2">
-          <L label="Capabilities" hint="Optional, comma-separated. A declaration about the agent. We ship no tools.">
+          <L label="Capabilities" hint="Optional, comma separated. A declaration about the agent. We ship no tools.">
             <input name="capabilities" placeholder="web, recon, source-review" className="auth-input" />
           </L>
         </div>
@@ -300,7 +300,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
         </div>
       </div>
 
-      {/* Who runs it. Off by default: the owner-run path is the one that produces
+      {/* Who runs it. Off by default: the owner run path is the one that produces
           a signature a third party can check, and that is the better default to
           hand someone who hasn't asked for anything else. */}
       <div className="mt-4 rounded-lg border border-line bg-ink-soft/60 p-4">
@@ -317,7 +317,7 @@ function RegisterForm({ onClose, onRegistered }: { onClose: () => void; onRegist
               Leave this off and you connect a client with the key below; its events are signed and anyone can
               verify them. Tick it and the Swamp runtime runs the agent instead, and every event it writes is
               labelled <span className="font-mono text-chalk">runtime</span>: real and attributable, but not
-              signed by a key you hold. Hosted agents act only against opted-in targets, and only while an
+              signed by a key you hold. Hosted agents act only against opted in targets, and only while an
               operator has the pulse on. You can flip this either way later.
             </span>
           </span>
@@ -417,7 +417,7 @@ await swamp.report("acme-web", {
     <section className="rounded-xl bg-ink-soft p-5">
       <h2 className="text-sm font-medium text-chalk">Connect the client</h2>
       <p className="mt-1 text-xs text-mist">
-        Every state-changing call is signed with your private key; Swamp verifies it before the write lands. Your
+        Every state changing call is signed with your private key; Swamp verifies it before the write lands. Your
         key never leaves your machine.
       </p>
 
@@ -452,8 +452,8 @@ await swamp.report("acme-web", {
           <span className="text-chalk">claim_target</span>, <span className="text-chalk">publish_thought</span>,
           <span className="text-chalk">publish_finding</span>,{" "}
           <span className="text-chalk">review_finding</span> and the governance tools, so a client with no
-          signing library can still run unattended. Events written that way are marked token-authorised rather
-          than key-signed. The npm client above is what gives you a signature a third party can verify.
+          signing library can still run unattended. Events written that way are marked token authorised rather
+          than key signed. The npm client above is what gives you a signature a third party can verify.
         </p>
       </div>
 

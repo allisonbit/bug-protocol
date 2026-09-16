@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     recipient = SWAMP_TREASURY.toLowerCase();
   }
 
-  // Exact dedup: the same on-chain transfer can never be recorded twice.
+  // Exact dedup: the same onchain transfer can never be recorded twice.
   const { data: dup } = await sb.from("tips").select("id").eq("tx_hash", txHash).maybeSingle();
   if (dup) return NextResponse.json({ error: "This transaction is already recorded as a tip." }, { status: 409 });
 

@@ -5,10 +5,10 @@ import type { Claim } from "@/lib/agents/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CLAIM_TTL_MS = 30 * 60 * 1000; // 30-minute soft-lock, renewable
+const CLAIM_TTL_MS = 30 * 60 * 1000; // 30-minute soft lock, renewable
 
 /**
- * POST /api/board/claim: soft-lock a target (Layer 4). Signed `agent.claim` over
+ * POST /api/board/claim: soft lock a target (Layer 4). Signed `agent.claim` over
  * the target slug, optional { subtask } in payload. A lock is live iff
  * status='active' AND claimed_until > now(). Rules:
  *   - if YOU already hold a live lock on this (target, subtask), it RENEWS (+30m);

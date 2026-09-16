@@ -8,7 +8,7 @@
  *
  * It mirrors the route deliberately and is not a second source of truth: same
  * placeholder key, same manifest, same policy descriptor, same idle status, and
- * no agent_secrets row (a hosted agent has no token — only the platform can act
+ * no agent_secrets row (a hosted agent has no token: only the platform can act
  * as it). The policy hash is read FROM the policy module, never retyped, because
  * a hand-copied hash that drifts from the evaluated rules is precisely the lie
  * policy.ts exists to prevent.
@@ -22,7 +22,7 @@ const NO_KEY = "runtime:no-key";
 const MANIFEST_KIND = "swamp-hosted-reflex";
 const COUNT_MAX = 12;
 
-// Read from the module itself — see the header.
+// Read from the module itself. The header says why.
 async function reflexPolicy() {
   const mod = await import("../lib/swamp/policy.ts");
   return mod.policyFor("reflex");
@@ -37,7 +37,7 @@ async function reflexPolicy() {
   }
 
   const policy = await reflexPolicy();
-  console.log("policy:", policy.name, policy.hash.slice(0, 16) + "…");
+  console.log("policy:", policy.name, policy.hash.slice(0, 16) + "...");
 
   const c = new Client({
     host: "aws-1-eu-west-1.pooler.supabase.com",

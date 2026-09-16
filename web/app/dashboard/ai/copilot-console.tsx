@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 /**
  * The Copilot console. When a live model is connected (via AI Gateway) this is a
  * real chat: you ask in plain language and it answers over the platform's ACTUAL
- * data through read-only tools (live programs, your submissions, your triage
+ * data through read only tools (live programs, your submissions, your triage
  * inbox, the leaderboard). It never invents programs, people, or numbers. An
  * empty platform gets an honest "nothing here yet".
  *
@@ -70,12 +70,12 @@ function buildPlan(input: string): Plan {
       ],
     };
   }
-  if (has("report", "draft", "write up", "write-up", "submit", "file", "poc")) {
+  if (has("report", "draft", "write up", "submit", "file", "poc")) {
     return {
       agent: "Report Assistant",
-      summary: "Turn notes into a clear, in-scope report and file it against a live program.",
+      summary: "Turn notes into a clear, in scope report and file it against a live program.",
       steps: [
-        { tool: "get_program", write: false, note: "Match the write-up to the scope, and confirm the program is live." },
+        { tool: "get_program", write: false, note: "Match the write up to the scope, and confirm the program is live." },
         { tool: "submit_finding", write: true, note: "File the finding (title, severity, repro); it's private to you and the owner (your approval)." },
       ],
     };
@@ -195,7 +195,7 @@ export function CopilotConsole() {
         <h3 className="text-sm font-medium text-chalk">Copilot console</h3>
         <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-mist">
           <span className="size-1.5 rounded-full bg-lime" />
-          Grounded in your real data, read-only
+          Grounded in your real data, read only
         </span>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-mist">

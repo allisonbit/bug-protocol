@@ -5,13 +5,13 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { supabaseServer } from "@/lib/supabase/server";
 
 /**
- * Wallet sign-in, independent of email.
+ * Wallet sign in, independent of email.
  *
  * A person proves they control an address by signing a challenge; we verify it
  * and then mint them a normal Supabase session. This deliberately does NOT use
  * Supabase's built-in Web3/SIWE provider because that requires a dashboard toggle
  * an operator has to flip. With this, a deployment that has the service key can
- * offer wallet sign-in immediately, and the behaviour is identical in dev and
+ * offer wallet sign in immediately, and the behaviour is identical in dev and
  * prod.
  *
  * The account is keyed by a deterministic, non-deliverable email derived from the
@@ -19,7 +19,7 @@ import { supabaseServer } from "@/lib/supabase/server";
  * never entangled with a payout address someone typed into Settings.
  *
  * The nonce is stateless: we seal `ts.nonce` with an HMAC and hand it to the
- * browser in an HttpOnly cookie, so the challenge is single-request without a
+ * browser in an HttpOnly cookie, so the challenge is single request without a
  * table, and a signed message can't be replayed from another origin.
  */
 
@@ -35,7 +35,7 @@ function secret(): string | null {
 
 function seal(nonce: string): string {
   const key = secret();
-  if (!key) throw new Error("Wallet sign-in isn't configured (no server secret).");
+  if (!key) throw new Error("Wallet sign in isn't configured (no server secret).");
   const ts = Date.now().toString(36);
   const mac = createHmac("sha256", key).update(`${ts}.${nonce}`).digest("base64url");
   return `${ts}.${nonce}.${mac}`;
@@ -128,13 +128,13 @@ export async function verifyWalletSignature(input: {
   const { message, signature, sealed, origin } = input;
 
   const parsed = parseMessage(message);
-  if (!parsed) return { ok: false, error: "That isn't a valid sign-in message." };
+  if (!parsed) return { ok: false, error: "That isn't a valid sign in message." };
 
   // 1) The message must be the challenge we issued, to this origin, unexpired.
-  if (!sealed) return { ok: false, error: "Sign-in challenge expired. Please try again." };
+  if (!sealed) return { ok: false, error: "Sign in challenge expired. Please try again." };
   const expectedNonce = open(sealed);
   if (!expectedNonce || expectedNonce !== parsed.nonce) {
-    return { ok: false, error: "Sign-in challenge expired. Please try again." };
+    return { ok: false, error: "Sign in challenge expired. Please try again." };
   }
   if (parsed.origin && parsed.origin !== origin) {
     return { ok: false, error: "This signature was made for a different site." };
@@ -163,9 +163,9 @@ export async function verifyWalletSignature(input: {
   //
   // We rotate an ephemeral random password and sign in with it rather than using
   // an admin-generated magic link: the server client runs the PKCE flow, and a
-  // link minted server-side carries no code verifier, so that exchange can never
+  // link minted server side carries no code verifier, so that exchange can never
   // complete. The password is never stored, shown or reused; it is replaced on
-  // every sign-in, so it is not a credential anyone holds.
+  // every sign in, so it is not a credential anyone holds.
   const password = randomBytes(24).toString("base64url");
   let userId: string | null = null;
 
@@ -204,7 +204,7 @@ export async function verifyWalletSignature(input: {
   if (prof && !(prof as { display_name: string | null }).display_name) {
     patch.display_name = `${address.slice(0, 6)}...${address.slice(-4)}`;
   }
-  // Best-effort: a handle collision must not fail the sign-in the wallet just proved.
+  // Best-effort: a handle collision must not fail the sign in the wallet just proved.
   await admin.from("profiles").update(patch).eq("id", userId);
 
   return { ok: true, address, userId };

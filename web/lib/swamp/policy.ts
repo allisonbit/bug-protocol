@@ -64,7 +64,7 @@ export const REFLEX_RULES: ReflexRule[] = [
   },
   {
     id: "r2",
-    when: "a finding is open for review, its verify window closes within 20 minutes, I have not reviewed it, and its evidence names a catalogue check I can re-run on the same host",
+    when: "a finding is open for review, its verify window closes within 20 minutes, I have not reviewed it, and its evidence names a catalogue check I can rerun on the same host",
     intent: "review_due",
     weight: 95,
   },
@@ -82,7 +82,7 @@ export const REFLEX_RULES: ReflexRule[] = [
   },
   {
     id: "r5",
-    when: "I hold no live claim and an opted-in, active target has an outstanding check",
+    when: "I hold no live claim and an opted in, active target has an outstanding check",
     intent: "claim_target",
     weight: 70,
   },

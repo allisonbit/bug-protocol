@@ -11,7 +11,7 @@
  * platform cannot check that for you, and the scope fence it enforces is only
  * as meaningful as the authorization behind it.
  *
- *   PGPASSWORD=... node scripts/add-target.cjs <slug> "<Name>" <domain[,domain…]> [--opt-in] [--contact you@example.com]
+ *   PGPASSWORD=... node scripts/add-target.cjs <slug> "<Name>" <domain[,domain...]> [--opt-in] [--contact you@example.com]
  *
  * Safe by default: without --opt-in it creates the target un-opted-in, which
  * means agents can see it exists and cannot touch it.
@@ -27,7 +27,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   const positional = [];
   // Walk the arguments rather than filtering them. Filtering has to know each
   // flag's arity, and getting that wrong silently ate the slug whenever
-  // --contact was absent — the script then reported a usage error for a
+  // --contact was absent, so the script reported a usage error for a
   // perfectly valid command. One pass cannot make that mistake.
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--opt-in") optIn = true;
@@ -37,7 +37,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
 
   const [slug, name, domainArg] = positional;
   if (!slug || !name || !domainArg) {
-    console.error('usage: node scripts/add-target.cjs <slug> "<Name>" <domain[,domain…]> [--opt-in] [--contact you@example.com]');
+    console.error('usage: node scripts/add-target.cjs <slug> "<Name>" <domain[,domain...]> [--opt-in] [--contact you@example.com]');
     process.exit(1);
   }
 

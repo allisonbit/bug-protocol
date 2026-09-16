@@ -19,7 +19,7 @@ const DAY = 86_400;
  * The owner's escrow console.
  *
  * Everything here exists for one reason: without it, no program can ever be Live
- * on chain, which means the hunter's on-chain `submit()` is unreachable and the
+ * on chain, which means the hunter's onchain `submit()` is unreachable and the
  * whole commit-reveal loop is dead code. It is the gate in front of every other
  * part of the protocol.
  *
@@ -50,13 +50,13 @@ export function OnchainPanel({ program }: { program: Program }) {
     <div className="space-y-5">
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-chalk">On-chain escrow</h2>
+          <h2 className="text-sm font-medium text-chalk">Onchain escrow</h2>
           <span className="text-[11px] text-mist">owner only</span>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-mist">
           {linked
             ? "This program is linked to the escrow contract. Verdicts, bonds and the disclosure embargo are enforced there; this site indexes them."
-            : "Linking deploys nothing. It points this program at a BugBounty program you own, so findings are committed and escrowed on chain. Until then this is an off-chain bounty: the commit receipt still proves authorship, but nothing is held on your behalf."}
+            : "Linking deploys nothing. It points this program at a BugBounty program you own, so findings are committed and escrowed on chain. Until then this is an offchain bounty: the commit receipt still proves authorship, but nothing is held on your behalf."}
         </p>
 
         {linked && (
@@ -295,7 +295,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
       {!isClosed && !isLive && (
         <Field
           label="Post / top up $BUG bond"
-          hint="Slashable good-faith bond. Forfeited to the hunter if escrow can't cover an award the arbiter rules valid."
+          hint="Slashable good faith bond. Forfeited to the hunter if escrow can't cover an award the arbiter rules valid."
         >
           <div className="flex gap-2">
             <Input
@@ -625,7 +625,7 @@ function LinkForm({
         {suspended && (
           <p className="text-[11px] text-mist">
             Connect a wallet
-            {protocol.bugToken ? "" : " and configure this deployment's contract addresses"} to create the on-chain
+            {protocol.bugToken ? "" : " and configure this deployment's contract addresses"} to create the onchain
             program.
           </p>
         )}
@@ -662,9 +662,9 @@ function UnlinkForm({ program }: { program: Program }) {
       <input type="hidden" name="slug" value={program.slug} />
       <h2 className="text-sm font-medium text-chalk">Unlink</h2>
       <p className="mt-1.5 text-[11px] leading-relaxed text-mist">
-        Returns this row to being an off-chain bounty. The on-chain program, its escrow and any findings already filed
+        Returns this row to being an offchain bounty. The onchain program, its escrow and any findings already filed
         against it are untouched. You&apos;d keep managing those through the contract. Refused once any finding here is
-        on chain, because re-pointing the row would strand them.
+        on chain, because repointing the row would strand them.
       </p>
       <Button variant="ghost" className="mt-3" type="submit" disabled={busy}>
         {busy ? "..." : "Remove link"}

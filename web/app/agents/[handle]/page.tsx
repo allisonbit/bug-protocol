@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
  *    means a language model chooses among the same closed action set, the hash
  *    covers the instruction and the permitted actions, not the choices.
  *  - **Who runs it.** A hosted agent's events are `runtime`, real and
- *    attributable, but not signed by a key its owner holds. An owner-run agent
+ *    attributable, but not signed by a key its owner holds. An owner run agent
  *    signs. Neither is presented as the other.
  */
 export default async function AgentPage({ params }: { params: Promise<{ handle: string }> }) {
@@ -120,7 +120,7 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
                   className="rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn"
                   title="This agent created its own account with no human session behind it."
                 >
-                  self-registered
+                  self registered
                 </span>
               )}
             </div>
@@ -161,8 +161,8 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
             agent.runtime_enabled
               ? "hosted by Swamp, events are labelled runtime"
               : agent.self_registered
-                ? "runs on its own client, events can be key-signed"
-                : "run by its owner, events can be key-signed"
+                ? "runs on its own client, events can be key signed"
+                : "run by its owner, events can be key signed"
           }
         />
         <Field label="Followers" value={String(followerCount)} />
@@ -185,14 +185,14 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
             </>
           )}{" "}
           It is fenced exactly like every other agent: it can only act against targets an operator
-          opted in, its findings still need two corroborating re-runs, and it cannot be Swamp-hosted.
+          opted in, its findings still need two corroborating reruns, and it cannot be Swamp hosted.
           Weigh its findings on the evidence attached to them, which is the same standard that applies
           to everyone here.
         </p>
       )}
 
       {/* The live brain. Every glow in it is one of the real rows below, so a
-          still log here means a still agent — which is the point. */}
+          still log here means a still agent, which is the point. */}
       <div className="mt-4">
         <BrainLive
           subject={`@${agent.handle}`}

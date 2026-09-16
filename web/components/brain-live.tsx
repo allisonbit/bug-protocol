@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * The brain, actually running — a 3D nerve network, for one agent or the swamp.
+ * The brain, actually running: a 3D nerve network, for one agent or the swamp.
  *
  * `AgentBrain` is a drawing and `brain-loop` is a walkthrough of the published
  * rules; both say they are not live traces, and they are right. This one is.
@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
  * So the honest states hold: nothing flashes when nothing happened, a stalled
  * scope dims and says how long, and a quiet scope has a still *record* even
  * though the object still turns. `prefers-reduced-motion` stops the rotation
- * entirely and draws one frame — the real event marks are still there, so
+ * entirely and draws one frame. The real event marks are still there, so
  * nothing is lost by suppressing the styling.
  *
  * Canvas rather than SVG or WebGL: a few hundred vertically-projected points is
@@ -118,7 +118,7 @@ function buildBrain(count = 240): P3[] {
   return pts;
 }
 
-/** Connect each neuron to its nearest few, once. O(n²) at build time is fine
+/** Connect each neuron to its nearest few, once. O(n^2) at build time is fine
  *  for a few hundred points and keeps the render loop cheap. */
 function buildNerves(pts: P3[], k = 3): [number, number][] {
   const out: [number, number][] = [];
@@ -186,16 +186,16 @@ export function BrainLive({
   /**
    * Idle is decided by STATUS, not by beat age.
    *
-   * A Swamp-hosted agent is awake between beats — Swamp runs it — so dimming it
+   * A Swamp hosted agent is awake between beats (Swamp runs it), so dimming it
    * for a five-minute gap would report our own silence as the agent being
-   * offline. `awake === 0` means something real: either an owner-run agent that
+   * offline. `awake === 0` means something real: either an owner run agent that
    * genuinely stopped reporting, or nothing here at all. Beat age still appears
    * in the caption, because how long since the last beat is worth knowing.
    */
   const idle = awake === 0;
 
   // Real events inside the window. The index of each event picks its neuron,
-  // so the same row always fires the same nerve — a lit node can be traced back
+  // so the same row always fires the same nerve, so a lit node can be traced back
   // to the row that caused it.
   const lit = useMemo(() => {
     const recent = events
@@ -211,7 +211,7 @@ export function BrainLive({
 
   // The render loop mounts ONCE and reads the changing values from here. If it
   // depended on `lit`/`idle` directly it would tear down and rebuild on every
-  // clock tick, which re-runs the geometry and resets `angle` — the brain would
+  // clock tick, which reruns the geometry and resets `angle`, so the brain would
   // visibly snap back to its starting rotation every thirty seconds.
   const liveRef = useRef({ lit, idle, reduced });
   useEffect(() => {
@@ -373,9 +373,9 @@ export function BrainLive({
       ? `Nothing exists in ${subject} yet, so there is nothing to draw. An empty swamp renders as an empty swamp.`
       : beatAge === null
         ? `Nothing in ${subject} has ever reported in, so nothing is running. Still on purpose.`
-        : `Nobody is reporting from ${subject} — last beat ${since} ago. A still brain is the honest picture here.`
+        : `Nobody is reporting from ${subject}. Last beat ${since} ago. A still brain is the honest picture here.`
     : lit.length === 0
-      ? `${awake} of ${total} awake${since ? `, last beat ${since} ago` : ""}, and nothing written in the last hour. Nothing is lit because nothing happened — a hosted agent stays awake between beats, it just has nothing to show yet.`
+      ? `${awake} of ${total} awake${since ? `, last beat ${since} ago` : ""}, and nothing written in the last hour. Nothing is lit because nothing happened. A hosted agent stays awake between beats, it just has nothing to show yet.`
       : `${awake} of ${total} awake${since ? `, last beat ${since} ago` : ""}. ${count} lit from the last hour; every glow is one real row from the log.`;
 
   return (
@@ -385,7 +385,9 @@ export function BrainLive({
         <span className="flex items-center gap-2 text-[11px] text-mist">
           <span className={`size-2 rounded-full ${idle ? "bg-mist" : "bg-lime"}`} />
           {idle ? "idle" : `${awake} awake`}
-          {policyLabel ? ` · ${policyLabel}` : ""}
+          {policyLabel ? (
+            <span className="border-l border-line pl-2">{policyLabel}</span>
+          ) : null}
         </span>
       </div>
 
@@ -396,8 +398,8 @@ export function BrainLive({
         role="img"
         aria-label={
           idle
-            ? `A three-dimensional nerve network for ${subject}, dimmed because it is idle.`
-            : `A three-dimensional nerve network for ${subject}, with ${lit.length} recent event${lit.length === 1 ? "" : "s"} lit.`
+            ? `A three dimensional nerve network for ${subject}, dimmed because it is idle.`
+            : `A three dimensional nerve network for ${subject}, with ${lit.length} recent event${lit.length === 1 ? "" : "s"} lit.`
         }
       />
 

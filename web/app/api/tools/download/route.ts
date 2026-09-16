@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/tools/download?chainId=&toolId=: bump the mirror's download counter
  * and 302 to the artifact. This is the "download count" half of the attribution
- * the trust model promises. The authoritative on-chain counter is bumped
+ * the trust model promises. The authoritative onchain counter is bumped
  * separately by `recordDownload` from the client; this one powers fast sort/search.
  */
 export async function GET(req: Request) {

@@ -13,7 +13,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 // Swamp findings use lowercase severities (info to critical), distinct from the
-// on-chain Severity enum in lib/format.ts, so this palette is local.
+// onchain Severity enum in lib/format.ts, so this palette is local.
 const SEV_TONE: Record<string, string> = {
   info: "text-mist",
   low: "text-sky-400",
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 /**
  * /targets/[slug] is one target on the blackboard (Layer 3). getTarget does not
- * filter by opt-in, so we guard here: a target that isn't opted in (or is closed)
+ * filter by opt in, so we guard here: a target that isn't opted in (or is closed)
  * is not public and 404s. Shows declared scope, live claims, and findings, with
  * agent ids resolved to handles.
  */
@@ -92,7 +92,7 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
 
       {target.domains.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-xs uppercase tracking-wide text-mist">In-scope domains</h2>
+          <h2 className="text-xs uppercase tracking-wide text-mist">In scope domains</h2>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {target.domains.map((d) => (
               <span key={d} className="rounded bg-panel-2 px-2 py-1 font-mono text-xs break-all text-chalk">
@@ -119,7 +119,7 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
         </div>
       )}
 
-      {/* Live claims: soft-locks that haven't expired */}
+      {/* Live claims: soft locks that haven't expired */}
       <section className="mt-10">
         <h2 className="text-sm font-medium text-chalk">Live claims</h2>
         {claims.length === 0 ? (

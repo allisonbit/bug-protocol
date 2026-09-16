@@ -136,7 +136,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ slug: 
               </div>
             </section>
 
-            {/* Scope, with an in-browser check of the recorded hash once the
+            {/* Scope, with an offline check of the recorded hash once the
                 program is escrowed, since that hash is what authorises testing. */}
             {program.description &&
               (program.scope_hash ? (

@@ -30,7 +30,7 @@ import {
 
 /**
  * Serializable snapshot of what the chain says about a submission, shaped by the
- * page's server-side read. Passing this in means the owner's first paint shows the
+ * page's server side read. Passing this in means the owner's first paint shows the
  * real verdict instead of flashing "pending" and then correcting itself.
  */
 export type ChainFacts = {
@@ -273,7 +273,7 @@ export function TriagePanel({
         <h2 className="text-sm font-medium text-chalk">Triage</h2>
         {facts && (
           <span className="rounded border border-line px-2 py-0.5 text-[11px] text-mist">
-            on-chain, {CHAIN_SUB_STATUS[facts.statusIndex]}
+            onchain, {CHAIN_SUB_STATUS[facts.statusIndex]}
           </span>
         )}
       </div>
@@ -339,7 +339,7 @@ export function TriagePanel({
         </div>
 
         {status === "duplicate" && (
-          <Field label="Duplicate of" hint="Only an earlier, already-accepted finding on this program counts.">
+          <Field label="Duplicate of" hint="Only an earlier, already accepted finding on this program counts.">
             {dupeOptions.length ? (
               <Select value={dupeOf} onChange={(e) => setDupeOf(e.target.value)}>
                 {dupeOptions.map((d) => (
@@ -350,7 +350,7 @@ export function TriagePanel({
               </Select>
             ) : (
               <p className="text-[11px] text-amber-300">
-                This program has no earlier accepted on-chain finding, so a duplicate verdict would be rejected by the
+                This program has no earlier accepted onchain finding, so a duplicate verdict would be rejected by the
                 contract.
               </p>
             )}
@@ -545,7 +545,7 @@ export function WaiveEmbargoPanel({
  *
  * Deliberately permissionless in the contract, and shown here as such: the owner
  * isn't the only one who can clean this up, and the bond is held, not taken,
- * until the window closes. That delay is what makes a bad-faith Spam call
+ * until the window closes. That delay is what makes a bad faith Spam call
  * reversible, which is the whole reason it isn't credited at triage time.
  */
 export function SpamFinalizePanel({ onchainSubmissionId, triagedAt }: { onchainSubmissionId: number; triagedAt: number }) {
@@ -560,7 +560,7 @@ export function SpamFinalizePanel({ onchainSubmissionId, triagedAt }: { onchainS
     <Card className="p-5">
       <h2 className="text-sm font-medium text-chalk">Held bond</h2>
       <p className="mt-2 text-[11px] leading-relaxed text-mist">
-        The anti-spam bond is held, not taken, until the hunter&apos;s dispute window closes
+        The spam bond is held, not taken, until the hunter&apos;s dispute window closes
         {triagedAt > 0 ? ` (${countdown.label})` : ""}. If they don&apos;t appeal to the arbiter in that time, the slash
         can be finalized by anyone.
       </p>
@@ -617,7 +617,7 @@ export function DisclosePanel({
       </h2>
       <p className="mt-2 text-xs leading-relaxed text-mist">
         {disclosed
-          ? "This finding is public. It appears on the hunter's profile and counts toward their track record. The write-up stays private. You can make it private again."
+          ? "This finding is public. It appears on the hunter's profile and counts toward their track record. The write up stays private. You can make it private again."
           : "Once the fix has shipped, publish this as a credential. The title, severity and reward appear on the hunter's public profile. The report body stays private."}
       </p>
       <DiscloseButton disclosed={disclosed} />

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/tools/flag: reflect a flag in the mirror for immediate UI feedback.
- * The authoritative action is the on-chain `flag(toolId, reasonURI)` call, which
+ * The authoritative action is the onchain `flag(toolId, reasonURI)` call, which
  * freezes the stake for the arbiter to resolve; this just flips the mirror's
  * `flagged` bool so the listing shows a warning without waiting for a re-sync.
  */

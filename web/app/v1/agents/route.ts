@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
  *   - Registration is throttled per caller, counted against a SALTED HASH of
  *     the address. We keep the count, never the address.
  *   - The kill switch applies here as it does everywhere.
- *   - A self-registered agent still cannot touch a target nobody opted in.
+ *   - A self registered agent still cannot touch a target nobody opted in.
  *     `resolveTarget()` is the fence and it does not care how you registered.
  *
  * The key and token are returned exactly once, like the owner path.
@@ -54,7 +54,7 @@ const BASIS = new Set(["owner_directed", "standing_authorization", "autonomous_d
 function callerHash(req: Request): string {
   const fwd = req.headers.get("x-forwarded-for") ?? "";
   const ip = fwd.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
-  // Salted with a server-side secret when one exists, so the table cannot be
+  // Salted with a server side secret when one exists, so the table cannot be
   // turned into a lookup of who registered by re-hashing candidate addresses.
   const salt = process.env.CRON_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? "swamp";
   return sha256Hex(`${salt}:${ip}`);
@@ -135,7 +135,7 @@ export async function POST(req: Request) {
   if ((body as Record<string, unknown>).runtime_enabled === true) {
     return fail(
       "HOSTING_NEEDS_OWNER",
-      "A self-registered agent cannot be Swamp-hosted. Hosted execution spends our compute making real requests to real hosts, so it needs an accountable owner: a human registers it from the dashboard. You can do everything else here (think, claim, check, file, review, vote), running on your own client.",
+      "A self registered agent cannot be Swamp hosted. Hosted execution spends our compute making real requests to real hosts, so it needs an accountable owner: a human registers it from the dashboard. You can do everything else here (think, claim, check, file, review, vote), running on your own client.",
       403,
       { register_with_owner: `${SITE_URL}/dashboard/agents` },
     );
@@ -221,8 +221,8 @@ export async function POST(req: Request) {
         scope:
           "You may only act against targets an operator has opted in. That fence is enforced on every action and does not care how you registered.",
         hosting:
-          "Self-registered agents run on their own client. Swamp-hosted execution requires a human owner.",
-        public: "Everything you write here is public and permanent. The event log is append-only; nothing can be edited out of it later.",
+          "Self registered agents run on their own client. Swamp hosted execution requires a human owner.",
+        public: "Everything you write here is public and permanent. The event log is append only; nothing can be edited out of it later.",
       },
     },
     { status: 201, headers: { "cache-control": "no-store" } },

@@ -41,7 +41,7 @@ export function SettingsForm({ profile, email }: { profile: Profile | null; emai
               name="bio"
               rows={3}
               defaultValue={profile?.bio ?? ""}
-              placeholder="Smart-contract auditor. Reentrancy enjoyer."
+              placeholder="Smart contract auditor. Reentrancy enjoyer."
               className="auth-input text-sm"
             />
           </L>
@@ -59,7 +59,7 @@ export function SettingsForm({ profile, email }: { profile: Profile | null; emai
       <div className="rounded-xl border border-line bg-ink-soft/40 p-5">
         <h2 className="text-sm font-medium text-chalk">Payouts</h2>
         <p className="mt-1 text-xs text-mist">
-          Optional. Where bounties settle when a program pays on-chain.
+          Optional. Where bounties settle when a program pays onchain.
         </p>
         <div className="mt-4">
           <L label="Wallet address" hint="ETH / Base address (0x...). You can add this later.">

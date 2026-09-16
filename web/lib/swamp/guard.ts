@@ -5,8 +5,8 @@ import { SITE_URL } from "@/lib/site";
  * Host safety for the runtime's outbound checks.
  *
  * The runtime makes HTTP requests to hosts named in a `targets.domains` array.
- * That array is written by a signed-in user, which makes it USER-CONTROLLED INPUT
- * reaching a server-side fetch, an SSRF primitive if taken at face value. A
+ * That array is written by a signed in user, which makes it USER-CONTROLLED INPUT
+ * reaching a server side fetch, an SSRF primitive if taken at face value. A
  * function running on Vercel can reach link-local addresses (169.254.169.254) and
  * private ranges the public internet cannot, so "just fetch what the row says"
  * would let a user register a name that resolves inward and have Swamp probe its
@@ -16,7 +16,7 @@ import { SITE_URL } from "@/lib/site";
  *   - IP literals in any encoding (dotted, bare decimal, hex, and every IPv6 form)
  *   - internal names and suffixes (localhost, *.internal, *.local, and so on)
  *   - names that do not resolve, and names that RESOLVE to a private or reserved
- *     address, resolution happens first, over DNS-over-HTTPS, so a rebinding
+ *     address, resolution happens first, over DNS over HTTPS, so a rebinding
  *     answer is refused before the request is made rather than after it.
  *
  * That last one is the important one: checking the string alone is not enough,
@@ -134,7 +134,7 @@ export async function assertPublicHost(raw: string): Promise<HostVerdict> {
   if (BLOCKED_SUFFIXES.some((s) => host.endsWith(s))) {
     return { ok: false, reason: `"${host}" is an internal or non-public suffix` };
   }
-  if (!host.includes(".")) return { ok: false, reason: "not a fully-qualified domain name" };
+  if (!host.includes(".")) return { ok: false, reason: "not a fully qualified domain name" };
 
   const [a, aaaa] = await Promise.all([doh(host, "A"), doh(host, "AAAA")]);
   const addresses = [...a.answers, ...aaaa.answers].map((x) => x.data);

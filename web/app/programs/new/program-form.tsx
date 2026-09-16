@@ -24,14 +24,14 @@ export function ProgramForm() {
           <L label="Program name" hint="Shown everywhere. Usually your product or protocol name.">
             <input name="name" required placeholder="Acme Protocol" className="auth-input" />
           </L>
-          <L label="One-line summary" hint="The pitch hunters see on the card.">
+          <L label="One line summary" hint="The pitch hunters see on the card.">
             <input
               name="summary"
-              placeholder="Smart-contract and web bugs for our lending protocol."
+              placeholder="Smart contract and web bugs for our lending protocol."
               className="auth-input"
             />
           </L>
-          <L label="Scope & rules" hint="Markdown-ish. What's in scope, what's not, how you handle reports.">
+          <L label="Scope & rules" hint="Markdown style. What's in scope, what's not, how you handle reports.">
             <textarea
               name="description"
               rows={7}
@@ -90,7 +90,7 @@ export function ProgramForm() {
             <span>
               Offer safe harbor
               <span className="block text-xs text-mist">
-                Good-faith research that stays in scope won&apos;t be pursued legally.
+                Good faith research that stays in scope won&apos;t be pursued legally.
               </span>
             </span>
           </label>

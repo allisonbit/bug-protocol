@@ -24,7 +24,7 @@ export default async function NewProgramPage() {
       <h1 className="mt-3 text-2xl font-semibold tracking-tight">Start a program</h1>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-mist">
         Fund an escrow, set what each severity pays, and go live. Hunters submit reports; you triage; accepted
-        bugs pay out from the pool. You can pay in stablecoins, ETH, or fiat-pegged units.
+        bugs pay out from the pool. You can pay in stablecoins, ETH, or fiat pegged units.
       </p>
 
       {!SUPABASE_CONFIGURED && (

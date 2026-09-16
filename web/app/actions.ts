@@ -12,7 +12,7 @@ import { slugify, type Severity, type SubmissionStatus, type ProgramStatus } fro
 /**
  * Server actions: the real write path. Each runs through the request-scoped,
  * cookie-authenticated Supabase client, so row-level security is what actually
- * authorizes the write. We still pass owner/hunter = the signed-in user so the
+ * authorizes the write. We still pass owner/hunter = the signed in user so the
  * RLS `with check` clauses pass.
  */
 
@@ -26,10 +26,10 @@ function str(v: FormDataEntryValue | null): string {
 }
 
 /**
- * The signed-in user's linked wallet address, lower-cased, or null.
+ * The signed in user's linked wallet address, lower-cased, or null.
  *
  * This is the only thing tying a Supabase account to a chain identity. It is what
- * stops a hunter indexing someone else's on-chain submission as their own, and
+ * stops a hunter indexing someone else's onchain submission as their own, and
  * therefore what stops them farming `rep` off a stranger's accepted finding.
  */
 async function profileWallet(sb: SupabaseClient, uid: string): Promise<string | null> {
@@ -94,7 +94,7 @@ export async function createProgram(formData: FormData) {
  *    Without that check anyone could index a stranger's accepted finding under
  *    their own account and the reputation trigger would credit them for it.
  *
- *  - **Unlinked (off-chain).** Same encrypted envelope and same commit receipt,
+ *  - **Unlinked (offchain).** Same encrypted envelope and same commit receipt,
  *    no escrow. This is the path that keeps working with no contract deployed at
  *    all, the receipt is still a timestamped, salt-bound proof of authorship.
  *
@@ -145,14 +145,14 @@ export async function submitFinding(formData: FormData) {
     const onchainId = /^\d+$/.test(onchainRaw) ? BigInt(onchainRaw) : 0n;
     if (!chainId || onchainId === 0n) {
       throw new Error(
-        "This program is escrowed on-chain, so the finding has to be committed there first. Nothing was recorded.",
+        "This program is escrowed onchain, so the finding has to be committed there first. Nothing was recorded.",
       );
     }
 
     const chain = await readChainSubmission(chainId, onchainId);
-    if (!chain) throw new Error("Couldn't find that submission on-chain. Nothing was recorded.");
+    if (!chain) throw new Error("Couldn't find that submission onchain. Nothing was recorded.");
     if (chain.programId !== BigInt(program.onchain_program_id)) {
-      throw new Error("That on-chain submission belongs to a different program.");
+      throw new Error("That onchain submission belongs to a different program.");
     }
 
     const wallet = await profileWallet(sb, user.id);
@@ -162,12 +162,12 @@ export async function submitFinding(formData: FormData) {
       );
     }
     if (chain.hunter.toLowerCase() !== wallet) {
-      throw new Error("That on-chain submission was filed by a different wallet than the one on your profile.");
+      throw new Error("That onchain submission was filed by a different wallet than the one on your profile.");
     }
 
     const commitHash = String(row.commit_hash ?? "");
     if (commitHash && chain.commitHash.toLowerCase() !== commitHash) {
-      throw new Error("That on-chain submission commits to a different report URI.");
+      throw new Error("That onchain submission commits to a different report URI.");
     }
 
     row.chain_id = chainId;
@@ -175,14 +175,14 @@ export async function submitFinding(formData: FormData) {
     row.commit_hash = chain.commitHash.toLowerCase();
     row.bond = toBugAmount(chain.bond);
     // Always filed as pending, never as whatever the chain currently says. Two
-    // reasons: the insert guard rightly refuses a hunter inserting an already-
-    // decided finding, and the privileged mirror below is the only writer allowed
-    // to move a row past pending. A retry against an existing on-chain submission
+    // reasons: the insert guard rightly refuses a hunter inserting a finding that
+    // already has a decision, and the privileged mirror is the only writer allowed
+    // to move a row past pending. A retry against an existing onchain submission
     // is redirected above rather than re-inserted.
     row.status = "pending";
     row.tx_hash = str(formData.get("tx_hash")) || null;
 
-    // Duplicate rows for the same on-chain submission would double-count
+    // Duplicate rows for the same onchain submission would double-count
     // reputation, so refuse rather than let the unique index throw.
     const { data: existing } = await sb
       .from("submissions")
@@ -206,7 +206,7 @@ export async function submitFinding(formData: FormData) {
 }
 
 /**
- * Records the on-chain deployment an existing off-chain program points at.
+ * Records the onchain deployment an existing offchain program points at.
  *
  * Verify-first: the id has to be a real program on that chain, and it has to be
  * owned by the wallet on the owner's profile. Otherwise an owner could link a
@@ -234,7 +234,7 @@ export async function linkProgramOnChain(formData: FormData) {
   const wallet = await profileWallet(sb, user.id);
   if (!wallet) throw new Error("Link your wallet in Settings first. It's how ownership is proved.");
   if (chain.owner.toLowerCase() !== wallet) {
-    throw new Error("That on-chain program is owned by a different wallet than the one on your profile.");
+    throw new Error("That onchain program is owned by a different wallet than the one on your profile.");
   }
 
   // RLS restricts this update to the program's owner.
@@ -266,7 +266,7 @@ export async function unlinkProgram(formData: FormData) {
   const slug = str(formData.get("slug"));
   if (!id) throw new Error("A program id is required.");
 
-  // Findings that are already on-chain stay on-chain; re-pointing the program
+  // Findings that are already onchain stay onchain; repointing the program
   // would strand them, so we refuse rather than quietly orphaning escrow.
   const { count } = await sb
     .from("submissions")
@@ -274,7 +274,7 @@ export async function unlinkProgram(formData: FormData) {
     .eq("program_id", id)
     .not("onchain_submission_id", "is", null);
   if ((count ?? 0) > 0) {
-    throw new Error("This program already has on-chain findings, so its link can't be removed.");
+    throw new Error("This program already has onchain findings, so its link can't be removed.");
   }
 
   const { error } = await sb
@@ -320,14 +320,14 @@ export async function mirrorSubmission(formData: FormData) {
  *
  * Two modes again, and the difference is who is allowed to decide the number:
  *
- *  - **Escrowed program.** The owner must have signed the on-chain `triage`
+ *  - **Escrowed program.** The owner must have signed the onchain `triage`
  *    transaction; we require its hash, read the verdict back off the chain, and
  *    mirror that. Client-supplied status and reward are ignored entirely. The
  *    contract already decided the award out of escrow, and letting a form field
  *    override it would be inventing money. Only the note is taken from the form,
  *    and it's written through RLS as the owner.
  *
- *  - **Off-chain program.** The owner sets the outcome and reward directly, as
+ *  - **Offchain program.** The owner sets the outcome and reward directly, as
  *    before. There is no escrow to be inconsistent with.
  */
 export async function triageSubmission(formData: FormData) {
@@ -363,7 +363,7 @@ export async function triageSubmission(formData: FormData) {
     const txHash = str(formData.get("tx_hash"));
     if (!txHash) {
       throw new Error(
-        "This program is escrowed on-chain: send the triage transaction first, then record it. Nothing was changed.",
+        "This program is escrowed onchain: send the triage transaction first, then record it. Nothing was changed.",
       );
     }
 
@@ -474,7 +474,7 @@ export async function setProgramStatus(formData: FormData) {
  * The write runs through the request-scoped client, so the RLS policies on
  * `agent_follows` are what authorize it: you may insert and delete only rows
  * whose `profile_id` is you. Nothing here re-implements that check, it passes
- * the signed-in id and lets the database refuse anything else, which is the same
+ * the signed in id and lets the database refuse anything else, which is the same
  * rule the rest of this file follows.
  *
  * Following is a reader's action, not the agent's. It changes what a person sees

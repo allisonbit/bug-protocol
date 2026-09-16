@@ -178,7 +178,7 @@ export function SubmitForm({
       fd.set("report_sha256", hash);
 
       if (escrowed && bountyAddress) {
-        // 4) The anti-spam bond is pulled by `submit` via transferFrom, so the
+        // 4) The spam bond is pulled by `submit` via transferFrom, so the
         //    allowance has to exist first.
         const bond = protocol.submissionBond ?? 0n;
         if (bond > 0n && protocol.bugToken) {
@@ -230,7 +230,7 @@ export function SubmitForm({
         fd.set("chain_id", String(program.chain_id));
         fd.set("onchain_submission_id", String(submissionId));
         fd.set("tx_hash", tx);
-        setStage(`committed as on-chain submission #${submissionId}`);
+        setStage(`committed as onchain submission #${submissionId}`);
         setBusy("indexing...");
       } else {
         setBusy("recording...");
@@ -330,17 +330,17 @@ export function SubmitForm({
       {escrowed ? (
         <div className="rounded-xl border border-line bg-ink-soft p-4 text-xs leading-relaxed text-mist">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-chalk">Escrowed on-chain</span>
+            <span className="text-chalk">Escrowed onchain</span>
             <span className="rounded border border-line px-2 py-0.5 text-[11px]">
               program #{program.onchain_program_id} on {linkMeta.short}
             </span>
           </div>
           <p className="mt-2">
-            Your report is committed before anyone can read it, so the timestamp is yours and cannot be back-claimed.
+            Your report is committed before anyone can read it, so the timestamp is yours and cannot be back claimed.
             {protocol.submissionBond !== undefined && protocol.submissionBond > 0n && (
               <>
                 {" "}
-                A refundable anti-spam bond of{" "}
+                A refundable spam bond of{" "}
                 <span className="font-mono text-chalk">{fmtAmount(protocol.submissionBond, 18, "$BUG")}</span> is
                 posted with the commit. It comes back unless the owner marks it spam, and you can dispute that to the
                 arbiter for seven days.
@@ -351,7 +351,7 @@ export function SubmitForm({
           {!bountyAddress && (
             <p className="mt-2 text-amber-300">
               This deployment has no escrow contract address configured for {linkMeta.label}, so findings can&apos;t be
-              committed here yet. The program will accept off-chain reports once it&apos;s unlinked or the address is
+              committed here yet. The program will accept offchain reports once it&apos;s unlinked or the address is
               set.
             </p>
           )}
@@ -373,7 +373,7 @@ export function SubmitForm({
         </div>
       ) : (
         <div className="rounded-xl border border-line bg-ink-soft p-4 text-xs leading-relaxed text-mist">
-          <span className="text-chalk">Off-chain program.</span> You still get an encrypted report and a commit receipt
+          <span className="text-chalk">Offchain program.</span> You still get an encrypted report and a commit receipt
           that timestamps and binds your finding, but this program holds no escrow, so the reward is the owner&apos;s to
           honour rather than a contract&apos;s obligation.
         </div>
@@ -385,7 +385,7 @@ export function SubmitForm({
           disabled={!canSubmit || !!busy || submitTx.busy || approve.state === "approving"}
           className="px-6"
         >
-          {busy ?? (escrowed ? "Commit & submit on-chain" : "Encrypt & submit")}
+          {busy ?? (escrowed ? "Commit & submit onchain" : "Encrypt & submit")}
         </Button>
         {stage && <span className="text-[11px] text-bug">{stage}</span>}
       </div>

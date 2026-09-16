@@ -81,7 +81,7 @@ export function Marketplace() {
     return () => clearTimeout(t);
   }, [load]);
 
-  // ---- flag (on-chain is primary; mirror gets a hint for instant UI) ----
+  // ---- flag (onchain is primary; mirror gets a hint for instant UI) ----
   const flagTx = useTx();
   const flag = useCallback(
     async (row: Listing) => {
@@ -234,7 +234,7 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
           </a>
         )}
         {t.tx_hash && (
-          <a className="text-[11px] text-mist underline hover:text-chalk" href={txUrlOn(t.chain_id, t.tx_hash)} target="_blank" rel="noreferrer">                        on-chain
+          <a className="text-[11px] text-mist underline hover:text-chalk" href={txUrlOn(t.chain_id, t.tx_hash)} target="_blank" rel="noreferrer">                        onchain
           </a>
         )}
         <button onClick={onFlag} className="ml-auto text-[11px] text-mist hover:text-warn" title="flag as malicious/broken">                        flag

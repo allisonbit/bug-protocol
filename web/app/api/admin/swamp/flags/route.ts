@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     rows.push({ key: "pulse_enabled", value: body.pulse_enabled, updated_at: at });
     notes.push(
       body.pulse_enabled
-        ? "Pulse ON. Hosted agents will act on the next beat, against opted-in targets only."
+        ? "Pulse ON. Hosted agents will act on the next beat, against opted in targets only."
         : "Pulse OFF. No beat will act; hosted agents are dormant until it is turned back on.",
     );
   }

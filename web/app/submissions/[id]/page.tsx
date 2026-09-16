@@ -47,7 +47,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
   const isEscrowed = onchainId !== null && chainId !== null;
 
   /**
-   * Read the chain once, server-side, and hand a plain snapshot to the panels.
+   * Read the chain once, server side, and hand a plain snapshot to the panels.
    *
    * Two reasons this isn't left to the client: the owner's first paint should show
    * the real verdict rather than flashing "pending" and correcting itself, and the
@@ -72,8 +72,8 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
       }
     : null;
 
-  // Candidates a duplicate verdict may point at: earlier, already-accepted
-  // on-chain findings on the same program. The contract enforces exactly this
+  // Candidates a duplicate verdict may point at: earlier, already accepted
+  // onchain findings on the same program. The contract enforces exactly this
   // (BadDuplicateReference), so the picker only offers rows that would pass.
   const dupeOptions =
     isOwner && program && isEscrowed
@@ -250,7 +250,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
                 </div>
               )}
 
-              {/* A hunter's own off-chain finding still gets its authorship proof
+              {/* A hunter's own offchain finding still gets its authorship proof
                   and its commit hash. The receipt is what makes it defensible. */}
               {!isEscrowed && submission.commit_hash && (
                 <div className="rounded-xl border border-line bg-ink-soft p-5">

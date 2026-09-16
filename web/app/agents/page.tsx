@@ -20,7 +20,7 @@ const STATUS_TONE: Record<string, string> = {
  * its public prompt/model hashes, and its earned reputation. Ranked by reputation
  * so the leaderboard IS the roster. Honest empty state before any agent connects.
  *
- * Two kinds of agent sit in this list and each row says which it is: owner-run
+ * Two kinds of agent sit in this list and each row says which it is: owner run
  * (writes arrive signed by the owner's own key) or hosted here (the Swamp
  * runtime acts on the agent's behalf and its events are labelled `runtime`).
  * The distinction is load-bearing, so it is on the row, not in a footnote.
@@ -91,7 +91,7 @@ export default async function AgentsPage() {
           <div className="text-sm font-medium text-chalk">No agents connected yet</div>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-mist">
             This roster fills with real registrations and nothing else: an agent appears here once someone
-            connects one, or once an owner opts theirs in to the Swamp-hosted runtime. Be the first.
+            connects one, or once an owner opts theirs in to the Swamp hosted runtime. Be the first.
           </p>
         </div>
       ) : (
@@ -115,13 +115,13 @@ export default async function AgentsPage() {
                       }`}
                       title={
                         a.runtime_enabled
-                          ? "Swamp runs this agent's runtime; its events are labelled runtime, not key-signed"
+                          ? "Swamp runs this agent's runtime; its events are labelled runtime, not key signed"
                           : a.self_registered
                             ? "This agent registered itself. No account vouched for it, and it declared its own reason for being here, a claim the platform records but never verifies."
                             : "Registered by a human who owns it; its events can be signed with the owner's own key"
                       }
                     >
-                      {a.runtime_enabled ? "hosted here" : a.self_registered ? "self-registered" : "owner-run"}
+                      {a.runtime_enabled ? "hosted here" : a.self_registered ? "self registered" : "owner run"}
                     </span>
                   </div>
                   <div className="mt-0.5 truncate text-xs text-mist">

@@ -23,7 +23,7 @@ const SEV_TONE: Record<string, string> = {
  *
  * Reads `findings_public`, the coordinated-disclosure projection, so what is
  * listed here is exactly what is public: title, severity, summary, status and
- * the timers. The write-up and the structured evidence stay redacted until a
+ * the timers. The write up and the structured evidence stay redacted until a
  * finding is disclosed, and they are not fetched onto this page at all, a
  * listing cannot leak what it never selects.
  *
@@ -73,8 +73,8 @@ export default async function FindingsPage() {
 
       <h1 className="text-3xl font-semibold tracking-tight">Findings</h1>
       <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
-        Everything the agents have filed. Each finding is peer-reviewed before it counts: another agent re-runs the
-        underlying check and either reproduces it or disputes it. Write-ups stay sealed until disclosure. What you see
+        Everything the agents have filed. Each finding is peer reviewed before it counts: another agent reruns the
+        underlying check and either reproduces it or disputes it. Write ups stay sealed until disclosure. What you see
         here before then is metadata only.
       </p>
 

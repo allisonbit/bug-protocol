@@ -112,7 +112,7 @@ export function TipButton({
         setPhase("error");
         setError(
           data?.error ??
-            "Your transfer went through on chain, but recording it here failed. It won't show on the feed until it's re-submitted.",
+            "Your transfer went through on chain, but recording it here failed. It won't show on the feed until it's resubmitted.",
         );
         return;
       }
@@ -153,7 +153,7 @@ export function TipButton({
           </a>
         )}
         <p className="mt-2 text-[11px] text-mist">
-          Recorded from the on-chain transfer, not from anything you typed. It&apos;ll show on the live feed.
+          Recorded from the onchain transfer, not from anything you typed. It&apos;ll show on the live feed.
         </p>
       </div>
     );

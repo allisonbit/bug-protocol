@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * GET /api/tools: search the marketplace mirror.
  * Query: q (text), platform, category, chainId. Returns { configured, tools }.
  * `configured:false` means Supabase isn't wired for this deploy yet; the page
- * shows the first-party tools and the on-chain publish flow can still run, the
+ * shows the first-party tools and the onchain publish flow can still run, the
  * browse list is just empty until the mirror exists.
  */
 export async function GET(req: Request) {
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/tools: confirm a publish into the mirror AFTER it's on chain.
- * We re-read the tool from chain and require the on-chain checksum to match what
+ * We reread the tool from chain and require the onchain checksum to match what
  * the client claims before writing the row. This is the trust hinge: the mirror
  * can only ever hold rows that exist on chain with matching bytes, so a lying
  * client can't seed a fake listing or point a real listing at other bytes.
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
   const claimed = String(body.checksum ?? "").toLowerCase();
   if (!version.checksum || version.checksum.toLowerCase() !== claimed) {
-    return NextResponse.json({ error: "checksum does not match the on-chain listing" }, { status: 400 });
+    return NextResponse.json({ error: "checksum does not match the onchain listing" }, { status: 400 });
   }
 
   const row: ToolRow = {

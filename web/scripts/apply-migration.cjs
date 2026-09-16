@@ -12,7 +12,7 @@
  *
  * The whole file is sent as ONE statement so Postgres parses the dollar-quoted
  * `do $$ ... $$` blocks itself. Splitting on semicolons would cut those blocks
- * in half — every one of these migrations is full of them.
+ * in half, and every one of these migrations is full of them.
  */
 const fs = require("fs");
 const path = require("path");

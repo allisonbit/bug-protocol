@@ -27,8 +27,8 @@ import { severityMeta, type Severity, type SubmissionStatus } from "@/lib/db";
  *     discovered at reveal time, months later.
  *
  *  2. **Reveal**, but only once the program's own disclosure delay has run from
- *     triage (or the owner waived it). The countdown reads the *on-chain* delay,
- *     not the off-chain `response_days`. Those are different numbers, and using
+ *     triage (or the owner waived it). The countdown reads the *onchain* delay,
+ *     not the offchain `response_days`. Those are different numbers, and using
  *     the wrong one tells a hunter to sign a transaction that will revert.
  *
  *  3. **Escalate.** Two independent grounds, and the contract distinguishes
@@ -97,7 +97,7 @@ export function RevealPanel({
   async function afterTx(action: () => Promise<unknown>) {
     setError(null);
     await action();
-    // Re-read the chain and stamp the index, so the page never disagrees with
+    // Reread the chain and stamp the index, so the page never disagrees with
     // the contract about what just happened.
     const fd = new FormData();
     fd.set("submission_id", rowId);
@@ -144,7 +144,7 @@ export function RevealPanel({
   if (!sub || !program.program) {
     return (
       <Card className="p-5">
-        <h2 className="text-sm font-medium text-chalk">On-chain submission #{onchainSubmissionId}</h2>
+        <h2 className="text-sm font-medium text-chalk">Onchain submission #{onchainSubmissionId}</h2>
         <p className="mt-2 text-xs leading-relaxed text-mist">
           Couldn&apos;t read it back from {linkMeta.label}. It exists, and the contract has an id for it, but this
           deployment didn&apos;t answer just now. Reload in a moment.
@@ -179,7 +179,7 @@ export function RevealPanel({
     <div className="space-y-5">
       <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-medium text-chalk">On-chain state</h2>
+          <h2 className="text-sm font-medium text-chalk">Onchain state</h2>
           <span className="text-[11px] text-mist">
             #{onchainSubmissionId} on {linkMeta.short}
           </span>
@@ -204,7 +204,7 @@ export function RevealPanel({
               )}
             />
           )}
-          {sub.bond > 0n && <Line label="anti-spam bond" value={fmtAmount(sub.bond, 18, "$BUG")} />}
+          {sub.bond > 0n && <Line label="spam bond" value={fmtAmount(sub.bond, 18, "$BUG")} />}
           {sub.dupeOf > 0n && <Line label="duplicate of" value={`#${sub.dupeOf}`} />}
           {revealed && <Line label="report" value={<Copyable value={sub.reportURI} display={short(sub.reportURI)} />} />}
         </dl>
@@ -346,7 +346,7 @@ export function RevealPanel({
                   ? "Waiting on the arbiter's ruling."
                   : canEscalateSla
                     ? "The owner has missed the triage deadline. Escalating hands the decision to the arbiter, and the escrow set aside for this finding stays reserved until they rule."
-                    : `You can dispute this verdict until ${disputeCountdown?.label ?? "the window closes"}. Losing an appeal in good faith doesn't cost you the bond. Only a bad-faith ruling does.`}
+                    : `You can dispute this verdict until ${disputeCountdown?.label ?? "the window closes"}. Losing an appeal in good faith doesn't cost you the bond. Only a bad faith ruling does.`}
               </p>
             </div>
           )}

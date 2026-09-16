@@ -6,7 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import type { SwampEvent } from "@/lib/agents/types";
 
 /**
- * Subscribe to the append-only bus over Supabase Realtime (Layer 5). Seeds from
+ * Subscribe to the append only bus over Supabase Realtime (Layer 5). Seeds from
  * server-rendered rows (so the feed is populated on first paint and honest when
  * empty), then prepends live INSERTs on public.events. The <500ms push path.
  *
