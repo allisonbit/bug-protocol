@@ -74,7 +74,7 @@ function WalletButton({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       onClick={() => openConnectModal?.()}
-      className="rounded-md border border-line px-2.5 py-1.5 text-xs text-mist transition-colors hover:text-chalk"
+      className="hidden rounded-md border border-line px-2.5 py-1.5 text-xs text-mist transition-colors hover:text-chalk sm:block"
       title="Connect a wallet for onchain payments; this is not a sign in"
     >
       Connect wallet
@@ -404,7 +404,7 @@ export function Nav() {
         <Link href="/" className="shrink-0">
           <BrandLockup size={26} />
         </Link>
-        <div className="hidden items-center gap-5 md:flex">
+        <div className="hidden items-center gap-5 lg:flex">
           {nav.map((l) => (
             <Link
               key={l.href}
@@ -422,7 +422,7 @@ export function Nav() {
           <AuthControls />
           <button
             onClick={() => setMenu((v) => !v)}
-            className="flex size-8 items-center justify-center rounded-md border border-line text-mist transition-colors hover:text-chalk md:hidden"
+            className="flex size-8 items-center justify-center rounded-md border border-line text-mist transition-colors hover:text-chalk lg:hidden"
             aria-label="menu"
             aria-expanded={menu}
           >
@@ -438,7 +438,7 @@ export function Nav() {
       </nav>
 
       {menu && (
-        <div className="border-t border-line bg-panel md:hidden">
+        <div className="border-t border-line bg-panel lg:hidden">
           <div className="mx-auto flex max-w-6xl flex-col px-4 py-2">
             {nav.map((l) => (
               <Link
