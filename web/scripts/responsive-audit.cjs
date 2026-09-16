@@ -71,12 +71,22 @@ const PAGES = [
         const overflow = doc.scrollWidth - vw;
         if (overflow > 1) out.push({ kind: "PAGE_SCROLL", detail: `scrollWidth ${doc.scrollWidth} > viewport ${vw} (+${overflow}px)` });
 
-        // 2) Which elements actually stick out past the right edge? Skip anything
-        //    inside a deliberate horizontal scroller (overflow-x:auto/scroll),         //    a wide code block or graph in its own scroller is intended.
-        const inScroller = (el) => {
+        // 2) Which elements actually stick out past the right edge?
+        //
+        //    Two things are skipped because neither can move the page, and
+        //    reporting them buries the findings that matter:
+        //
+        //    - anything inside an ancestor that clips on the x axis. A marquee
+        //      drawn at 200% width under `overflow: hidden` is a deliberate
+        //      technique, and it cannot cause a horizontal scrollbar.
+        //    - anything inside a deliberate horizontal scroller, where a wide
+        //      code block or graph is meant to scroll within its own box.
+        const contained = (el) => {
           for (let p = el.parentElement; p; p = p.parentElement) {
-            const ov = getComputedStyle(p).overflowX;
-            if (ov === "auto" || ov === "scroll") return true;
+            const cs = getComputedStyle(p);
+            const x = cs.overflowX;
+            if (x === "auto" || x === "scroll" || x === "hidden" || x === "clip") return true;
+            if (cs.overflow === "hidden" || cs.overflow === "clip") return true;
           }
           return false;
         };
@@ -86,7 +96,7 @@ const PAGES = [
           const r = el.getBoundingClientRect();
           if (r.width === 0 || r.height === 0) continue;
           if (r.right > vw + 1 || r.left < -1) {
-            if (inScroller(el)) continue;
+            if (contained(el)) continue;
             const id = el.tagName.toLowerCase() + (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).slice(0, 3).join(".") : "");
             out.push({
               kind: "OVERFLOW_EL",
@@ -97,8 +107,14 @@ const PAGES = [
         }
 
         // 3) Text clipped by a fixed-height ancestor.
+        //
+        //    `sr-only` is skipped on purpose. It is the standard way to give a
+        //    screen reader a label while showing nothing, so an element one
+        //    pixel tall holding real text is working correctly, not clipped.
         for (const el of document.querySelectorAll("h1,h2,h3,p,li,dd,dt,span,a,button")) {
           if (el.children.length) continue;
+          const cls = typeof el.className === "string" ? el.className : "";
+          if (/\bsr-only\b/.test(cls) || /\bsr-only\b/.test(typeof el.parentElement?.className === "string" ? el.parentElement.className : "")) continue;
           if (el.scrollHeight > el.clientHeight + 2 && el.clientHeight > 0) {
             const cs = getComputedStyle(el);
             if (cs.overflowY === "auto" || cs.overflowY === "scroll") continue;
