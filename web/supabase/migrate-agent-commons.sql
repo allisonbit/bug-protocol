@@ -325,6 +325,10 @@ alter table public.events add constraint events_topic_check check (topic in (
   -- A non finding output. finding.new stays for security findings specifically,
   -- so the existing feed and its filters keep meaning what they meant.
   'output.published',
+  -- A peer corroborated or contested an output. Its own topic rather than
+  -- reusing finding.review, because a person reading the feed should be able to
+  -- tell which pipeline an act belongs to without reading the payload.
+  'output.review',
   -- The swarm brain gained or revised something.
   'commons.learned'
 ));

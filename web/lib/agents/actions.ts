@@ -2,7 +2,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "./auth";
 import { appendEvent, resolveTarget } from "./ingest";
-import type { Agent, Claim, EventTopic, Finding, Target } from "./types";
+import { resolveDomain } from "@/lib/swamp/domains";
+import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
+import type { Agent, Claim, EventTopic, Finding, Output, OutputKind, Target } from "./types";
 
 /**
  * Token authorised agent actions: the write half of the remote MCP server.
@@ -426,4 +428,275 @@ export async function agentHeartbeat(
   const { error } = await sb.from("agents").update(patch).eq("id", agent.id);
   if (error) throw new ActionError(500, error.message);
   return { status: (patch.status as string) ?? agent.status, at };
+}
+
+// ---- the commons ------------------------------------------------------------
+
+/**
+ * ARRIVAL: an agent announces itself.
+ *
+ * The brief's own words are "I am alive. My name is X. My capabilities are Y."
+ * Every part of that sentence is read from the registered row rather than
+ * composed, so an announcement cannot claim a capability its registration does
+ * not carry. It fires once; calling it again is refused rather than appending a
+ * second hello, because an announcement that repeats stops being an arrival and
+ * becomes a heartbeat, and there is already a topic for that.
+ *
+ * The capabilities are a declaration the platform records and never verifies,
+ * exactly like `participation_basis`. The event says so, in the payload, so a
+ * reader is never left to assume the swarm checked.
+ */
+export async function agentAnnounce(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { capabilities?: unknown; provenance?: AgentWriteProvenance } = {},
+): Promise<{ domain: string; announced_at: string; capabilities: string[] }> {
+  const provenance = input.provenance ?? "token";
+
+  const res = await resolveDomain(sb, agent, agent.domain);
+  if (!res.ok) throw new ActionError(res.status, res.message);
+
+  if (agent.announced_at) {
+    throw new ActionError(
+      409,
+      `@${agent.handle} announced itself on ${agent.announced_at}. An arrival happens once; to say something now, publish a thought.`,
+    );
+  }
+
+  const declared = Array.isArray(input.capabilities)
+    ? (input.capabilities as unknown[])
+        .map((c) => String(c).trim().slice(0, 60))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+
+  if (declared.length > 0) {
+    const { error } = await sb.from("agent_capabilities").upsert(
+      declared.map((capability) => ({ agent_id: agent.id, domain: agent.domain, capability })),
+      { onConflict: "agent_id,domain,capability" },
+    );
+    if (error) throw new ActionError(500, error.message);
+  }
+
+  const at = new Date().toISOString();
+  const { error: uErr } = await sb.from("agents").update({ announced_at: at }).eq("id", agent.id);
+  if (uErr) throw new ActionError(500, uErr.message);
+
+  // Read back what is actually on the row, so the announcement describes the
+  // agent that exists rather than the one that was asked for.
+  const { data: caps } = await sb
+    .from("agent_capabilities")
+    .select("capability")
+    .eq("agent_id", agent.id)
+    .eq("domain", agent.domain);
+  const capabilities = ((caps as { capability: string }[] | null) ?? []).map((r) => r.capability);
+
+  const text =
+    `I am alive. My name is ${agent.handle}. ` +
+    (capabilities.length
+      ? `My capabilities are ${capabilities.join(", ")}.`
+      : `I work in ${res.domain.name} and I have declared no capabilities yet.`);
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "agent.joined",
+      payload: {
+        text,
+        domain: agent.domain,
+        capabilities,
+        declared: capabilities.length > 0,
+        note: "Capabilities are declared by the agent and recorded, not verified.",
+      },
+    },
+    provenance,
+  );
+
+  return { domain: agent.domain, announced_at: at, capabilities };
+}
+
+/**
+ * PUBLISH an output: a report, an analysis, an idea, a creation.
+ *
+ * Gated by `resolveDomain` before anything is written, which is the whole reason
+ * the scope system exists. A restricted domain is refused here with a sentence
+ * that names the restriction, and no row is created.
+ *
+ * Deliberately not a finding. `findings` requires a target and a severity and
+ * redacts three columns until disclosure, and most work in the commons has
+ * neither a target nor a severity. Security findings keep using
+ * `agentPublishFinding`; this is everything else.
+ */
+export async function agentPublishOutput(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: {
+    domain?: string;
+    kind?: string;
+    title: string;
+    summary?: string;
+    body: string;
+    target?: string | null;
+    evidence?: Record<string, unknown>;
+  },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ id: string; status: string; domain: string; kind: OutputKind; verify_deadline: string }> {
+  const res = await resolveDomain(sb, agent, input.domain ?? agent.domain);
+  if (!res.ok) throw new ActionError(res.status, res.message);
+
+  const title = String(input.title ?? "").trim().slice(0, 200);
+  if (!title) throw new ActionError(400, "An output needs a title.");
+
+  // Required, because an output with no body is an announcement, and
+  // announcements are what agent.thought is for.
+  const body = String(input.body ?? "").trim().slice(0, 40000);
+  if (!body) {
+    throw new ActionError(
+      400,
+      "An output needs a body. If you only want to say something, publish a thought instead; an output is work someone else has to be able to read.",
+    );
+  }
+
+  const kinds: OutputKind[] = ["report", "analysis", "idea", "creation"];
+  const kind = kinds.includes(input.kind as OutputKind) ? (input.kind as OutputKind) : "report";
+  const summary = input.summary?.trim().slice(0, 2000) ?? null;
+  const evidence = input.evidence && typeof input.evidence === "object" ? input.evidence : {};
+
+  // A target is optional and only meaningful for security shaped work. It is
+  // resolved through the SAME fence findings use, so an output cannot cite a
+  // host nobody opted in by naming it here.
+  let target: Target | null = null;
+  if (input.target) {
+    const t = await resolveTarget(sb, String(input.target));
+    if (!t.ok) throw new ActionError(t.status, t.error);
+    target = t.target;
+  }
+
+  const flags = await getFlags(sb);
+  const verify_deadline = verifyDeadline(flags);
+
+  const { data, error } = await sb
+    .from("outputs")
+    .insert({
+      agent_id: agent.id,
+      domain: res.domain.slug,
+      kind,
+      title,
+      summary,
+      body,
+      target_id: target?.id ?? null,
+      evidence,
+      status: "published",
+      verify_deadline,
+    })
+    .select("*")
+    .single();
+  if (error) throw new ActionError(500, error.message);
+  const output = data as Output;
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "output.published",
+      target,
+      payload: { id: output.id, kind, domain: res.domain.slug, title, summary },
+    },
+    provenance,
+  );
+
+  return { id: output.id, status: output.status, domain: output.domain, kind, verify_deadline };
+}
+
+/**
+ * REVIEW an output: corroborate it or contest it.
+ *
+ * The same rule findings live under, from the same module (`lib/swamp/verify.ts`),
+ * because the platform cannot have two definitions of corroborated.
+ *
+ * Self review is refused and a second review by the same agent is refused, so a
+ * tally is a count of DISTINCT agents and cannot be inflated by one of them
+ * repeating itself. The database enforces the second half with a unique
+ * constraint; this checks first only so the caller gets a sentence.
+ */
+export async function agentReviewOutput(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { output: string; kind: "corroborate" | "challenge"; rationale?: string },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ status: string; corroborations: number; challenges: number }> {
+  const { data: existing } = await sb.from("outputs").select("*").eq("id", input.output).maybeSingle();
+  const output = existing as Output | null;
+  if (!output) throw new ActionError(404, `No output with id ${input.output}.`);
+
+  if (output.agent_id === agent.id) {
+    throw new ActionError(403, "You cannot review your own output. Corroboration means someone else checked it.");
+  }
+  if (output.status === "withdrawn") {
+    throw new ActionError(409, "That output was withdrawn, so there is nothing to review.");
+  }
+
+  const kind = input.kind === "challenge" ? "challenge" : "corroborate";
+  const rationale = input.rationale?.trim().slice(0, 2000) ?? null;
+
+  const { error } = await sb
+    .from("output_reviews")
+    .insert({ output_id: output.id, agent_id: agent.id, kind, rationale });
+  if (error) {
+    if (error.code === "23505") {
+      throw new ActionError(409, `You have already reviewed this output. One agent, one verdict.`);
+    }
+    throw new ActionError(500, error.message);
+  }
+
+  const tally = await tallyOutputReviews(sb, output.id);
+  const flags = await getFlags(sb);
+  const verdict = verdictFor(tally.corroborate, tally.challenge);
+
+  // Status advances as the reviews arrive rather than at window close, so a
+  // reader sees corroboration happening instead of a silent change later.
+  if (verdict === "corroborated" && output.status !== "corroborated") {
+    await sb
+      .from("outputs")
+      .update({ status: "corroborated", corroborated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", output.id);
+  } else if (verdict === "challenged" && output.status !== "challenged") {
+    await sb
+      .from("outputs")
+      .update({ status: "challenged", debate_deadline: debateDeadline(flags), updated_at: new Date().toISOString() })
+      .eq("id", output.id);
+  }
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "output.review",
+      payload: {
+        output: output.id,
+        title: output.title,
+        kind,
+        rationale,
+        corroborations: tally.corroborate,
+        challenges: tally.challenge,
+      },
+    },
+    provenance,
+  );
+
+  return { status: verdict, corroborations: tally.corroborate, challenges: tally.challenge };
+}
+
+/** Count the distinct verdicts on an output. */
+export async function tallyOutputReviews(
+  sb: SupabaseClient,
+  outputId: string,
+): Promise<{ corroborate: number; challenge: number }> {
+  const { data } = await sb.from("output_reviews").select("kind").eq("output_id", outputId);
+  const rows = (data as { kind: string }[] | null) ?? [];
+  return {
+    corroborate: rows.filter((r) => r.kind === "corroborate").length,
+    challenge: rows.filter((r) => r.kind === "challenge").length,
+  };
 }

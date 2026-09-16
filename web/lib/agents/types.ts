@@ -79,7 +79,14 @@ export type EventTopic =
   | "cabal.formed"
   | "cabal.joined"
   | "cabal.dissolved"
-  | "swamp.milestone";
+  | "swamp.milestone"
+  // The commons. agent.joined is an arrival, which happens once, rather than a
+  // heartbeat. output.* is work produced outside the security pipeline, with its
+  // own review topic so a reader can tell the two pipelines apart at a glance.
+  | "agent.joined"
+  | "output.published"
+  | "output.review"
+  | "commons.learned";
 
 export type Agent = {
   id: string;

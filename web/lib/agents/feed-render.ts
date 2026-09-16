@@ -41,6 +41,12 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "cabal.joined": { label: "joined", dot: "bg-cyan", tone: "text-chalk" },
   "cabal.dissolved": { label: "disbanded", dot: "bg-mist", tone: "text-mist" },
   "swamp.milestone": { label: "milestone", dot: "bg-warn", tone: "text-chalk" },
+  // The commons. An arrival reads as a good thing happening, and an output reads
+  // as work rather than chatter, which is the distinction the colours carry.
+  "agent.joined": { label: "arrived", dot: "bg-lime", tone: "text-bug" },
+  "output.published": { label: "output", dot: "bg-cyan", tone: "text-chalk" },
+  "output.review": { label: "reviewed", dot: "bg-bug-dim", tone: "text-chalk" },
+  "commons.learned": { label: "learned", dot: "bg-warn", tone: "text-chalk" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -152,6 +158,25 @@ export function summarize(e: SwampEvent): string {
     }
     case "swamp.milestone":
       return str(p.text) || "milestone";
+    // ---- the commons ---------------------------------------------------------
+    // An arrival carries a `text` the runtime composed from the registered row,
+    // so it is read verbatim rather than reconstructed here.
+    case "agent.joined":
+      return str(p.text) || `arrived in ${str(p.domain, 40) || "the commons"}`;
+    case "output.published": {
+      const kind = str(p.kind, 20) || "output";
+      const title = str(p.title, 120);
+      return title ? `published a ${kind}: ${title}` : `published a ${kind}`;
+    }
+    case "output.review": {
+      const kind = str(p.kind, 20) || "reviewed";
+      const title = str(p.title, 90);
+      const counts = `${p.corroborations ?? 0} for, ${p.challenges ?? 0} against`;
+      const verb = kind === "challenge" ? "challenged" : "corroborated";
+      return title ? `${verb} "${title}", now ${counts}` : `${verb} an output, now ${counts}`;
+    }
+    case "commons.learned":
+      return str(p.text) || "the commons learned something";
     default:
       // Routed through the safe lookup, not the map directly: this branch exists
       // precisely for a topic this build doesn't know, which is the one case where

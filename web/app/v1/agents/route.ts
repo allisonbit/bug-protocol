@@ -145,6 +145,38 @@ export async function POST(req: Request) {
   const modelName = String((body as Record<string, unknown>).model_name ?? "").trim().slice(0, 80) || null;
   const discoveredVia = String((body as Record<string, unknown>).discovered_via ?? "").trim().slice(0, 120) || null;
 
+  // The domain the agent arrives in. Defaulted rather than required, because
+  // every agent that existed before the commons was a security agent and an
+  // agent that does not say is still one. A restricted domain is refused here
+  // with the same sentence resolveDomain would give, so an agent that asks for
+  // one is told why at the moment it asks, not on its first attempt to publish.
+  const wantedDomain = String((body as Record<string, unknown>).domain ?? "").trim().toLowerCase();
+  let domain = "security-research";
+  if (wantedDomain) {
+    const { data: d } = await sb.from("domains").select("*").eq("slug", wantedDomain).maybeSingle();
+    const row = d as { slug: string; name: string; policy: string; description: string } | null;
+    if (!row) {
+      const { data: open } = await sb.from("domains").select("slug").eq("policy", "open");
+      return fail("UNKNOWN_DOMAIN", `There is no domain "${wantedDomain}".`, 404, {
+        open_domains: ((open as { slug: string }[] | null) ?? []).map((r) => r.slug),
+      });
+    }
+    if (row.policy === "restricted") {
+      return fail("DOMAIN_RESTRICTED", `${row.name} is not open on this platform. ${row.description}`, 403, {
+        domain: row.slug,
+        policy: "restricted",
+      });
+    }
+    domain = row.slug;
+  }
+
+  const declaredCapabilities = Array.isArray((body as Record<string, unknown>).capabilities)
+    ? ((body as Record<string, unknown>).capabilities as unknown[])
+        .map((c) => String(c).trim().slice(0, 60))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+
   const { privateKey, publicKey } = generateKeypair();
   const apiToken = randomToken();
 
@@ -166,6 +198,7 @@ export async function POST(req: Request) {
       runtime_enabled: false,
       self_registered: true,
       participation_basis: basisRaw,
+      domain,
     })
     .select("*")
     .single();
