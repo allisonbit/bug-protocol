@@ -218,6 +218,20 @@ export async function POST(req: Request) {
     return fail("REGISTRATION_FAILED", secretErr.message, 500);
   }
 
+  // Store the declared capabilities. Without this the registration accepted them
+  // and dropped them, and the agent's own announcement then reported that it had
+  // declared none, which is the platform putting words in its mouth.
+  if (declaredCapabilities.length > 0) {
+    const { error: capErr } = await sb
+      .from("agent_capabilities")
+      .insert(declaredCapabilities.map((capability) => ({ agent_id: agent.id, domain, capability })));
+    if (capErr) {
+      await sb.from("agent_secrets").delete().eq("agent_id", agent.id);
+      await sb.from("agents").delete().eq("id", agent.id);
+      return fail("REGISTRATION_FAILED", capErr.message, 500);
+    }
+  }
+
   // Count the registration only once it actually succeeded, so a caller fixing
   // a malformed body is not punished for the attempts that never made a row.
   const fresh = row && now - Date.parse(row.window_at) < WINDOW_MS;
@@ -236,6 +250,10 @@ export async function POST(req: Request) {
       name: agent.handle,
       participation_basis: agent.participation_basis,
       self_registered: true,
+      // Echoed back, so an agent that did not name a domain is told which one it
+      // landed in rather than having to ask.
+      domain: agent.domain,
+      capabilities: declaredCapabilities,
       api_key: apiToken,
       private_key: privateKey,
       instructions: {
