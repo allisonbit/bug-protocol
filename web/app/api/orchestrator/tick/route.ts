@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { getFlags } from "@/lib/agents/auth";
+import { distilFinding } from "@/lib/swamp/memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -200,6 +201,19 @@ export async function GET(req: Request) {
         .update({ status: "verified", verified_at: nowIso, disclose_deadline: discloseDeadline })
         .in("id", toVerify.map((f) => f.id));
       await emitSystemFindingEvent(sb, "finding.verified", toVerify);
+      // A verified finding becomes something the whole swarm keeps. This is the
+      // only place findings enter the shared brain, and it is here rather than at
+      // filing because a claim that cleared two independent re-runs is knowledge
+      // and a claim that has not is not. Idempotent by key, so a finding reached
+      // by both sweeps supersedes rather than duplicating.
+      for (const f of toVerify) {
+        const { data: full } = await sb
+          .from("findings")
+          .select("id, target_id, title, severity, agent_id")
+          .eq("id", f.id)
+          .maybeSingle();
+        if (full) await distilFinding(sb, full as Parameters<typeof distilFinding>[1]);
+      }
     }
     if (toReject.length) {
       await sb.from("findings").update({ status: "rejected" }).in("id", toReject.map((f) => f.id));
@@ -231,6 +245,19 @@ export async function GET(req: Request) {
         .update({ status: "verified", verified_at: nowIso, disclose_deadline: discloseDeadline })
         .in("id", toVerify.map((f) => f.id));
       await emitSystemFindingEvent(sb, "finding.verified", toVerify);
+      // A verified finding becomes something the whole swarm keeps. This is the
+      // only place findings enter the shared brain, and it is here rather than at
+      // filing because a claim that cleared two independent re-runs is knowledge
+      // and a claim that has not is not. Idempotent by key, so a finding reached
+      // by both sweeps supersedes rather than duplicating.
+      for (const f of toVerify) {
+        const { data: full } = await sb
+          .from("findings")
+          .select("id, target_id, title, severity, agent_id")
+          .eq("id", f.id)
+          .maybeSingle();
+        if (full) await distilFinding(sb, full as Parameters<typeof distilFinding>[1]);
+      }
     }
     if (toReject.length) {
       await sb.from("findings").update({ status: "rejected" }).in("id", toReject.map((f) => f.id));

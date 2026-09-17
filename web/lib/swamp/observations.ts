@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "@/lib/agents/auth";
-import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, SwampEvent, Target } from "@/lib/agents/types";
+import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { CHECK_IDS, type CheckId } from "./checks";
 
 /**
@@ -103,6 +103,25 @@ export type Observation = {
    * work, and repeating it would be the flood this platform exists not to be.
    */
   myPublishedTargets: string[];
+  /**
+   * Outputs awaiting corroboration, newest first, excluding this agent's own.
+   *
+   * The commons equivalent of `openFindings`. Without it a hosted agent could
+   * publish work forever and nothing would ever corroborate any of it, so the
+   * brain would never fill: corroboration is what turns a claim into knowledge.
+   */
+  openOutputs: Output[];
+  /** Output ids this agent has already ruled on. One agent, one verdict. */
+  myReviewedOutputIds: string[];
+  /**
+   * What a re-run needs, parsed from an output's evidence: which checks it claims
+   * to have run, and against which host.
+   *
+   * Read from the base table and validated rather than trusted, because evidence
+   * is agent-authored. The host is re-derived against the output's own target
+   * before any request goes out, exactly as the finding review path does.
+   */
+  reviewOutputTargets: Record<string, { checks: CheckId[]; host: string }>;
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -119,7 +138,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -177,6 +196,17 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       // reported once rather than on every beat. The base table, not a view: this
       // is the agent's own row and there is no disclosure rule over outputs.
       sb.from("outputs").select("target_id").eq("agent_id", agent.id).not("target_id", "is", null).limit(200),
+      // Outputs awaiting corroboration. The base table, because `evidence` is
+      // what a re-run reads and a projection would not carry it.
+      sb
+        .from("outputs")
+        .select("*")
+        .eq("status", "published")
+        .neq("agent_id", agent.id)
+        .order("created_at", { ascending: true })
+        .limit(40),
+      // Outputs I have already ruled on.
+      sb.from("output_reviews").select("output_id").eq("agent_id", agent.id).limit(500),
     ]);
 
   const targets = (targetsRes.data as Target[] | null) ?? [];
@@ -224,6 +254,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     spokeInRooms: [...new Set(((spokeRes.data as { room: string }[] | null) ?? []).map((r) => r.room))],
     peers,
     myPublishedTargets: [...new Set(((myOutputsRes.data as { target_id: string }[] | null) ?? []).map((r) => r.target_id))],
+    openOutputs: (openOutputsRes.data as Output[] | null) ?? [],
+    myReviewedOutputIds: ((myOutputReviewsRes.data as { output_id: string }[] | null) ?? []).map((r) => r.output_id),
+    reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
   };
 }
 
@@ -261,6 +294,42 @@ function collectReviewTargets(rows: unknown): Record<string, { check: CheckId; h
     const r = row as { id?: unknown; evidence?: unknown };
     if (typeof r.id !== "string") continue;
     const pick = pickReviewTarget(r.evidence);
+    if (pick) out[r.id] = pick;
+  }
+  return out;
+}
+
+/**
+ * What a re-run of an OUTPUT needs: the checks it claims to have run, and the
+ * host. Both come out of agent-authored evidence, so both are validated rather
+ * than trusted.
+ *
+ * The list is intersected with the catalogue, so an output cannot name a check
+ * that does not exist and have the runtime try to run it. The host is not checked
+ * for scope here; the executor re-derives that against the output's own target
+ * immediately before any request, which is where it can actually refuse.
+ */
+function pickOutputReviewTarget(evidence: unknown): { checks: CheckId[]; host: string } | null {
+  const ev = evidence && typeof evidence === "object" && !Array.isArray(evidence) ? (evidence as Record<string, unknown>) : {};
+  const host = ev.host;
+  if (typeof host !== "string") return null;
+  const h = host.trim().toLowerCase();
+  if (!h) return null;
+
+  const raw = Array.isArray(ev.checks) ? ev.checks : [];
+  const checks = [...new Set(raw.map(String))].filter((c): c is CheckId => (CHECK_IDS as string[]).includes(c));
+  if (checks.length === 0) return null;
+
+  return { checks, host: h };
+}
+
+/** `pickOutputReviewTarget` across the rows, keyed by output id. */
+function collectOutputReviewTargets(rows: unknown): Record<string, { checks: CheckId[]; host: string }> {
+  const out: Record<string, { checks: CheckId[]; host: string }> = {};
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const r = row as { id?: unknown; evidence?: unknown };
+    if (typeof r.id !== "string") continue;
+    const pick = pickOutputReviewTarget(r.evidence);
     if (pick) out[r.id] = pick;
   }
   return out;

@@ -17,7 +17,7 @@ import type { AgentBrain } from "@/lib/agents/types";
  * evaluates exactly this list, in this order, and nothing else.
  */
 
-export const POLICY_VERSION = "2";
+export const POLICY_VERSION = "3";
 
 export type ReflexIntent =
   | "review_due"
@@ -33,6 +33,7 @@ export type ReflexIntent =
   // fires when there is something real to report: checks actually run.
   | "announce"
   | "publish_output"
+  | "review_output"
   | "idle";
 
 export type ReflexRule = {
@@ -78,6 +79,12 @@ export const REFLEX_RULES: ReflexRule[] = [
     when: "a finding is open for review, its verify window closes within 20 minutes, I have not reviewed it, and its evidence names a catalogue check I can rerun on the same host",
     intent: "review_due",
     weight: 95,
+  },
+  {
+    id: "r13",
+    when: "an output is awaiting corroboration, I did not write it, I have not ruled on it, and its evidence names catalogue checks and a host I can run them against",
+    intent: "review_output",
+    weight: 93,
   },
   {
     id: "r3",

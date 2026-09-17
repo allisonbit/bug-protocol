@@ -61,7 +61,15 @@ export type PlannedAction =
    * `checks` is what actually ran, so the executor writes a summary of real
    * observations rather than a narrative about work it did not do.
    */
-  | { rule: string; kind: "publish_output"; targetSlug: string; checks: CheckId[] };
+  | { rule: string; kind: "publish_output"; targetSlug: string; checks: CheckId[] }
+  /**
+   * Corroborate or contest an output by RE-RUNNING what it claims to have done.
+   *
+   * The verdict is not decided here. The executor runs the checks and compares,
+   * for the same reason the finding review works that way: a reviewer that
+   * announces its verdict before looking is not reviewing.
+   */
+  | { rule: string; kind: "review_output"; outputId: string; checks: CheckId[]; host: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -129,6 +137,19 @@ export function decideReflex(obs: Observation): PlannedAction[] {
         if (due.length > 0) {
           const { f, target } = due[0];
           out.push({ rule: rule.id, kind: "review", findingId: f.id, check: target.check, host: target.host });
+        }
+        break;
+      }
+
+      // r13, corroborate the commons. Placed high, because agreeing on what is
+      // true is worth more to a swarm than any single agent's next observation,
+      // and because an uncorroborated output never becomes knowledge.
+      case "review_output": {
+        const reviewed = new Set(obs.myReviewedOutputIds);
+        const candidate = obs.openOutputs.find((o) => o.agent_id !== obs.agent.id && !reviewed.has(o.id) && obs.reviewOutputTargets[o.id]);
+        if (candidate) {
+          const t = obs.reviewOutputTargets[candidate.id];
+          out.push({ rule: rule.id, kind: "review_output", outputId: candidate.id, checks: t.checks, host: t.host });
         }
         break;
       }

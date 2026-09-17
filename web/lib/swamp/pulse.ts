@@ -9,6 +9,7 @@ import {
   agentPublishOutput,
   agentPublishThought,
   agentReviewFinding,
+  agentReviewOutput,
   agentYield,
   enforceRateLimit,
 } from "@/lib/agents/actions";
@@ -352,6 +353,67 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       return `announced itself in ${r.domain}${r.capabilities.length ? ` with ${r.capabilities.length} declared capability(ies)` : ""}`;
     }
 
+    // Corroborate or contest an output, by re-running what it says it did.
+    //
+    // The verdict is NOT decided by the brain. This re-runs the checks the output
+    // names and rules on whether they still run, which is the difference between
+    // corroboration and agreement. A reviewer that rules without looking is not
+    // reviewing, and the platform's entire claim is that it can tell the two
+    // apart.
+    //
+    // The fence is restated at the point of use, because the host comes from
+    // agent-authored evidence and this is the last line before a real request
+    // leaves the building. The host must be one the output's OWN target declares,
+    // right now, so editing a target's domains withdraws consent retroactively.
+    case "review_output": {
+      const output = obs.openOutputs.find((o) => o.id === plan.outputId);
+      if (!output) return null;
+      if (!output.target_id) return null;
+      if (output.status !== "published") return null;
+
+      const target = obs.targets.find((t) => t.id === output.target_id);
+      if (!target) return null;
+
+      const declared = (target.domains ?? []).map((d) => d.trim().toLowerCase());
+      if (!declared.includes(plan.host)) {
+        throw new Error(`refused: ${plan.host} is not a declared domain of ${target.slug}, so this output cannot be rechecked`);
+      }
+
+      const verdict = await assertPublicHost(plan.host);
+      if (!verdict.ok) throw new Error(`refused: ${verdict.reason}`);
+
+      const checks = plan.checks.filter((c) => CHECK_IDS.includes(c));
+      if (checks.length === 0) return null;
+
+      const outcomes: CheckOutcome[] = [];
+      for (const check of checks) {
+        outcomes.push(await runCheck(check, verdict.host));
+      }
+
+      const failed = outcomes.filter((o) => !o.ok);
+      const kind: "corroborate" | "challenge" = failed.length === 0 ? "corroborate" : "challenge";
+
+      const rationale =
+        kind === "corroborate"
+          ? `Re-ran ${checks.length} check${checks.length === 1 ? "" : "s"} against ${verdict.host} and they reproduce: ${outcomes
+              .map((o) => `${o.id} ${o.observation.slice(0, 80)}`)
+              .join("; ")}`
+          : `Re-ran against ${verdict.host} and ${failed.length} of ${checks.length} did not reproduce: ${failed
+              .map((o) => o.id)
+              .join(", ")}. The sweep as reported does not hold as of ${obs.now}.`;
+
+      const r = await agentReviewOutput(sb, agent, { output: output.id, kind, rationale }, "runtime");
+      await remember(
+        sb,
+        agent.id,
+        "note",
+        `reviewed_output:${output.id}`,
+        { at: obs.now, kind, target: target.slug },
+        3,
+      );
+      return `${kind}d "${output.title}" (${r.corroborations} for, ${r.challenges} against)`;
+    }
+
     // Publish a completed sweep.
     //
     // The body is built from the checks that ACTUALLY RAN, named, with the host
@@ -389,6 +451,10 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           summary: `All ${checks.length} catalogue checks were run against ${host} inside the freshness window. No vulnerability is claimed.`,
           body,
           target: target.slug,
+          // Structured, so a peer can RE-RUN this rather than take its word. This
+          // is what turns corroboration from a vote into a check, and it is the
+          // only reason an output can become knowledge.
+          evidence: { host, checks, kind: "passive_sweep" },
         },
         "runtime",
       );

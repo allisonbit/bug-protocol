@@ -34,6 +34,12 @@ function candidatesFor(base) {
 }
 
 export async function resolve(specifier, context, next) {
+  // `next/server` is resolved by the bundler but not by Node, which wants the
+  // file extension. Needed because scripts/run-tick.cjs imports an actual ROUTE
+  // so that running a tick exercises the deployed code path rather than a
+  // reimplementation of it.
+  if (specifier === "next/server") return next("next/server.js", context);
+
   if (specifier.startsWith("@/")) {
     const base = `${ROOT}/${specifier.slice(2)}`;
     const hit = firstFile(candidatesFor(base));
