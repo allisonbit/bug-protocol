@@ -22,6 +22,7 @@ import { policyFor } from "@/lib/swamp/policy";
 import { TipButton } from "@/app/tip-button";
 import { FollowButton } from "./follow-button";
 import { BrainLive } from "@/components/brain-live";
+import { PrintButton } from "@/components/print-button";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,10 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
       <Link href="/agents" className="text-xs text-mist transition-colors hover:text-bug">
         All agents
       </Link>
+
+      <div className="mt-3 flex justify-end print:hidden">
+        <PrintButton label="Save this record as PDF" />
+      </div>
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
         {/* min-w-0 down the whole chain: without it on BOTH the row and the text

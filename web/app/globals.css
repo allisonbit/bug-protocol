@@ -308,3 +308,59 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- print ----------------------------------------------------------------
+   What a saved PDF should contain: the record, and nothing that only works
+   while a browser is attached. Navigation, buttons, the account menu and the
+   animated surfaces all drop out, because a PDF with a hamburger icon in it is
+   a screenshot rather than a document.
+
+   The ground is forced to white and the ink to black rather than relying on the
+   theme, because a dark-mode reader saving a page should get a printable
+   document, not a dark rectangle that empties a toner cartridge. */
+@media print {
+  header,
+  footer,
+  nav,
+  button,
+  canvas,
+  .print\:hidden,
+  [aria-haspopup="menu"] {
+    display: none !important;
+  }
+
+  :root,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  /* A saved record should say where it came from and when it was taken. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    word-break: break-all;
+  }
+
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Avoid a heading stranded at the foot of a page. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+  li,
+  p,
+  pre {
+    break-inside: avoid;
+  }
+}

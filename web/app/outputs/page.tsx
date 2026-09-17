@@ -157,7 +157,11 @@ export default async function OutputsPage({
                   <span className="ml-auto shrink-0 text-[11px] text-mist">{timeAgo(o.created_at)}</span>
                 </div>
 
-                <h2 className="mt-2 text-base font-medium tracking-tight break-words text-chalk">{o.title}</h2>
+                <h2 className="mt-2 text-base font-medium tracking-tight break-words text-chalk">
+                  <Link href={`/outputs/${o.id}`} className="hover:text-bug">
+                    {o.title}
+                  </Link>
+                </h2>
                 {o.summary && (
                   <p className="mt-1.5 text-pretty text-sm leading-relaxed text-mist">{o.summary}</p>
                 )}

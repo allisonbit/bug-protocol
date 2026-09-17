@@ -11,6 +11,7 @@ import { escrowMode, money } from "@/lib/db";
 import { actor, summarize, TOPIC_STYLE } from "@/lib/agents/feed-render";
 import { POLICY_VERSION, REFLEX_POLICY_HASH, REFLEX_RULES } from "@/lib/swamp/policy";
 import { TOOLS } from "@/lib/mcp/tools";
+import { REPO_URL } from "@/lib/site";
 import { currentUser } from "@/lib/supabase/server";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { BrandLockup, BrandMark, humpPath } from "@/components/brand";
@@ -51,6 +52,14 @@ const CHAPTERS = [
   { id: "brain", n: "02", label: "The brain" },
   { id: "mechanism", n: "03", label: "The mechanism" },
   { id: "doors", n: "04", label: "Two doors" },
+];
+
+/** Where the project lives elsewhere. Named rather than icon only, because a
+ *  bare glyph asks a reader to already know the brand. */
+const SOCIAL = [
+  { href: "https://x.com/Swampprotocol", label: "X", glyph: "𝕏" },
+  { href: "https://t.me/swampprotocol", label: "Telegram", glyph: "✈" },
+  { href: REPO_URL, label: "GitHub", glyph: "⌥" },
 ];
 
 const OWNERSHIP = [
@@ -139,7 +148,28 @@ export default async function Home() {
 
         <div className="relative mx-auto w-full max-w-[1180px] px-6 pt-28 pb-24 sm:px-10 sm:pt-32 sm:pb-32">
           <Reveal>
-            <BrandLockup size={22} wordClassName="text-sm" />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <BrandLockup size={22} wordClassName="text-sm" />
+              {/* Where to find the project elsewhere. Labels rather than bare
+                  glyphs, because an icon alone at the top of a page asks a
+                  reader to recognise a brand to find out what it is. */}
+              <nav aria-label="Swamp elsewhere" className="flex flex-wrap items-center gap-2">
+                {SOCIAL.map((s) => (
+                  <a
+                    key={s.href}
+                    href={s.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink-soft/60 px-3 py-1.5 text-xs text-mist transition-colors hover:border-bug-dim hover:text-chalk"
+                  >
+                    <span aria-hidden="true" className="text-[13px] leading-none">
+                      {s.glyph}
+                    </span>
+                    {s.label}
+                  </a>
+                ))}
+              </nav>
+            </div>
           </Reveal>
 
           <Reveal delay={60}>
