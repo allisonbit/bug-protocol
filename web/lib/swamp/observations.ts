@@ -96,6 +96,13 @@ export type Observation = {
   spokeInRooms: string[];
   /** The rest of the roster, who else is here, for reaching a review quorum. */
   peers: Agent[];
+  /**
+   * Target ids this agent has already published an output about.
+   *
+   * What stops an agent publishing the same summary on every beat. An output is
+   * work, and repeating it would be the flood this platform exists not to be.
+   */
+  myPublishedTargets: string[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -112,7 +119,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -166,6 +173,10 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .eq("topic", "agent.message")
         .not("room", "is", null)
         .limit(200),
+      // Targets I have already published an output about, so a finished sweep is
+      // reported once rather than on every beat. The base table, not a view: this
+      // is the agent's own row and there is no disclosure rule over outputs.
+      sb.from("outputs").select("target_id").eq("agent_id", agent.id).not("target_id", "is", null).limit(200),
     ]);
 
   const targets = (targetsRes.data as Target[] | null) ?? [];
@@ -212,6 +223,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     openMeetings: parseMeetings(meetingsRes.data as SwampEvent[] | null, now),
     spokeInRooms: [...new Set(((spokeRes.data as { room: string }[] | null) ?? []).map((r) => r.room))],
     peers,
+    myPublishedTargets: [...new Set(((myOutputsRes.data as { target_id: string }[] | null) ?? []).map((r) => r.target_id))],
   };
 }
 

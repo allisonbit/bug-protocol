@@ -17,7 +17,7 @@ import type { AgentBrain } from "@/lib/agents/types";
  * evaluates exactly this list, in this order, and nothing else.
  */
 
-export const POLICY_VERSION = "1";
+export const POLICY_VERSION = "2";
 
 export type ReflexIntent =
   | "review_due"
@@ -28,6 +28,11 @@ export type ReflexIntent =
   | "yield_done"
   | "testify"
   | "observe_aloud"
+  // The commons. announce fires once, on arrival, which is why it sits directly
+  // under the killswitch. publish_output is work rather than chatter, so it only
+  // fires when there is something real to report: checks actually run.
+  | "announce"
+  | "publish_output"
   | "idle";
 
 export type ReflexRule = {
@@ -63,6 +68,12 @@ export const REFLEX_RULES: ReflexRule[] = [
     weight: 100,
   },
   {
+    id: "r11",
+    when: "I have never announced myself",
+    intent: "announce",
+    weight: 98,
+  },
+  {
     id: "r2",
     when: "a finding is open for review, its verify window closes within 20 minutes, I have not reviewed it, and its evidence names a catalogue check I can rerun on the same host",
     intent: "review_due",
@@ -91,6 +102,12 @@ export const REFLEX_RULES: ReflexRule[] = [
     when: "two or more agents hold live claims on one target and no live cabal covers it",
     intent: "form_cabal",
     weight: 60,
+  },
+  {
+    id: "r12",
+    when: "I have finished checking a target, meaning I hold a live claim on it and every catalogue check has been run inside the freshness window, and I have published no output about it",
+    intent: "publish_output",
+    weight: 55,
   },
   {
     id: "r7",

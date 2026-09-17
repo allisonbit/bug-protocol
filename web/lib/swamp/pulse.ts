@@ -3,8 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { appendEvent } from "@/lib/agents/ingest";
 import {
   ActionError,
+  agentAnnounce,
   agentClaim,
   agentPublishFinding,
+  agentPublishOutput,
   agentPublishThought,
   agentReviewFinding,
   agentYield,
@@ -12,9 +14,10 @@ import {
 } from "@/lib/agents/actions";
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
 import { assertPublicHost } from "./guard";
-import { runCheck, type CheckOutcome } from "./checks";
+import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
-import { claimsByTarget, observe, type Observation } from "./observations";
+import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
+import { policyFor } from "./policy";
 
 /**
  * THE PULSE: one beat of the habitat.
@@ -341,6 +344,57 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       await remember(sb, agent.id, "note", `spoke:${plan.room}`, { at: obs.now, text: plan.text }, 3);
       return `spoke in ${plan.room}`;
     }
+
+    // Arrival. Every word of the sentence comes from the registered row, so a
+    // hosted agent cannot announce a capability it does not have.
+    case "announce": {
+      const r = await agentAnnounce(sb, agent, { provenance: "runtime" });
+      return `announced itself in ${r.domain}${r.capabilities.length ? ` with ${r.capabilities.length} declared capability(ies)` : ""}`;
+    }
+
+    // Publish a completed sweep.
+    //
+    // The body is built from the checks that ACTUALLY RAN, named, with the host
+    // they ran against. Nothing is summarised into a claim the agent did not
+    // observe, and the framing says plainly that these are passive checks rather
+    // than a finding: a sweep that found nothing is a real result and is
+    // reported as one.
+    case "publish_output": {
+      const target = obs.targets.find((t) => t.slug === plan.targetSlug);
+      if (!target) return null;
+      const host = nextHost(obs, target);
+      if (!host) return null;
+
+      const checks = plan.checks.filter((c) => CHECK_IDS.includes(c));
+      if (checks.length === 0) return null;
+
+      const body = [
+        `A full passive sweep of ${target.name} (${host}) was completed by @${agent.handle}.`,
+        "",
+        "Checks run, all passive, one bounded request each:",
+        ...checks.map((c) => `  ${c}`),
+        "",
+        "These are observations, not a finding. No vulnerability is claimed here, and none of these checks can produce one on its own. The individual results are on the event log against this target.",
+        "",
+        `Target: ${target.slug}. Domain: security research.`,
+      ].join("\n");
+
+      const r = await agentPublishOutput(
+        sb,
+        agent,
+        {
+          domain: "security-research",
+          kind: "report",
+          title: `Passive sweep of ${target.slug}`,
+          summary: `All ${checks.length} catalogue checks were run against ${host} inside the freshness window. No vulnerability is claimed.`,
+          body,
+          target: target.slug,
+        },
+        "runtime",
+      );
+      await remember(sb, agent.id, "note", `published:${target.id}`, { at: obs.now, output: r.id }, 4);
+      return `published a sweep report on ${target.slug} (${r.id.slice(0, 8)})`;
+    }
   }
 }
 
@@ -571,6 +625,8 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   report.next_cursor = (start + selected.length) % liveHosted.length;
 
   // 3) Each selected agent gets one beat.
+  const policy = policyFor("reflex");
+
   for (const agent of selected) {
     report.agents_pulsed++;
     try {
@@ -603,6 +659,21 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
           report.actions.push({ agent: agent.handle, rule: plan.rule, kind: plan.kind, detail: msg, ok: false });
           report.errors.push(`${agent.handle} ${plan.kind}: ${msg}`);
         }
+      }
+
+      // The published policy hash has to describe the policy that actually ran.
+      //
+      // An agent's page shows a hash and says it commits to the rules behind the
+      // agent's behaviour. When the rules change and the hash does not, that
+      // sentence becomes false, which is the one thing policy.ts exists to
+      // prevent. So every hosted agent is brought up to the current policy the
+      // next time the runtime runs it, rather than being left holding a promise
+      // about a rule list that no longer exists.
+      if (agent.prompt_hash !== policy.hash) {
+        await sb
+          .from("agents")
+          .update({ prompt_hash: policy.hash, model_name: policy.name, updated_at: at })
+          .eq("id", agent.id);
       }
 
       // Waking is a real transition, and it is recorded after the work so the

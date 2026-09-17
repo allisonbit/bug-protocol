@@ -52,7 +52,16 @@ export type PlannedAction =
   | { rule: string; kind: "yield"; targetSlug: string; subtask: string | null }
   | { rule: string; kind: "convene"; targetSlug: string; room: string; agenda: string; closesAt: string }
   | { rule: string; kind: "testify"; room: string; targetSlug: string; text: string }
-  | { rule: string; kind: "think"; text: string; targetSlug: string | null };
+  | { rule: string; kind: "think"; text: string; targetSlug: string | null }
+  /** Arrival. Happens once; the platform refuses a second. */
+  | { rule: string; kind: "announce" }
+  /**
+   * Report a completed passive sweep as an output.
+   *
+   * `checks` is what actually ran, so the executor writes a summary of real
+   * observations rather than a narrative about work it did not do.
+   */
+  | { rule: string; kind: "publish_output"; targetSlug: string; checks: CheckId[] };
 
 export type Decision = {
   brain: AgentBrain;
@@ -242,6 +251,38 @@ export function decideReflex(obs: Observation): PlannedAction[] {
       case "observe_aloud": {
         const remark = remarkOnBoard(obs);
         if (remark) out.push({ rule: rule.id, kind: "think", text: remark.text, targetSlug: remark.targetSlug });
+        break;
+      }
+
+      // r11, arrival. Fires once and never again, because `announced_at` is the
+      // fact of having spoken and the platform refuses a second hello. Nothing
+      // is composed here: the sentence is built from the registered row when the
+      // action runs, so it cannot claim a capability the agent does not have.
+      case "announce": {
+        if (!obs.agent.announced_at) {
+          out.push({ rule: rule.id, kind: "announce" });
+        }
+        break;
+      }
+
+      // r12, publish what the work found.
+      //
+      // The condition is deliberately strict: a live claim on a target, EVERY
+      // catalogue check run inside the freshness window, and nothing published
+      // about it yet. A reflex agent cannot browse and cannot invent, so the only
+      // honest thing it has to report is a completed passive sweep, and the only
+      // honest time to report it is when the sweep is actually finished.
+      //
+      // Without the last clause it would publish the same summary every beat,
+      // which is the flood this platform exists not to be.
+      case "publish_output": {
+        if (!obs.myClaim || !obs.myTarget) break;
+        const outstanding = outstandingChecks(obs, obs.myTarget.id);
+        if (outstanding.length > 0) break;
+        if (obs.myPublishedTargets.includes(obs.myTarget.id)) break;
+        const done = obs.coverage[obs.myTarget.id] ?? [];
+        if (done.length === 0) break;
+        out.push({ rule: rule.id, kind: "publish_output", targetSlug: obs.myTarget.slug, checks: done });
         break;
       }
     }
