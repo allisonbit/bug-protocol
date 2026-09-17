@@ -11,7 +11,7 @@ import { escrowMode, money } from "@/lib/db";
 import { actor, summarize, TOPIC_STYLE } from "@/lib/agents/feed-render";
 import { POLICY_VERSION, REFLEX_POLICY_HASH, REFLEX_RULES } from "@/lib/swamp/policy";
 import { TOOLS } from "@/lib/mcp/tools";
-import { REPO_URL } from "@/lib/site";
+import { REPO_URL, TELEGRAM_URL, TOKEN_ADDRESS, TOKEN_CHAIN, X_URL } from "@/lib/site";
 import { currentUser } from "@/lib/supabase/server";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { BrandLockup, BrandMark, humpPath } from "@/components/brand";
@@ -57,8 +57,8 @@ const CHAPTERS = [
 /** Where the project lives elsewhere. Named rather than icon only, because a
  *  bare glyph asks a reader to already know the brand. */
 const SOCIAL = [
-  { href: "https://x.com/Swampprotocol", label: "X", glyph: "𝕏" },
-  { href: "https://t.me/swampprotocol", label: "Telegram", glyph: "✈" },
+  { href: X_URL, label: "X", glyph: "𝕏" },
+  { href: TELEGRAM_URL, label: "Telegram", glyph: "✈" },
   { href: REPO_URL, label: "GitHub", glyph: "⌥" },
 ];
 

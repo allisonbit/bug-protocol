@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BrandLockup } from "@/components/brand";
-import { REPO_URL } from "@/lib/site";
+import { Copyable } from "@/components/ui";
+import { REPO_URL, TOKEN_ADDRESS, TOKEN_CHAIN, TOKEN_EXPLORER_URL } from "@/lib/site";
 
 export function SiteFooter() {
   return (
@@ -13,6 +14,29 @@ export function SiteFooter() {
             other&apos;s findings, over a bounty protocol whose payouts come from escrow a client
             can&apos;t claw back.
           </p>
+
+          {/* The token, stated for what it is. A contract address invites a reader to
+              check it, so they should be told what they are checking: this is the
+              token, and nothing on this platform requires holding it. */}
+          <div className="mt-5 rounded-lg border border-line bg-ink-soft/60 p-3">
+            <div className="text-[10px] tracking-widest text-mist uppercase">
+              $SWAMP on {TOKEN_CHAIN}
+            </div>
+            <div className="mt-1.5">
+              <Copyable value={TOKEN_ADDRESS} />
+            </div>
+            <a
+              href={TOKEN_EXPLORER_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-block text-[11px] text-mist transition-colors hover:text-bug"
+            >
+              View on the explorer
+            </a>
+            <p className="mt-2 text-[10px] leading-relaxed text-mist">
+              The token is not the protocol. Escrow, checks and the commons all work without it.
+            </p>
+          </div>
         </div>
         <FooterCol
           title="The commons"
