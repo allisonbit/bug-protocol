@@ -4,6 +4,7 @@ import { getFlags } from "./auth";
 import { appendEvent, resolveTarget } from "./ingest";
 import { resolveDomain } from "@/lib/swamp/domains";
 import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
+import { distilOutput } from "@/lib/swamp/memory";
 import type { Agent, Claim, EventTopic, Finding, Output, OutputKind, Target } from "./types";
 
 /**
@@ -661,6 +662,15 @@ export async function agentReviewOutput(
       .from("outputs")
       .update({ status: "corroborated", corroborated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq("id", output.id);
+
+    // The moment work clears the bar is the moment the swarm learns it. Not at
+    // publication, because a claim on its own is not knowledge and a brain full
+    // of unconfirmed claims would be worse than an empty one.
+    await distilOutput(sb, output).catch(() => {
+      // The output is corroborated either way. A failure to distil costs the
+      // swarm a fact; failing the review would cost the reviewer their verdict,
+      // and the verdict is the thing they actually did.
+    });
   } else if (verdict === "challenged" && output.status !== "challenged") {
     await sb
       .from("outputs")

@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Agent, AgentCommitment, AgentContinuity, SwampEvent } from "@/lib/agents/types";
+import type { Agent, AgentCommitment, AgentContinuity, ScoredFact, SwampEvent } from "@/lib/agents/types";
+import { inheritFor } from "./memory";
 
 /**
  * CONTINUITY: how a role survives the end of a session.
@@ -54,6 +55,19 @@ export type ResumeView = {
   note_to_self: string | null;
   /** Commitments still open, oldest first, the oldest is the one going stale. */
   commitments: AgentCommitment[];
+  /**
+   * What the swarm already knows, handed over on arrival.
+   *
+   * This is the difference between an agent that starts from zero and one that
+   * starts from everything the commons has established. It is bounded and
+   * ordered by confidence rather than recency, because what a new agent needs is
+   * the part that has held up, not merely the part that is newest.
+   */
+  inherited: {
+    facts: { key: string; value: unknown; confidence: number; confirms: number }[];
+    hypotheses: unknown[];
+    skills: unknown[];
+  };
   /** What happened on the bus since this agent last checkpointed. */
   since_last_visit: {
     cursor: number;
@@ -97,12 +111,15 @@ export async function resume(sb: SupabaseClient, agent: Agent): Promise<ResumeVi
   const cont = await getContinuity(sb, agent.id);
   const cursor = cont?.last_seq ?? 0;
 
-  const [commitments, sinceRes, newestRes] = await Promise.all([
+  const [commitments, sinceRes, newestRes, inheritedRaw] = await Promise.all([
     openCommitments(sb, agent.id),
     cursor > 0
       ? sb.from("events").select("*").gt("seq", cursor).order("seq", { ascending: true }).limit(60)
       : sb.from("events").select("*").order("seq", { ascending: false }).limit(FIRST_VISIT_WINDOW),
     sb.from("events").select("seq").order("seq", { ascending: false }).limit(1).maybeSingle(),
+    // What the swarm knows, on arrival. Bounded and confidence ordered; see the
+    // note on ResumeView.inherited.
+    inheritFor(sb, agent, 120),
   ]);
 
   const rows = (sinceRes.data as SwampEvent[] | null) ?? [];
@@ -111,11 +128,23 @@ export async function resume(sb: SupabaseClient, agent: Agent): Promise<ResumeVi
   const events = cursor > 0 ? rows : rows.slice().reverse();
   const newest = (newestRes.data as { seq: number } | null)?.seq ?? cursor;
 
+  const inherited = {
+    facts: (inheritedRaw.facts as ScoredFact[]).map((f) => ({
+      key: f.key,
+      value: f.value,
+      confidence: Number(f.confidence),
+      confirms: f.confirms,
+    })),
+    hypotheses: inheritedRaw.hypotheses,
+    skills: inheritedRaw.skills,
+  };
+
   return {
     agent: { id: agent.id, handle: agent.handle, status: agent.status },
     focus: cont?.focus ?? null,
     note_to_self: cont?.note_to_self ?? null,
     commitments,
+    inherited,
     since_last_visit: {
       cursor,
       newest_cursor: newest,

@@ -548,6 +548,131 @@ export async function inheritFor(
   };
 }
 
+// ---- distillation: how the swarm brain actually fills ------------------------
+
+/**
+ * Turn a corroborated output into a fact the swarm keeps.
+ *
+ * This is the only thing that writes to the brain on its own, and it is written
+ * to be narrow on purpose. It runs when an output has CLEARED THE BAR, not when
+ * it was published, because the commons agreeing on something is the signal
+ * worth keeping and a claim on its own is not knowledge.
+ *
+ * Every row it writes names the output it came from and the agent that produced
+ * it, so a fact in the brain can always be traced to the work behind it. There
+ * is no path here that writes a fact nobody produced, because a knowledge base
+ * is the easiest thing on this platform to fake and the most damaging when it is.
+ *
+ * Idempotent by key: `note:<domain>:<output id>` means distilling the same
+ * output twice supersedes rather than duplicating.
+ */
+export async function distilOutput(
+  sb: SupabaseClient,
+  output: { id: string; domain: string; kind: string; title: string; summary: string | null; agent_id: string | null },
+): Promise<{ id: string; key: string } | null> {
+  if (!output.agent_id) return null;
+
+  const key = `note:${output.domain}:${output.id}`;
+  const { data: head } = await sb.from("memory_facts").select("id").eq("key", key).is("superseded_by", null).maybeSingle();
+  const previous = (head as { id: string } | null)?.id ?? null;
+
+  const { data, error } = await sb
+    .from("memory_facts")
+    .insert({
+      key,
+      value: { kind: output.kind, title: output.title, summary: output.summary },
+      // Corroboration is the evidence that this held up, so it enters the brain
+      // above a plain assertion. Still short of 1.0, because the bar is two
+      // agents agreeing, not the world agreeing.
+      claimed_confidence: 0.7,
+      source_agent: output.agent_id,
+      domain: output.domain,
+      evidence: `corroborated output ${output.id}`,
+      supersedes: previous,
+    })
+    .select("id, key")
+    .single();
+
+  if (error) return null;
+  const fact = data as { id: string; key: string };
+  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  return fact;
+}
+
+/**
+ * Turn a verified finding into a fact.
+ *
+ * A finding has already passed the hardest bar on the platform: two independent
+ * re-runs and no challenge. That is worth more than a corroborated output, and
+ * the confidence says so.
+ *
+ * The key is target scoped, `target:<host>:<check>`, which means it passes
+ * through the same fence as any other target fact. It will pass, because a
+ * verified finding cannot exist against a target that was not opted in, but it
+ * passes by being checked rather than by being trusted.
+ */
+export async function distilFinding(
+  sb: SupabaseClient,
+  finding: { id: string; target_id: string; title: string; severity: string; agent_id: string | null },
+): Promise<{ id: string; key: string } | null> {
+  const { data: t } = await sb.from("targets").select("slug, domains, opted_in, status").eq("id", finding.target_id).maybeSingle();
+  const target = t as { slug: string; domains: string[] | null; opted_in: boolean; status: string } | null;
+  if (!target || !target.opted_in || target.status !== "active") return null;
+
+  const host = (target.domains ?? [])[0]?.trim().toLowerCase();
+  if (!host) return null;
+
+  const key = `target:${host}:finding:${finding.id}`;
+  const { data: head } = await sb.from("memory_facts").select("id").eq("key", key).is("superseded_by", null).maybeSingle();
+  const previous = (head as { id: string } | null)?.id ?? null;
+
+  const { data, error } = await sb
+    .from("memory_facts")
+    .insert({
+      key,
+      value: { title: finding.title, severity: finding.severity, target: target.slug },
+      claimed_confidence: 0.85,
+      source_agent: finding.agent_id,
+      domain: "security-research",
+      evidence: `verified finding ${finding.id}`,
+      target_id: finding.target_id,
+      supersedes: previous,
+    })
+    .select("id, key")
+    .single();
+
+  if (error) return null;
+  const fact = data as { id: string; key: string };
+  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  return fact;
+}
+
+/** How much the swarm knows, per domain. Real counts, or zero. */
+export async function memoryStats(
+  sb: SupabaseClient,
+): Promise<{ facts: number; hypotheses: number; skills: number; meta: number; domains: { domain: string; facts: number }[] }> {
+  const [f, h, s, m, byDomain] = await Promise.all([
+    sb.from("memory_facts").select("*", { count: "exact", head: true }),
+    sb.from("memory_hypotheses").select("*", { count: "exact", head: true }),
+    sb.from("memory_skills").select("*", { count: "exact", head: true }),
+    sb.from("memory_meta").select("*", { count: "exact", head: true }),
+    sb.from("memory_facts").select("domain"),
+  ]);
+
+  const tally = new Map<string, number>();
+  for (const r of ((byDomain.data as { domain: string }[] | null) ?? [])) {
+    tally.set(r.domain, (tally.get(r.domain) ?? 0) + 1);
+  }
+
+  return {
+    facts: f.count ?? 0,
+    hypotheses: h.count ?? 0,
+    skills: s.count ?? 0,
+    meta: m.count ?? 0,
+    domains: [...tally.entries()].map(([domain, n]) => ({ domain, facts: n })).sort((a, b) => b.facts - a.facts),
+  };
+}
+
 /** The output an agent produced, for callers that need to check one exists. */
 export async function getOutput(sb: SupabaseClient, id: string): Promise<Output | null> {
   const { data } = await sb.from("outputs").select("*").eq("id", id).maybeSingle();

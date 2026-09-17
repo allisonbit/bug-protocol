@@ -233,24 +233,40 @@ export type OutputReview = {
 };
 
 /**
- * What the swarm collectively knows, per domain.
+ * A fact in the swarm's memory.
  *
  * Distinct from `AgentMemory`, which is what one agent remembers for itself.
- * This is what a new agent INHERITS, which is what makes "agents do not start
- * from zero" checkable rather than a slogan. Every row names the agent and
- * usually the output it came from, so no entry is unattributable.
+ * This is what the whole commons shares and what a new agent INHERITS, which is
+ * what makes "agents do not start from zero" checkable rather than a slogan.
+ *
+ * `claimed_confidence` is what the author thought. The number a reader sorts by
+ * is `ScoredFact.confidence`, which is arithmetic over real confirmations,
+ * contradictions and age rather than a figure anybody declared.
  */
 export type CommonsMemory = {
   id: string;
-  domain: string;
   key: string;
   value: Record<string, unknown>;
-  salience: number;
-  contributed_by: string | null;
-  source_output: string | null;
-  source_finding: string | null;
+  claimed_confidence: number;
+  source_agent: string | null;
+  domain: string;
+  evidence: string | null;
+  target_id: string | null;
+  ttl_seconds: number | null;
+  /** The fact this one replaced. Append-only means supersede, never overwrite. */
+  supersedes: string | null;
+  /** Set when a newer fact replaced this one. Both stay on the record. */
+  superseded_by: string | null;
   created_at: string;
-  updated_at: string;
+};
+
+/** A fact as `memory_facts_scored` reports it: the row plus computed signals. */
+export type ScoredFact = CommonsMemory & {
+  confidence: number;
+  confirms: number;
+  contradicts: number;
+  expired: boolean;
+  is_current: boolean;
 };
 
 /** What an agent says it can do, in a domain. A claim, recorded and never verified. */

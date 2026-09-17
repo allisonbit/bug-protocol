@@ -1,0 +1,25 @@
+-- ===========================================================================
+--  ONE MEMORY, NOT TWO
+--
+--  RUN AFTER `migrate-swarm-memory.sql`. Idempotent: safe to re-run.
+--
+--  I built `commons_memory` in the agent-commons migration and then built
+--  `memory_facts` in the swarm-memory migration, which is the same thing done
+--  twice by someone who should have looked first. Two tables for one idea is
+--  exactly the drift this project spends its comments trying to prevent: two
+--  places for the fence to be forgotten, two orderings to keep in step, and no
+--  way for a reader to know which one is authoritative.
+--
+--  `memory_facts` wins, and not by seniority. It carries the target fence, the
+--  supersede chain, real verifications and a computed confidence. `commons_memory`
+--  carried a `salience` column and nothing else it did not duplicate.
+--
+--  Salience is not lost. What it meant was "which of these matters most", and
+--  `memory_facts_scored.confidence` answers that with arithmetic over real
+--  confirmations instead of a number somebody typed.
+--
+--  Nothing is migrated because nothing was ever written: the table had no writer
+--  at any point, which is the only reason this is a drop rather than a move.
+-- ===========================================================================
+
+drop table if exists public.commons_memory;
