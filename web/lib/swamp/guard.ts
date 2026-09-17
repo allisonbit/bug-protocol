@@ -137,13 +137,35 @@ export async function assertPublicHost(raw: string): Promise<HostVerdict> {
   if (!host.includes(".")) return { ok: false, reason: "not a fully qualified domain name" };
 
   const [a, aaaa] = await Promise.all([doh(host, "A"), doh(host, "AAAA")]);
-  const addresses = [...a.answers, ...aaaa.answers].map((x) => x.data);
+
+  // ONLY address records. A DNS answer for a CNAME'd host carries the CNAME
+  // chain before the address, and a CNAME's `data` is a HOSTNAME, not an IP.
+  // Feeding that to the reserved-range checks refused every host behind a CDN,
+  // because a hostname parses as a malformed address and malformed is treated as
+  // unsafe. That made most of the real internet unscannable, including this
+  // platform's own domain, so the filter is load bearing rather than tidy.
+  const ADDRESS_TYPES = new Set([1 /* A */, 28 /* AAAA */]);
+  const addresses = [...a.answers, ...aaaa.answers]
+    .filter((x) => ADDRESS_TYPES.has(x.type))
+    .map((x) => x.data);
+
   // Strip the trailing dot Cloudflare returns on some records.
   const cleaned = addresses.map((ip) => ip.replace(/\.$/, ""));
-  if (cleaned.length === 0) return { ok: false, reason: `"${host}" does not resolve` };
+  if (cleaned.length === 0) {
+    return {
+      ok: false,
+      reason: `"${host}" resolves to no address we can reach. A name that only exists as a CNAME has nothing to connect to.`,
+    };
+  }
 
   for (const ip of cleaned) {
-    if (ipv4Reserved(ip) || ipv6Reserved(ip)) {
+    // DISPATCH BY FAMILY. Both checks used to run against every address, and
+    // that refused the entire IPv6 internet: an IPv6 string contains no dots, so
+    // `ipv4Reserved` read it as a malformed address and malformed is treated as
+    // unsafe. A host is one family or the other and must be judged by the check
+    // that can actually parse it.
+    const reserved = ip.includes(":") ? ipv6Reserved(ip) : ipv4Reserved(ip);
+    if (reserved) {
       return { ok: false, reason: `"${host}" resolves to a private or reserved address (${ip})` };
     }
   }
