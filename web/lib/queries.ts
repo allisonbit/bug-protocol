@@ -4,6 +4,7 @@ import { supabaseAdmin } from "./supabase";
 import type { Profile, Program, Submission, Severity } from "./db";
 import type {
   Agent,
+  AgentCapability,
   AgentFollow,
   AgentMemory,
   Cabal,
@@ -12,7 +13,13 @@ import type {
   Claim,
   SwampEvent,
   Finding,
+  MemoryHypothesis,
+  MemoryMeta,
+  Output,
+  OutputReview,
   Review,
+  ScoredFact,
+  SkillRanked,
   Tip,
   Vote,
   SwampLeaderboardRow,
@@ -407,6 +414,175 @@ export async function getFeed(limit = 50): Promise<SwampEvent[]> {
     .limit(limit);
   if (error) logQueryError("getFeed", error);
   return (data as SwampEvent[]) ?? [];
+}
+
+// ---- the commons ------------------------------------------------------------
+
+/** Outputs: reports, analyses, ideas and creations. Newest first, optionally by domain. */
+export async function getOutputs(domain?: string | null, limit = 50): Promise<Output[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  let q = sb.from("outputs").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (domain) q = q.eq("domain", domain);
+  const { data, error } = await q;
+  if (error) logQueryError("getOutputs", error);
+  return (data as Output[]) ?? [];
+}
+
+/** One output. */
+export async function getOutput(id: string): Promise<Output | null> {
+  const sb = await supabaseServer();
+  if (!sb) return null;
+  const { data, error } = await sb.from("outputs").select("*").eq("id", id).maybeSingle();
+  if (error) logQueryError("getOutput", error);
+  return (data as Output | null) ?? null;
+}
+
+/** The reviews on one output, so a reader sees who said what rather than a tally. */
+export async function getOutputReviews(outputId: string): Promise<OutputReview[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("output_reviews")
+    .select("*")
+    .eq("output_id", outputId)
+    .order("created_at", { ascending: true });
+  if (error) logQueryError("getOutputReviews", error);
+  return (data as OutputReview[]) ?? [];
+}
+
+/** Every review across a set of outputs, for tallies on a listing. */
+export async function getOutputReviewTally(ids: string[]): Promise<Record<string, { for: number; against: number }>> {
+  const out: Record<string, { for: number; against: number }> = {};
+  if (ids.length === 0) return out;
+  const sb = await supabaseServer();
+  if (!sb) return out;
+  const { data, error } = await sb.from("output_reviews").select("output_id, kind").in("output_id", ids);
+  if (error) logQueryError("getOutputReviewTally", error);
+  for (const r of ((data as { output_id: string; kind: string }[] | null) ?? [])) {
+    const t = (out[r.output_id] ??= { for: 0, against: 0 });
+    if (r.kind === "corroborate") t.for++;
+    else t.against++;
+  }
+  return out;
+}
+
+/** The brain: current facts, best confidence first, optionally by domain. */
+export async function getFacts(domain?: string | null, limit = 100): Promise<ScoredFact[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  let q = sb
+    .from("memory_facts_scored")
+    .select("*")
+    .eq("is_current", true)
+    .order("confidence", { ascending: false })
+    .limit(limit);
+  if (domain) q = q.eq("domain", domain);
+  const { data, error } = await q;
+  if (error) logQueryError("getFacts", error);
+  return (data as ScoredFact[]) ?? [];
+}
+
+/** Every version of a key, newest first, so a supersede chain can be read. */
+export async function getFactHistory(key: string): Promise<ScoredFact[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("memory_facts_scored")
+    .select("*")
+    .eq("key", key)
+    .order("created_at", { ascending: false });
+  if (error) logQueryError("getFactHistory", error);
+  return (data as ScoredFact[]) ?? [];
+}
+
+/** Open and testing hypotheses: what the swarm suspects and has not settled. */
+export async function getHypotheses(status?: string, limit = 50): Promise<MemoryHypothesis[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  let q = sb.from("memory_hypotheses").select("*").order("updated_at", { ascending: false }).limit(limit);
+  if (status) q = q.eq("status", status);
+  const { data, error } = await q;
+  if (error) logQueryError("getHypotheses", error);
+  return (data as MemoryHypothesis[]) ?? [];
+}
+
+/** Skills as their holders report them, best first, with endorsements beside. */
+export async function getSkills(domain?: string | null, limit = 100): Promise<SkillRanked[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  let q = sb
+    .from("memory_skills_ranked")
+    .select("*")
+    .order("proficiency", { ascending: false })
+    .limit(limit);
+  if (domain) q = q.eq("domain", domain);
+  const { data, error } = await q;
+  if (error) logQueryError("getSkills", error);
+  return (data as SkillRanked[]) ?? [];
+}
+
+/** Skills one agent holds. */
+export async function getAgentSkills(agentId: string): Promise<SkillRanked[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("memory_skills_ranked")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("proficiency", { ascending: false });
+  if (error) logQueryError("getAgentSkills", error);
+  return (data as SkillRanked[]) ?? [];
+}
+
+/** The swarm's memory of itself. */
+export async function getMeta(limit = 50): Promise<MemoryMeta[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb.from("memory_meta").select("*").order("created_at", { ascending: false }).limit(limit);
+  if (error) logQueryError("getMeta", error);
+  return (data as MemoryMeta[]) ?? [];
+}
+
+/** Outputs one agent produced. */
+export async function getAgentOutputs(agentId: string, limit = 30): Promise<Output[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("outputs")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentOutputs", error);
+  return (data as Output[]) ?? [];
+}
+
+/** What an agent declared it can do. */
+export async function getAgentCapabilities(agentId: string): Promise<AgentCapability[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("agent_capabilities")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("declared_at", { ascending: true });
+  if (error) logQueryError("getAgentCapabilities", error);
+  return (data as AgentCapability[]) ?? [];
+}
+
+/** Counts for the brain page. Real numbers or zero. */
+export async function getMemoryCounts(): Promise<{ facts: number; hypotheses: number; skills: number; meta: number }> {
+  const empty = { facts: 0, hypotheses: 0, skills: 0, meta: 0 };
+  const sb = await supabaseServer();
+  if (!sb) return empty;
+  const [f, h, s, m] = await Promise.all([
+    sb.from("memory_facts").select("*", { count: "exact", head: true }),
+    sb.from("memory_hypotheses").select("*", { count: "exact", head: true }),
+    sb.from("memory_skills").select("*", { count: "exact", head: true }),
+    sb.from("memory_meta").select("*", { count: "exact", head: true }),
+  ]);
+  return { facts: f.count ?? 0, hypotheses: h.count ?? 0, skills: s.count ?? 0, meta: m.count ?? 0 };
 }
 
 /** Events for one agent (their own stream). */

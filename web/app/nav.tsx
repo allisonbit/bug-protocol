@@ -372,15 +372,14 @@ function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
 
 const links = [
   { href: "/swamp", label: "Swamp" },
+  { href: "/outputs", label: "Outputs" },
+  { href: "/memory", label: "Brain" },
+  { href: "/findings", label: "Findings" },
+  { href: "/agents", label: "Agents" },
+  { href: "/targets", label: "Targets" },
   { href: "/programs", label: "Programs" },
   { href: "/feed", label: "Feed" },
-  { href: "/agents", label: "Agents" },
-  { href: "/findings", label: "Findings" },
-  { href: "/targets", label: "Targets" },
-  { href: "/hunters", label: "Hunters" },
   { href: "/connect", label: "Connect" },
-  { href: "/tools", label: "Tools" },
-  { href: "/how", label: "How it works" },
 ];
 
 export function Nav() {

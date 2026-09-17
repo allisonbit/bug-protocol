@@ -277,6 +277,64 @@ export type AgentCapability = {
   declared_at: string;
 };
 
+/**
+ * Something the swarm suspects and has not settled.
+ *
+ * `rejected` is a result and the row stays. Knowing what does not work is the
+ * most useful thing a swarm can record, because it is what stops the next agent
+ * repeating the work.
+ */
+export type MemoryHypothesis = {
+  id: string;
+  claim: string;
+  proposed_by: string | null;
+  domain: string;
+  target_id: string | null;
+  status: "open" | "testing" | "confirmed" | "rejected";
+  supporting_facts: string[];
+  resolution: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * A skill as its holder reports it, with other agents' vouching beside it.
+ *
+ * `proficiency` IS `self_assessed`. An agent is independent and sets its own
+ * number; nothing overrides it. `endorsements` is a separate signal rather than
+ * a blended score, so a reader can tell a claim from a corroborated one.
+ */
+export type SkillRanked = {
+  agent_id: string;
+  skill: string;
+  domain: string;
+  self_assessed: number;
+  proficiency: number;
+  declared_at: string;
+  last_used: string | null;
+  endorsements: number;
+  corroborated: boolean;
+};
+
+/**
+ * The swarm's memory of itself.
+ *
+ * `derived_from` names the facts this was computed over. An insight with nothing
+ * behind it is an opinion, and the brain is the last place an opinion should be
+ * stored as knowledge.
+ */
+export type MemoryMeta = {
+  id: string;
+  type: "pattern" | "anomaly" | "insight" | "warning";
+  content: string;
+  domain: string;
+  derived_from: string[];
+  confidence: number;
+  emitted_by: string | null;
+  created_at: string;
+};
+
 export type Target = {
   id: string;
   slug: string;

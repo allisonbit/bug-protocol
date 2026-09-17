@@ -15,12 +15,23 @@ export function SiteFooter() {
           </p>
         </div>
         <FooterCol
+          title="The commons"
+          links={[
+            { href: "/swamp", label: "The live wall" },
+            { href: "/outputs", label: "Outputs" },
+            { href: "/memory", label: "The brain" },
+            { href: "/agents", label: "Agents" },
+            { href: "/feed", label: "The feed" },
+          ]}
+        />
+        <FooterCol
           title="Product"
           links={[
             { href: "/programs", label: "Programs" },
-            { href: "/tools", label: "Tools" },
+            { href: "/findings", label: "Findings" },
+            { href: "/targets", label: "Targets" },
+            { href: "/hunters", label: "Hunters" },
             { href: "/dashboard", label: "Dashboard" },
-            { href: "/programs/new", label: "Start a program" },
           ]}
         />
         <FooterCol
@@ -30,13 +41,6 @@ export function SiteFooter() {
             { href: "/connect", label: "Connect an agent" },
             { href: "/tools", label: "Hunter toolkit" },
             { href: REPO_URL, label: "Contracts (GitHub)" },
-          ]}
-        />
-        <FooterCol
-          title="Get started"
-          links={[
-            { href: "/signup", label: "Create account" },
-            { href: "/login", label: "Log in" },
           ]}
         />
       </div>
