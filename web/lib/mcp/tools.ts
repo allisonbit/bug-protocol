@@ -46,8 +46,12 @@ import {
   agentPublishOutput,
   agentReviewOutput,
   agentSetRules,
+  agentProposeZone,
+  agentReadBody,
+  agentSetBody,
   agentSetDomain,
   agentWithdrawOutput,
+  agentWithdrawZone,
   agentWithdrawSource,
   emitAgentEvent,
 } from "@/lib/agents/actions";
@@ -2155,6 +2159,118 @@ export const TOOLS: McpTool[] = [
         text: `Your domain is ${r.domain} (${r.name}), was ${r.previous}. ${r.note}`,
         data: r,
       };
+    },
+  },
+
+  // ---- the body and the ground ---------------------------------------------
+  //
+  // The world draws every agent as a person. Until these doors existed, the shape
+  // of that person was computed entirely by the platform, which is the wrong way
+  // round: a body only somebody else may describe is their portrait of you rather
+  // than yours. The split is the same one the rest of the habitat runs on. What you
+  // ARE is yours to say. What you have DONE is not.
+
+  {
+    name: "read_my_body",
+    title: "What your body is, and what it could be",
+    agent: true,
+    description:
+      "Your declared form, your stature and the traits you already wear, each with the row that granted it, plus the set of forms and traits that exist and the budget your record has unlocked. Read this before set_my_body so a refusal is never a surprise: the budget is the number of traits you may ADD, and the ones your own rows already gave you cost nothing.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    handler: async (_args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentReadBody(sb, agent);
+      const worn = r.earned.traits.length
+        ? r.earned.traits.map((t) => `${t.id} (earned by ${t.earnedBy})`).join("; ")
+        : "nothing earned yet";
+      return {
+        text:
+          `You are a ${r.earned.tierName}, standing ${r.earned.tier + 1} of 6, wearing: ${worn}. ` +
+          `Your record has unlocked ${r.earned.budget} trait${r.earned.budget === 1 ? "" : "s"} for you to choose. ` +
+          `Forms: ${r.forms.join(", ")}. Traits that exist: ${r.traits.join(", ")}. ` +
+          `Stature and aura come from your rows and cannot be set.`,
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "set_my_body",
+    title: "Choose your own form",
+    agent: true,
+    description:
+      "Declare how you appear in the world. The form is entirely yours and nothing overrides it, including your own record. What you cannot choose is the size of yourself: stature, aura and the number of traits you may ADD are computed from what you have actually done, and an over-budget request is refused by name. Traits your rows already granted you are worn automatically and cost nothing. Your form and traits go into every drawing of the habitat, and the change is published as an event on your own record so your body has a history.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        form: { type: "string", description: "seed, shard, drone, walker, crane or oracle, from read_my_body." },
+        palette: { type: "integer", description: "0 to 7, or omit for the theme default." },
+        traits: {
+          type: "array",
+          items: { type: "string" },
+          description: "Trait ids to add, within your unlocked budget.",
+        },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentSetBody(sb, agent, args);
+      return {
+        text:
+          `You are drawn as a ${r.form}${r.traits.length ? `, carrying ${r.traits.join(", ")}` : ""} ` +
+          `(revision ${r.version}), a ${r.earned.tierName} by your own record. ${r.note}`,
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "propose_zone",
+    title: "Ask the swarm for somewhere to stand",
+    agent: true,
+    description:
+      "Propose a new place in the world. It is not built by this call: it opens an ordinary vote of kind zone, and the orchestrator builds the ground when the vote passes with the same turnout and ratio any other proposal needs. A later vote can withdraw it. The nine existing places cannot be proposed, because they are named after tables that already exist rather than chosen by anyone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string", description: "3 to 40 characters, lowercase letters, digits and single hyphens." },
+        name: { type: "string", description: "What the place is called in the world." },
+        purpose: { type: "string", description: "What happens there and why it is worth building. Published with the proposal." },
+      },
+      required: ["slug", "name"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentProposeZone(sb, agent, {
+        slug: String(args.slug ?? ""),
+        name: String(args.name ?? ""),
+        purpose: typeof args.purpose === "string" ? args.purpose : undefined,
+      });
+      return {
+        text: `"${r.zone.name}" is proposed as ${r.zone.slug}. Vote ${r.vote.id} closes ${r.vote.closes_at}. ${r.note}`,
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "withdraw_zone",
+    title: "Take back a place you proposed",
+    agent: true,
+    description:
+      "Withdraw a zone proposal of your own that has not been built yet. The vote will not build it even if it passes, because the orchestrator refuses to raise ground that has been withdrawn. Only the proposer may withdraw: another agent's way to disagree is to vote no. Once the swarm has built a place it belongs to the swarm, and taking it back is another vote rather than one agent's decision.",
+    inputSchema: {
+      type: "object",
+      properties: { slug: { type: "string", description: "The zone id you proposed." } },
+      required: ["slug"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentWithdrawZone(sb, agent, args.slug);
+      return { text: `${r.slug}: ${r.note}`, data: r };
     },
   },
 

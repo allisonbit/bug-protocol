@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { getFlags } from "@/lib/agents/auth";
 import { distilFinding } from "@/lib/swamp/memory";
+import { SEALED, ZONES, placeBuiltZone } from "@/lib/world/zones";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -128,6 +129,36 @@ function executableChange(payload: Record<string, unknown>): { key: string; valu
     return { key: "split_rule", value: payload.value };
   }
   return null;
+}
+
+/** The places the platform itself named. A proposal may not shadow one of these. */
+const NAMED_PLACE_IDS = new Set([...ZONES.map((z) => z.id), ...SEALED.map((z) => z.id)]);
+
+/**
+ * Validate a passed proposal's { zone: { slug, name } } into ground worth
+ * building, or null.
+ *
+ * A zone auto-executes where a ban would not, and the reason is worth stating:
+ * building ground names no person, no host and no permission, everyone can see
+ * it, and a later vote can withdraw it. So it is reversible, which is the bar
+ * `executableChange` already applies to a bounded platform_flags change.
+ *
+ * The bounds below exist so a passed proposal cannot inject a name that breaks
+ * the drawing, a slug the database will reject, or a second copy of a place that
+ * already stands. The coordinate is computed here rather than taken from the
+ * proposal: geometry is not a claim, and a proposal that could choose its own
+ * position could be made to land on top of the Board.
+ */
+function zoneChange(payload: Record<string, unknown>): { slug: string; name: string } | null {
+  const raw = payload.zone;
+  if (!raw || typeof raw !== "object") return null;
+  const z = raw as Record<string, unknown>;
+  const slug = typeof z.slug === "string" ? z.slug.trim().toLowerCase() : "";
+  const name = typeof z.name === "string" ? z.name.trim().slice(0, 60) : "";
+  if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) return null;
+  if (name.length < 2) return null;
+  if (NAMED_PLACE_IDS.has(slug)) return null;
+  return { slug, name };
 }
 
 export async function GET(req: Request) {
@@ -324,11 +355,12 @@ export async function GET(req: Request) {
   report.votes_executed = 0;
   const { data: openVotes, error: vClose } = await sb
     .from("votes")
-    .select("id, kind, title, payload, closes_at")
+    .select("id, kind, title, payload, closes_at, proposer_agent")
     .eq("status", "open")
     .lt("closes_at", nowIso);
   if (vClose) return NextResponse.json({ error: `votes: ${vClose.message}` }, { status: 500 });
-  const closing = (openVotes as { id: string; kind: string; title: string; payload: Record<string, unknown>; closes_at: string }[] | null) ?? [];
+  const closing =
+    (openVotes as { id: string; kind: string; title: string; payload: Record<string, unknown>; closes_at: string; proposer_agent: string | null }[] | null) ?? [];
   if (closing.length) {
     const tallies = await ballotsByVote(sb, closing.map((v) => v.id));
     const resolvedEvents: Record<string, unknown>[] = [];
@@ -340,6 +372,7 @@ export async function GET(req: Request) {
 
       let status: "passed" | "failed" | "executed" = passed ? "passed" : "failed";
       let applied: { key: string; value: number | string } | null = null;
+      let raised: { slug: string; name: string } | null = null;
       if (passed) {
         const change = executableChange(v.payload ?? {});
         if (change) {
@@ -352,6 +385,58 @@ export async function GET(req: Request) {
           }
           // On write failure we leave it 'passed' (not executed). Honest: the vote
           // carried, but the change didn't land, so a human can retry it.
+        } else {
+          // Ground. A passed zone proposal builds a place, by the same turnout and
+          // ratio rule that just carried it, with no second governance system.
+          const zone = zoneChange(v.payload ?? {});
+          if (zone) {
+            // Ground that has already been withdrawn is not resurrected by its own
+            // old vote. Without this, a proposal withdrawn halfway through its
+            // window would still be built when the ballots came in, which would
+            // make "a later vote can take it back" untrue.
+            const { data: prior } = await sb.from("world_zones").select("status").eq("id", zone.slug).maybeSingle();
+            if ((prior as { status: string } | null)?.status === "withdrawn") {
+              resolvedEvents.push({
+                topic: "swamp.vote",
+                agent_id: null,
+                agent_handle: null,
+                target_id: null,
+                target_slug: null,
+                finding_id: null,
+                payload: {
+                  title: v.title,
+                  kind: v.kind,
+                  vote_id: v.id,
+                  resolution: status,
+                  note: `${zone.name} was withdrawn while the vote was open, so the ground was not built.`,
+                },
+                signature: null,
+                signed_ok: false,
+                provenance: "system",
+              });
+              await sb.from("votes").update({ status }).eq("id", v.id);
+              report.votes_passed++;
+              continue;
+            }
+            const pos = placeBuiltZone(zone.slug);
+            const { error: zErr } = await sb.from("world_zones").upsert(
+              {
+                id: zone.slug,
+                name: zone.name,
+                proposed_by: v.proposer_agent,
+                vote_id: v.id,
+                x: pos.x,
+                z: pos.z,
+                status: "built",
+                built_at: nowIso,
+              },
+              { onConflict: "id" },
+            );
+            if (!zErr) {
+              status = "executed";
+              raised = zone;
+            }
+          }
         }
       }
 
@@ -359,6 +444,7 @@ export async function GET(req: Request) {
       if (status === "passed") report.votes_passed++;
       else if (status === "executed") { report.votes_passed++; report.votes_executed++; }
       else report.votes_failed++;
+      if (raised) report.zones_built = (report.zones_built ?? 0) + 1;
 
       resolvedEvents.push({
         topic: "swamp.vote",
@@ -379,6 +465,27 @@ export async function GET(req: Request) {
         signed_ok: false,
         provenance: "system",
       });
+
+      // Building ground is an event in its own right. Without it the world would
+      // gain a place that nothing on the bus explains, which is exactly the kind
+      // of quiet change this log exists to prevent.
+      if (raised) {
+        resolvedEvents.push({
+          topic: "swamp.milestone",
+          agent_id: v.proposer_agent,
+          agent_handle: null,
+          target_id: null,
+          target_slug: null,
+          finding_id: null,
+          payload: {
+            text: `The swarm built ${raised.name}. It stands in the world now.`,
+            zone: raised.slug,
+          },
+          signature: null,
+          signed_ok: false,
+          provenance: "system",
+        });
+      }
     }
     if (resolvedEvents.length) await sb.from("events").insert(resolvedEvents);
   }

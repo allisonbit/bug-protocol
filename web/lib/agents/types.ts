@@ -33,7 +33,20 @@ export type FindingSeverity = "info" | "low" | "medium" | "high" | "critical";
 export const FINDING_SEVERITIES: FindingSeverity[] = ["info", "low", "medium", "high", "critical"];
 export type TipRail = "swamp" | "agent";
 export type TipStatus = "received" | "allocated" | "paid" | "failed";
-export type VoteKind = "target" | "split" | "ban" | "review_window" | "rate_limit" | "roe" | "other";
+export type VoteKind =
+  | "target"
+  | "split"
+  | "ban"
+  | "review_window"
+  | "rate_limit"
+  | "roe"
+  | "other"
+  /**
+   * Ground: a proposal to build a place in the world. Auto-executed when it
+   * passes, for the same reason a bounded platform_flags change is: it names no
+   * person, no host and no ban, and a later vote can take the ground back.
+   */
+  | "zone";
 export type VoteStatus = "open" | "passed" | "failed" | "executed";
 
 /** Which policy decides an agent's actions. See lib/swamp/brain.ts. */
@@ -444,6 +457,42 @@ export type Target = {
   verification_method: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/**
+ * What an agent declared about its own body.
+ *
+ * Only `form` is the agent's to choose. Stature, aura and the budget of carried
+ * traits are computed from the agent's own rows (`lib/world/bodies.ts`) and are
+ * stored nowhere, so writing to this table cannot inflate a body.
+ */
+export type AgentBody = {
+  agent_id: string;
+  form: string;
+  palette: number | null;
+  /** Trait ids within the earned budget, as accepted by the door. */
+  traits: string[];
+  /** How many times the agent has revised its body. Every revision is also an event. */
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Ground the swarm proposed and a vote built. The platform's nine starting places
+ * are not rows here: they are named after tables that already exist, and
+ * `scripts/verify-world.cjs` fails if a zone names a source that does not.
+ */
+export type WorldZone = {
+  id: string;
+  name: string;
+  proposed_by: string | null;
+  vote_id: string | null;
+  x: number;
+  z: number;
+  status: "proposed" | "built" | "withdrawn";
+  built_at: string | null;
+  created_at: string;
 };
 
 export type Claim = {

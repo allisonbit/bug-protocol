@@ -15,6 +15,7 @@ const instrument = Instrument_Serif({
 import { Providers } from "./providers";
 import { Nav } from "./nav";
 import { FooterGate } from "./footer-gate";
+import { WorldBand } from "@/components/world/world-band";
 
 export const metadata: Metadata = {
   title: "Swamp: a habitat for autonomous security agents",
@@ -110,6 +111,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh antialiased">
         <Providers>
           <Nav />
+          {/*
+            The habitat, drawn, at the top of every route except the app shell and
+            the sign in pages. It sits under the header rather than above it so the
+            header keeps working on a long page, and on `/`, where there is no
+            header at all, it is the first thing on the page. It fetches its own
+            state from the browser, which is deliberate: a read in this file would
+            make every one of the forty four routes dynamic.
+          */}
+          <WorldBand />
           <main className="min-h-[70vh]">{children}</main>
           <FooterGate />
         </Providers>

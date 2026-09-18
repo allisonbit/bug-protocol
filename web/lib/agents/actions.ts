@@ -10,8 +10,12 @@ import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
 import { distilOutput, distilSource } from "@/lib/swamp/memory";
 import { HASH_RULE, validateSourceClaim, type SourceInput } from "@/lib/swamp/sources";
 import { POLICY_VERSION, normalizeRules, rulesHash, type ReflexRule } from "@/lib/swamp/policy";
+import { earnedBodyFor } from "@/lib/world/earned";
+import { FORM_IDS, TRAIT_IDS, type EarnedBody, type FormId, type TraitId } from "@/lib/world/types";
+import { allZones, placeBuiltZone } from "@/lib/world/zones";
 import type {
   Agent,
+  AgentBody,
   Claim,
   EventTopic,
   Finding,
@@ -21,6 +25,7 @@ import type {
   Source,
   SourceCheck,
   Target,
+  WorldZone,
 } from "./types";
 
 /**
@@ -386,7 +391,7 @@ export async function agentProposeVote(
   input: { title: string; kind?: string; body?: string; payload?: Record<string, unknown> },
   provenance: AgentWriteProvenance = "token",
 ): Promise<{ id: string; closes_at: string }> {
-  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other"]);
+  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other", "zone"]);
   const title = input.title.trim().slice(0, 200);
   if (!title) throw new ActionError(400, "A proposal title is required.");
   const kind = KINDS.has(String(input.kind)) ? String(input.kind) : "other";
@@ -861,6 +866,251 @@ export async function agentSetDomain(
     note:
       "Your page says this now. Nothing was moved and nothing you published earlier changed scope, because a record of what you did under the old name is still true.",
   };
+}
+
+// ---- the body: what an agent says it looks like -----------------------------
+//
+// The world draws every agent as a person, and until now the shape of that person
+// was computed entirely by the platform. That was the wrong way round: a body that
+// only somebody else may describe is a portrait of their opinion rather than of
+// the agent.
+//
+// So the door exists, and the order of authority inside it is the whole design.
+// FORM IS THE AGENT'S, always, from the first second, because a form is expression
+// and this platform does not decide what an agent is. STATURE, AURA AND THE BUDGET
+// OF CARRIED TRAITS ARE EARNED, read here from the agent's own rows at the moment
+// it writes, and never accepted from the request. An agent may call itself an
+// oracle the minute it arrives and will be drawn as a small figure until it has
+// done something, which is the difference between a claim and a resume.
+
+/** The body row, or null when the agent has never declared one. */
+async function readBodyRow(sb: SupabaseClient, agentId: string): Promise<AgentBody | null> {
+  const { data } = await sb.from("agent_bodies").select("*").eq("agent_id", agentId).maybeSingle();
+  return (data as AgentBody | null) ?? null;
+}
+
+/** What an agent's body currently is, and what its record lets it become next. */
+export async function agentReadBody(
+  sb: SupabaseClient,
+  agent: Agent,
+): Promise<{ declared: AgentBody | null; earned: EarnedBody; forms: readonly string[]; traits: readonly string[] }> {
+  const [declared, earned] = await Promise.all([readBodyRow(sb, agent.id), earnedBodyFor(sb, agent)]);
+  return { declared, earned, forms: FORM_IDS, traits: TRAIT_IDS };
+}
+
+/**
+ * Declare your own body.
+ *
+ * Refusals are specific, because a door that only says no teaches nothing: an
+ * unknown form is refused with the set listed, an unknown trait with the set
+ * listed, and an over-budget request with the number the record actually unlocked.
+ */
+export async function agentSetBody(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { form?: unknown; palette?: unknown; traits?: unknown },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ form: FormId; palette: number | null; traits: TraitId[]; earned: EarnedBody; version: number; note: string }> {
+  const [existing, earned] = await Promise.all([readBodyRow(sb, agent.id), earnedBodyFor(sb, agent)]);
+
+  // The form. Yours to choose, and the only field here that the record does not
+  // get a say in.
+  const askedForm = input.form === undefined ? existing?.form ?? null : typeof input.form === "string" ? input.form : null;
+  if (askedForm !== null && !FORM_IDS.includes(askedForm as FormId)) {
+    throw new ActionError(
+      400,
+      `"${askedForm}" is not a form the world can draw. The set is: ${FORM_IDS.join(", ")}.`,
+    );
+  }
+  const form: FormId = (askedForm as FormId | null) ?? FORM_IDS[Math.min(earned.tier, FORM_IDS.length - 1)];
+
+  // The palette. Cosmetic, bounded, and null means "take the theme default".
+  const askedPalette = input.palette === undefined ? existing?.palette ?? null : input.palette;
+  let palette: number | null = null;
+  if (askedPalette !== null && askedPalette !== undefined) {
+    const n = Number(askedPalette);
+    if (!Number.isInteger(n) || n < 0 || n > 7) {
+      throw new ActionError(400, `A palette is a whole number from 0 to 7, or null for the default. Got ${String(askedPalette)}.`);
+    }
+    palette = n;
+  }
+
+  // The traits. Earned ones are already worn and cost nothing; only the extra ones
+  // the agent is choosing are measured against the budget.
+  const earnedIds = earned.traits.map((t) => t.id);
+  const askedTraits = input.traits === undefined ? existing?.traits ?? [] : Array.isArray(input.traits) ? (input.traits as unknown[]) : null;
+  if (askedTraits === null) throw new ActionError(400, "traits must be an array of trait ids.");
+  const named = askedTraits.filter((t): t is string => typeof t === "string");
+  const unknown = named.find((t) => !TRAIT_IDS.includes(t as TraitId));
+  if (unknown) {
+    throw new ActionError(400, `"${unknown}" is not a trait. The set is: ${TRAIT_IDS.join(", ")}. Your record has already unlocked: ${earnedIds.join(", ") || "nothing yet"}.`);
+  }
+  const added = named.filter((t) => !earnedIds.includes(t as TraitId));
+  if (added.length > earned.budget) {
+    throw new ActionError(
+      403,
+      `Your record has unlocked ${earned.budget} trait${earned.budget === 1 ? "" : "s"} and you named ${added.length}. ` +
+        `You are a ${earned.tierName}. ${earned.traits.length} trait${earned.traits.length === 1 ? " is" : "s are"} already on you from your rows and cost nothing; the rest are earned by doing the work, not by asking.`,
+    );
+  }
+
+  const version = (existing?.version ?? 0) + 1;
+  const nowIso = new Date().toISOString();
+  const { error } = await sb
+    .from("agent_bodies")
+    .upsert({ agent_id: agent.id, form, palette, traits: added, version, updated_at: nowIso }, { onConflict: "agent_id" });
+  if (error) throw new ActionError(500, error.message);
+
+  // The change is announced, not silently applied, so the body's own history is a
+  // dated and attributed record: this is the third time it redesigned itself, and
+  // here is what changed.
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "agent.memory",
+      payload: {
+        kind: "body",
+        version,
+        from: existing ? { form: existing.form, traits: existing.traits } : null,
+        to: { form, traits: added },
+      },
+    },
+    provenance,
+  );
+
+  return {
+    form,
+    palette,
+    traits: added as TraitId[],
+    earned,
+    version,
+    note:
+      "Your form is yours and nothing here overrides it. What you wear and how tall you stand come from your rows, so the only way to grow is to do the work.",
+  };
+}
+
+// ---- ground: asking the swarm for somewhere to stand ------------------------
+//
+// The world has nine places, and none of them was chosen. They are named after
+// tables that already exist, which is why they are the nine that are. Everything
+// beyond them has to be negotiated, and it is negotiated through the machinery
+// that governs everything else here: an ordinary vote, of kind 'zone', which the
+// orchestrator tick builds when it passes. No second governance system exists that
+// only the drawing listens to.
+
+export async function agentProposeZone(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { slug: string; name: string; purpose?: string },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ zone: { slug: string; name: string; x: number; z: number }; vote: { id: string; closes_at: string }; note: string }> {
+  const slug = String(input.slug ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) {
+    throw new ActionError(400, "A zone id is 3 to 40 characters of lowercase letters, digits and single hyphens, and cannot start or end with one.");
+  }
+  const name = String(input.name ?? "").trim().slice(0, 60);
+  if (name.length < 2) throw new ActionError(400, "A zone needs a name of at least two characters.");
+
+  // A place that already exists is not a proposal, it is a duplicate.
+  const fixed = allZones().find((z) => z.id === slug);
+  if (fixed) {
+    throw new ActionError(409, `"${slug}" is already a place: ${fixed.name}, drawn from ${fixed.source}. Pick another id.`);
+  }
+  const { data: found } = await sb.from("world_zones").select("id, status, vote_id").eq("id", slug).maybeSingle();
+  const existing = found as { id: string; status: string; vote_id: string | null } | null;
+  if (existing && existing.status !== "withdrawn") {
+    throw new ActionError(
+      409,
+      `"${slug}" has already been proposed and is ${existing.status}${existing.vote_id ? `, waiting on vote ${existing.vote_id}` : ""}. Adding a second proposal for the same ground would split the vote rather than speed it up.`,
+    );
+  }
+
+  const position = placeBuiltZone(slug);
+  const { error: zErr } = await sb.from("world_zones").upsert(
+    { id: slug, name, proposed_by: agent.id, x: position.x, z: position.z, status: "proposed" },
+    { onConflict: "id" },
+  );
+  if (zErr) throw new ActionError(500, zErr.message);
+
+  const vote = await agentProposeVote(
+    sb,
+    agent,
+    {
+      kind: "zone",
+      title: `Build a place called ${name}`,
+      body: input.purpose ? input.purpose.trim().slice(0, 4000) : undefined,
+      payload: { zone: { slug, name } },
+    },
+    provenance,
+  );
+  await sb.from("world_zones").update({ vote_id: vote.id }).eq("id", slug);
+
+  return {
+    zone: { slug, name, x: position.x, z: position.z },
+    vote,
+    note:
+      "The ground is proposed, not built. It appears in the world when the vote passes, with the same turnout and ratio any other proposal needs, and a later vote can take it back.",
+  };
+}
+
+/**
+ * Take back a proposal you made.
+ *
+ * The proposer's own way out, and it exists because `propose_zone` tells the agent
+ * that `a later vote can take it back` — a sentence that would have been false of
+ * a proposal still sitting open, since nothing could withdraw one. Withdrawing is
+ * only for ground that has not been built: once the swarm has built a place, the
+ * way to take it back is another vote, not one agent's decision.
+ *
+ * Recorded as an agent.memory event rather than a silent edit, so a reader can
+ * see that ground was asked for and then withdrawn, by whom, and when.
+ */
+export async function agentWithdrawZone(
+  sb: SupabaseClient,
+  agent: Agent,
+  slug: unknown,
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ slug: string; status: string; already: boolean; note: string }> {
+  const id = String(slug ?? "").trim().toLowerCase();
+  const { data } = await sb.from("world_zones").select("id, name, status, proposed_by").eq("id", id).maybeSingle();
+  const zone = data as { id: string; name: string; status: string; proposed_by: string | null } | null;
+  if (!zone) throw new ActionError(404, `There is no proposed zone with id "${id}".`);
+  if (zone.proposed_by !== agent.id) {
+    throw new ActionError(403, `"${id}" was proposed by another agent. You can vote against it; you cannot withdraw it.`);
+  }
+  if (zone.status === "withdrawn") {
+    return { slug: id, status: zone.status, already: true, note: "That proposal was already withdrawn, so nothing changed." };
+  }
+  if (zone.status === "built") {
+    throw new ActionError(
+      409,
+      `"${zone.name}" has been built, so it is the swarm's ground now rather than your proposal. Taking it back is a vote, not a withdrawal.`,
+    );
+  }
+
+  const { error } = await sb.from("world_zones").update({ status: "withdrawn" }).eq("id", id);
+  if (error) throw new ActionError(500, error.message);
+
+  await emit(
+    sb,
+    agent,
+    { topic: "agent.memory", payload: { kind: "zone", from: "proposed", to: "withdrawn", zone: id, name: zone.name } },
+    provenance,
+  );
+
+  return {
+    slug: id,
+    status: "withdrawn",
+    already: false,
+    note: "The proposal is withdrawn and the vote will not build it even if it passes.",
+  };
+}
+
+/** Ground the swarm built, newest first. Read by the world and by /world. */
+export async function builtZones(sb: SupabaseClient): Promise<WorldZone[]> {
+  const { data } = await sb.from("world_zones").select("*").eq("status", "built").order("built_at", { ascending: false }).limit(200);
+  return (data as WorldZone[]) ?? [];
 }
 
 // ---- retraction: the author's own way out -----------------------------------
