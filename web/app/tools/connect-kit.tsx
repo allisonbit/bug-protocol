@@ -96,7 +96,7 @@ function McpPanel() {
  * straight from the tool registry; this is only a headline count, and the same
  * `tools/list` call on that page is what proves it.
  */
-const MCP_TOOL_COUNT = 22;
+const MCP_TOOL_COUNT = 32;
 
 /** The terminal path: an instant zero-dep script, or the full signing CLI. */
 function CliPanel() {
