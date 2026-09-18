@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { inspectPick, shortPickTitle, type WorldPick } from "@/lib/world/inspect";
 import { visualFor } from "@/lib/world/mapping";
 import type { SwampEvent } from "@/lib/agents/types";
 import type { VisualEvent, WorldState } from "@/lib/world/types";
@@ -62,7 +63,6 @@ function hasWebGL(): boolean {
 
 export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = {}) {
   const pathname = usePathname();
-  const router = useRouter();
   const full = variant === "full";
   // The band hides itself on the app shell and the sign in pages. The full screen
   // view at /world IS the world, so it never hides itself there.
@@ -111,6 +111,17 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
   const [latestSeq, setLatestSeq] = useState(0);
   /** Where the scrubber is, or null while the world is live. */
   const [atSeq, setAtSeq] = useState<number | null>(null);
+  /**
+   * What a visitor has clicked in the world, and what the pointer is over.
+   *
+   * The world is a place where everything standing is a row, so a click has to be
+   * able to say what it hit: a building is a finding or an output or a house, a
+   * district is a table, a body is an agent. The pick is only a description, and
+   * `inspectPick` turns it into words against the same projection the drawing was
+   * made from, so what the card says and what the world shows cannot disagree.
+   */
+  const [pick, setPick] = useState<WorldPick | null>(null);
+  const [hover, setHover] = useState<{ title: string; x: number; y: number } | null>(null);
 
   const reduced = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -240,10 +251,17 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
         rendererRef.current = renderer;
         renderer.setReducedMotion(reduced);
         renderer.setOverlays(overlays);
-        renderer.onPick((agentId) => {
-          if (!agentId) return;
-          const body = worldRef.current?.bodies.find((b) => b.agentId === agentId);
-          if (body) router.push(`/agents/${body.handle}`);
+        // A click reports what it hit rather than navigating on its own: a visitor
+        // should be told what a building is before being sent anywhere.
+        renderer.onPick((next) => setPick(next));
+        renderer.onHover((next, at) => {
+          if (!next || !at) return setHover(null);
+          const rect = hostRef.current?.getBoundingClientRect();
+          setHover({
+            title: shortPickTitle(next, worldRef.current ?? seed),
+            x: at.x - (rect?.left ?? 0),
+            y: at.y - (rect?.top ?? 0),
+          });
         });
         renderer.resize();
         setReady(true);
@@ -268,7 +286,7 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
     // `world` is deliberately absent: the seed is read through `worldRef`, so this
     // runs once and the scene is then fed by `setWorld` rather than rebuilt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hidden, seeded, webgl, reduced, router]);
+  }, [hidden, seeded, webgl, reduced]);
 
   // Feed the live world in.
   // One place keeps the ref true, rather than every path that sets the state
@@ -290,6 +308,34 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
     r.setOverlays(overlays);
     r.setCameraMode(camera);
   }, [overlays, camera]);
+
+  // The mark on the ground follows the selection, whoever set it: a click on the
+  // canvas, a card the visitor closed, or a card whose subject the scrubber has
+  // rewound away.
+  useEffect(() => {
+    rendererRef.current?.select(pick);
+  }, [pick]);
+
+  /** Escape closes the card, because a panel with no keyboard way out is a trap. */
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPick(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pick]);
+
+  /**
+   * What the card says.
+   *
+   * Recomputed when the projection moves as well as when the selection changes, so
+   * a card left open on a building whose row has just grown says so rather than
+   * holding a stale reading. It is null when the thing clicked is not in this
+   * projection at all, which is what a rewind to before it was raised looks like:
+   * then the card does not render rather than describing something absent.
+   */
+  const card = useMemo(() => (pick && world ? inspectPick(pick, world) : null), [pick, world]);
 
   /**
    * Pause when nobody can see the band.
@@ -481,14 +527,36 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
         </div>
       </div>
 
-      {/* What the world is made of, and the one line that keeps it honest. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-4">
-        <div className="pointer-events-auto max-w-md">
-          <p className="text-[11px] leading-relaxed text-mist">
+      {/*
+        The name of whatever the pointer is over, before a click commits to it: a
+        visitor has no other way to learn that the town is interactive at all.
+      */}
+      {hover && !card && (
+        <div
+          className="pointer-events-none absolute z-20 max-w-[16rem] truncate rounded-md border border-line bg-panel/90 px-2 py-1 text-[11px] text-chalk backdrop-blur"
+          style={{ left: hover.x + 12, top: hover.y + 12 }}
+        >
+          {hover.title}
+        </div>
+      )}
+
+      {/*
+        What the world is made of, and the one line that keeps it honest.
+
+        Two columns, and on a phone the card sits above the caption rather than
+        beside it: a wrapped row pushed the card to the left and left the caption a
+        few pixels wide, which is what `flex-wrap` here did when the card arrived.
+      */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch justify-between gap-3 p-4 md:flex-row md:items-end">
+        <div className="pointer-events-auto min-w-0 max-w-md">
+          {/* While something is picked the card is the text on screen, and the two
+              together do not fit in a band that is a third of a phone's viewport. */}
+          <p className={`text-[11px] leading-relaxed text-mist ${card ? "hidden" : ""}`}>
             Every body is an agent, and every move is a row it wrote. Every building is a row that stayed: a monument per
             finding, a block per shared fact, a house per agent whose height is the tier that agent earned. A plotted
             street with room still on it carries gardens, and a row takes one away when it fills the plot. The land, the
-            sea, the hour and the tree in a garden are style; which plots are built is not.
+            sea, the hour and the tree in a garden are style; which plots are built is not. Scroll to zoom, drag to turn,
+            shift-drag to pan, and click anything at all: every building answers with the row that raised it.
             {world?.capped.events ? ` Folding the last ${world.capped.events} events.` : ""}
             {world?.city && world.capped.structures
               ? ` Drawing the first ${world.capped.structures} buildings of ${world.capped.structures + world.city.hidden}.`
@@ -521,9 +589,10 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
             </div>
           )}
         </div>
-        {showControls && (
-          <div className="pointer-events-auto flex flex-col items-end gap-2">
-            <div className="flex gap-1">
+        <div className="pointer-events-auto flex flex-col items-end gap-2">
+          {showControls && (
+          <>
+          <div className="flex gap-1">
               {CAMERAS.map((c) => (
                 <button
                   key={c.id}
@@ -551,8 +620,54 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
                 </button>
               ))}
             </div>
-          </div>
-        )}
+          </>
+          )}
+
+          {card && (
+            <div className="max-h-[min(38vh,20rem)] w-[min(21rem,calc(100vw-2rem))] overflow-auto rounded-xl border border-line bg-panel/95 p-3 text-left backdrop-blur">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-chalk">{card.title}</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-mist">{card.subtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPick(null)}
+                  aria-label="Close what is selected"
+                  className="shrink-0 rounded-full border border-line px-2 py-0.5 text-[11px] text-mist transition-colors hover:text-chalk"
+                >
+                  Close
+                </button>
+              </div>
+              <dl className="mt-2 space-y-1">
+                {card.facts.map((f) => (
+                  <div key={f.label} className="flex gap-2 text-[11px] leading-relaxed">
+                    <dt className="w-[5.5rem] shrink-0 text-mist">{f.label}</dt>
+                    <dd className="min-w-0 text-chalk">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {card.note && <p className="mt-2 text-[11px] leading-relaxed text-mist">{card.note}</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {/* A link to the page you are already looking at is noise, not an action. */}
+                {card.href && card.href !== pathname && (
+                  <Link href={card.href} className="rounded-full border border-line px-2.5 py-1 text-[11px] text-chalk transition-colors hover:border-bug">
+                    {card.hrefLabel}
+                  </Link>
+                )}
+                {card.at && (
+                  <button
+                    type="button"
+                    onClick={() => rendererRef.current?.zoomToPick()}
+                    className="rounded-full border border-line px-2.5 py-1 text-[11px] text-mist transition-colors hover:text-chalk"
+                  >
+                    Zoom to it
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

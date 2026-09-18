@@ -193,7 +193,11 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   /** The outermost ring anything stands in, which is how far the town has reached. */
   let phase = 0;
 
-  function add(kind: StructureKind, rowId: string, fields: { floors: number; lit: boolean; cites: string; label: string; at: string | null }): void {
+  function add(
+    kind: StructureKind,
+    rowId: string,
+    fields: { floors: number; lit: boolean; cites: string; href: string; label: string; at: string | null },
+  ): void {
     if (out.length >= MAX_STRUCTURES) {
       hidden++;
       return;
@@ -228,6 +232,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       height: spec.base + floors * spec.storey,
       lit: fields.lit,
       cites: fields.cites,
+      href: fields.href,
       label: fields.label,
       at: fields.at,
     });
@@ -244,6 +249,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + (body?.earned.tier ?? 0),
       lit: agent.status === "active",
       cites: `agents:${agent.id}`,
+      href: `/agents/${agent.handle}`,
       label: `The house of ${agent.display_name ?? agent.handle}`,
       at: agent.last_heartbeat_at ?? null,
     });
@@ -256,6 +262,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + live.length,
       lit: live.length > 0,
       cites: `targets:${target.id}`,
+      href: `/targets/${target.slug}`,
       label: target.name,
       at: target.updated_at ?? target.created_at ?? null,
     });
@@ -269,6 +276,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: Math.min(4, members.length),
       lit: cabal.status === "active",
       cites: `cabals:${cabal.id}`,
+      href: `/cabals`,
       label: cabal.name,
       at: cabal.formed_at ?? null,
     });
@@ -281,6 +289,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: (SEVERITY_FLOORS[finding.severity] ?? 1) + (settled ? 1 : 0),
       lit: settled,
       cites: `findings:${finding.id}`,
+      href: `/findings/${finding.id}`,
       label: finding.title,
       at: finding.updated_at ?? finding.created_at ?? null,
     });
@@ -293,6 +302,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1,
       lit: true,
       cites: `memory_facts:${fact.key}`,
+      href: `/memory`,
       label: fact.key,
       at: null,
     });
@@ -307,6 +317,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: hypothesis.status === "confirmed" ? 3 : resolved ? 2 : 1,
       lit: resolved,
       cites: `memory_hypotheses:${hypothesis.id}`,
+      href: `/memory`,
       label: hypothesis.claim ?? "A hypothesis",
       at: null,
     });
@@ -318,6 +329,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: output.status === "corroborated" ? 3 : 2,
       lit: output.status === "corroborated",
       cites: `outputs:${output.id}`,
+      href: `/outputs/${output.id}`,
       label: output.title,
       at: output.updated_at ?? output.created_at ?? null,
     });
@@ -329,6 +341,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + Math.min(3, source.corroborations ?? 0),
       lit: source.status === "corroborated",
       cites: `sources:${source.id}`,
+      href: `/sources/${source.id}`,
       label: source.url,
       at: source.updated_at ?? source.created_at ?? null,
     });
@@ -341,6 +354,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + Math.min(3, Math.max(0, room.members - 1)),
       lit: room.open,
       cites: `events.room:${room.name}`,
+      href: `/bus`,
       label: room.name,
       at: room.at,
     });

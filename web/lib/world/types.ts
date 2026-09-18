@@ -218,6 +218,16 @@ export type StructureState = {
   lit: boolean;
   /** The row that raised it. Never empty, and never a placeholder. */
   cites: string;
+  /**
+   * Where its row can actually be read on the site, resolved at projection time.
+   *
+   * Carried on the building rather than worked out by whoever clicked it, because
+   * the knowledge of which page opens a finding, a source or a convening belongs
+   * with the rows that raise them: a citation that cannot be opened would be a card
+   * promising something that does not exist. `verify-world.cjs` fetches a sample of
+   * these and fails if one of them is not a real page.
+   */
+  href: string;
   /** What it is, in the words of the row: a finding title, a handle, a fact key. */
   label: string;
   /** When its newest contribution landed, so growth can be seen rather than only counted. */

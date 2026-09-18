@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { rgbForTopic } from "@/lib/world/mapping";
 import type { BodyState, VisualEvent, WorldState } from "@/lib/world/types";
-import { createCityscape, PLACE } from "./cityscape";
+import type { WorldPick } from "@/lib/world/inspect";
+import { createCityscape, pickTagOf, tag, PLACE, type PickTag } from "./cityscape";
 import { buildHumanoid, palettesFrom, type ActionId, type BodyPalette, type Humanoid } from "./humanoid";
 
 /**
@@ -44,7 +45,21 @@ export type WorldRenderer = {
   setOverlays(o: Overlays): void;
   setCameraMode(m: CameraMode): void;
   follow(agentId: string | null): void;
-  onPick(cb: (agentId: string | null) => void): void;
+  /**
+   * A click landed on something. Null means it landed on nothing at all.
+   *
+   * The pick is a description of the thing, not a command: the world reports what
+   * was hit and the page decides what to say about it. Nothing here navigates on
+   * its own any more, because a click on a building should first tell you what it
+   * is rather than taking you somewhere before you can read it.
+   */
+  onPick(cb: (pick: WorldPick | null) => void): void;
+  /** What the pointer is over, and where, so the page can name it before a click. */
+  onHover(cb: (pick: WorldPick | null, at: { x: number; y: number } | null) => void): void;
+  /** Mark something as the current selection, or clear the mark. */
+  select(pick: WorldPick | null): void;
+  /** Take the camera to whatever is currently selected, close enough to read it. */
+  zoomToPick(): void;
   setReducedMotion(reduced: boolean): void;
   setPaused(paused: boolean): void;
   resize(): void;
@@ -241,6 +256,10 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     label.position.set(zone.position.x, 0.35, zone.position.z + zone.radius + 0.9);
     label.scale.multiplyScalar(1.35);
     zonePads.add(label);
+    // The district's pad, ring and name all answer for the district.
+    tag(disc, { kind: "zone", id: zone.id });
+    tag(ring, { kind: "zone", id: zone.id });
+    tag(label, { kind: "zone", id: zone.id });
 
     padHandles.set(zone.id, { id: zone.id, ring: ringMat, disc: discMat });
   }
@@ -256,7 +275,8 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   let cameraMode: CameraMode = "orbit";
   let followedId: string | null = null;
   let paused = false;
-  let pickCb: ((id: string | null) => void) | null = null;
+  let pickCb: ((pick: WorldPick | null) => void) | null = null;
+  let hoverCb: ((pick: WorldPick | null, at: { x: number; y: number } | null) => void) | null = null;
 
   // ---- the city ------------------------------------------------------------
   //
@@ -271,12 +291,155 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   city.apply(initial.structures, initial.city);
 
   // Orbit state: spherical around a moving focus.
+  //
+  // `focusGoal` is where the camera is asked to look and `focus` is where it is
+  // looking now; they are separate so a pan, a zoom toward a building or a double
+  // click all read as the camera moving rather than as the world jumping. Before
+  // them there was one focus vector that every frame pulled back to the origin,
+  // which meant a visitor could not hold the camera on anything they had zoomed in
+  // to: the moment they let go, the town slid away underneath them.
   const focus = new THREE.Vector3(0, 0.8, 0);
+  const focusGoal = new THREE.Vector3(0, 0.8, 0);
   let orbitTheta = 0.6;
   let orbitPhi = 1.02;
+  const MIN_RADIUS = 3.6;
+  const MAX_RADIUS = 92;
   let orbitRadius = 40;
+  /** Where the wheel and the pinch are taking the distance, eased into each frame. */
+  let radiusTarget = 40;
   let dragging = false;
   let lastPointer = { x: 0, y: 0 };
+  /** Where the pointer went down, so a drag can be told from a click. */
+  let downAt = { x: 0, y: 0, t: 0 };
+
+  // ---- picking -------------------------------------------------------------
+  //
+  // One ray, cast at whatever object is under the pointer, tagged objects only.
+  // Everything in this world is clickable on purpose: a building is a row, a
+  // district is a table, an agent is an agent, and the land under all of it is the
+  // one thing the card is allowed to call style.
+  const raycaster = new THREE.Raycaster();
+  const pickList: THREE.Object3D[] = [];
+  const ndc = new THREE.Vector2();
+  let pickedPick: WorldPick | null = null;
+  let pickedPoint: THREE.Vector3 | null = null;
+  let hoverPick: WorldPick | null = null;
+  let hoverPoint: THREE.Vector3 | null = null;
+  let hoverKey = "";
+  let hoverAt = 0;
+
+  // The mark: a ring on the ground under whatever is hovered, brighter under
+  // whatever is selected. It is the only feedback a click gives that is not text,
+  // and without it a visitor cannot tell a building they missed from one they hit.
+  const markerMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(theme.accent),
+    transparent: true,
+    opacity: 0,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const marker = new THREE.Mesh(new THREE.RingGeometry(0.84, 1, 64), markerMat);
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.y = 0.07;
+  marker.visible = false;
+  scene.add(marker);
+  let markerScale = 1;
+
+  /** Which world thing a tag over a surface describes. */
+  function toWorldPick(t: PickTag, instanceId: number | null): WorldPick | null {
+    if (t.kind === "tree") {
+      const plot = instanceId === null ? null : city.treePlot(instanceId);
+      if (!plot) return { kind: "land" };
+      return { kind: "plot", zone: plot.zone, index: plot.index, ring: plot.ring, tree: true };
+    }
+    if (t.kind === "plot") return { kind: "plot", zone: t.zone, index: t.index, ring: t.ring, tree: false };
+    return t;
+  }
+
+  /**
+   * What is under a point, in normalised device coordinates.
+   *
+   * The first tagged thing along the ray wins, and the hit point comes back too:
+   * the ground, a street and the sea have no position of their own beyond where
+   * the ray met them, and the marker has to stand where the visitor actually
+   * pointed rather than at the centre of the island.
+   */
+  function pickAtNdc(nx: number, ny: number): { pick: WorldPick | null; point: THREE.Vector3 | null } {
+    pickList.length = 0;
+    for (const mesh of bodyMeshes) pickList.push(mesh);
+    for (const object of city.pickables()) pickList.push(object);
+    ndc.set(nx, ny);
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(pickList, true);
+    for (const hit of hits) {
+      const t = pickTagOf(hit.object);
+      if (!t) continue;
+      const pick = toWorldPick(t, typeof hit.instanceId === "number" ? hit.instanceId : null);
+      if (pick) return { pick, point: hit.point.clone() };
+    }
+    return { pick: null, point: hits.length > 0 ? hits[0].point.clone() : null };
+  }
+
+  function ndcFromPointer(clientX: number, clientY: number): THREE.Vector2 {
+    const rect = canvas.getBoundingClientRect();
+    return ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  }
+
+  /** Where the mark belongs for a pick, and how wide it should be. */
+  function markFor(pick: WorldPick | null, point: THREE.Vector3 | null): { x: number; z: number; r: number } | null {
+    if (!pick) return null;
+    switch (pick.kind) {
+      case "agent": {
+        const entry = bodies.get(pick.agentId);
+        if (!entry) return null;
+        return { x: entry.current.x, z: entry.current.z, r: 0.6 };
+      }
+      case "structure": {
+        const s = world.structures.find((x) => x.id === pick.id);
+        if (!s) return null;
+        return { x: s.position.x, z: s.position.z, r: s.footprint * 1.6 };
+      }
+      case "zone": {
+        const z = world.zones.find((x) => x.id === pick.id);
+        if (!z) return null;
+        return { x: z.position.x, z: z.position.z, r: z.radius };
+      }
+      default:
+        return point ? { x: point.x, z: point.z, r: 0.75 } : null;
+    }
+  }
+
+  /** How close the camera should get to something to read it. Geometry, not meaning. */
+  function zoomFor(pick: WorldPick): number {
+    if (pick.kind === "structure") {
+      const s = world.structures.find((x) => x.id === pick.id);
+      return s ? Math.max(4.5, Math.min(18, s.height * 2.1)) : 10;
+    }
+    if (pick.kind === "agent") return 5.5;
+    if (pick.kind === "zone") {
+      const z = world.zones.find((x) => x.id === pick.id);
+      return z ? Math.max(8, z.radius * 2.6) : 14;
+    }
+    return 9;
+  }
+
+  /** Move the camera's gaze toward a point, used by zoom and by double click. */
+  function driftFocus(x: number, z: number, k: number): void {
+    focusGoal.x += (x - focusGoal.x) * k;
+    focusGoal.z += (z - focusGoal.z) * k;
+    // Kept over the island: there is nothing to look at out at sea, and a focus
+    // that has wandered off leaves the town at the edge of the frame.
+    const dist = Math.hypot(focusGoal.x, focusGoal.z);
+    if (dist > 46) {
+      focusGoal.x = (focusGoal.x / dist) * 46;
+      focusGoal.z = (focusGoal.z / dist) * 46;
+    }
+  }
+
+  // Touch: a second finger is a pinch, and the distance between two fingers is the
+  // only zoom a phone has.
+  const pointers = new Map<number, { x: number; y: number }>();
+  let pinchDist = 0;
 
   // ---- connections and groups ---------------------------------------------
   //
@@ -406,6 +569,9 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
         humanoid.group.position.copy(target);
         bodyGroup.add(humanoid.group);
         bodyMeshes.push(humanoid.group);
+        // A body answers for its agent, so clicking a head, a hand or the name above
+        // it all open the same page.
+        tag(humanoid.group, { kind: "agent", agentId: b.agentId });
         const label = makeLabel(b.displayName ?? b.handle, theme.chalk, { size: 30, bg: theme.surface, max: 28 });
         label.position.set(0, 2.05, 0);
         humanoid.group.add(label);
@@ -434,6 +600,7 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
           const traits = [...b.earned.traits.map((t) => t.id), ...(b.authored?.traits ?? [])];
           const humanoid = buildHumanoid(palette, b.form, traits.slice(0, 11), b.scale);
           humanoid.group.position.copy(entry.current);
+          tag(humanoid.group, { kind: "agent", agentId: b.agentId });
           const label = makeLabel(b.displayName ?? b.handle, theme.chalk, { size: 30, bg: theme.surface, max: 28 });
           label.position.set(0, 2.05, 0);
           humanoid.group.add(label);
@@ -612,7 +779,22 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     // reports it once, when the row lands.
     city.update(dt);
 
+    // The mark, wherever the pointer or the last click put it.
+    const markPick = pickedPick ?? hoverPick;
+    const mark = markFor(markPick, pickedPick ? pickedPoint : hoverPoint);
+    const wantOpacity = mark ? (pickedPick ? 0.62 : 0.3) : 0;
+    if (mark) {
+      marker.visible = true;
+      marker.position.x += (mark.x - marker.position.x) * Math.min(1, dt * 12);
+      marker.position.z += (mark.z - marker.position.z) * Math.min(1, dt * 12);
+      markerScale += (mark.r - markerScale) * Math.min(1, dt * 9);
+      marker.scale.setScalar(markerScale);
+    }
+    markerMat.opacity += (wantOpacity - markerMat.opacity) * Math.min(1, dt * 9);
+    if (markerMat.opacity < 0.015 && !mark) marker.visible = false;
+
     // Camera.
+    orbitRadius += (radiusTarget - orbitRadius) * Math.min(1, dt * 5.5);
     let radius = orbitRadius;
     if (cameraMode === "top") {
       orbitPhi = lerp(orbitPhi, 0.12, 0.05);
@@ -623,11 +805,15 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     }
     if (cameraMode === "follow" && followedId) {
       const e = bodies.get(followedId);
-      if (e) focus.lerp(new THREE.Vector3(e.current.x, 1, e.current.z), Math.min(1, dt * 3));
+      if (e) focusGoal.set(e.current.x, 0.8, e.current.z);
       radius = 13;
-    } else {
-      focus.lerp(new THREE.Vector3(0, 0.8, 0), Math.min(1, dt * 1.4));
+    } else if (cameraMode === "orbit" || cameraMode === "top") {
+      // The two modes that are a fixed view: they look at the middle of the town.
+      // A mode a visitor has taken hold of does not, which is what lets a zoom
+      // into a district hold there instead of sliding back to the plaza.
+      focusGoal.set(0, 0.8, 0);
     }
+    focus.lerp(focusGoal, Math.min(1, dt * (cameraMode === "follow" ? 4 : 2.6)));
     const px = focus.x + Math.sin(orbitTheta) * Math.sin(orbitPhi) * radius;
     const py = focus.y + Math.cos(orbitPhi) * radius;
     const pz = focus.z + Math.cos(orbitTheta) * Math.sin(orbitPhi) * radius;
@@ -638,52 +824,173 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   }
 
   // ---- input ---------------------------------------------------------------
-  function pointerDown(ev: PointerEvent): void {
-    dragging = true;
-    lastPointer = { x: ev.clientX, y: ev.clientY };
-    canvas.setPointerCapture(ev.pointerId);
+  //
+  // One map of live pointers rather than a single pointer, because a second finger
+  // is the only zoom a phone has, and the same handlers have to tell a click from a
+  // drag: a click opens what is under it, a drag turns the camera, and releasing a
+  // drag must never count as a click on whatever the drag happened to end over.
+  function pinchWidth(): number {
+    const [a, b] = [...pointers.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
   }
+
+  function pointerDown(ev: PointerEvent): void {
+    pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+    if (pointers.size === 1) {
+      dragging = true;
+      lastPointer = { x: ev.clientX, y: ev.clientY };
+      downAt = { x: ev.clientX, y: ev.clientY, t: performance.now() };
+    } else {
+      pinchDist = pinchWidth();
+    }
+    // Capture keeps a drag alive when the pointer leaves the canvas, but it throws
+    // for a pointer that is not active - a synthetic event, an assistive click, a
+    // touch the browser has already cancelled. None of those should take the world
+    // down mid gesture, so a failed capture is survivable rather than fatal.
+    try {
+      canvas.setPointerCapture(ev.pointerId);
+    } catch {
+      // The drag still works; it just stops following the pointer off the canvas.
+    }
+    canvas.style.cursor = "grabbing";
+  }
+
   function pointerMove(ev: PointerEvent): void {
-    if (!dragging) return;
+    if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+    if (pointers.size >= 2) {
+      const width = pinchWidth();
+      if (pinchDist > 0 && width > 0) {
+        radiusTarget = clamp(radiusTarget * (pinchDist / width), MIN_RADIUS, MAX_RADIUS);
+        cameraMode = "free";
+      }
+      pinchDist = width;
+      return;
+    }
+
+    if (!dragging) {
+      hoverCheck(ev);
+      return;
+    }
+
     const dx = ev.clientX - lastPointer.x;
     const dy = ev.clientY - lastPointer.y;
     lastPointer = { x: ev.clientX, y: ev.clientY };
+    // A press that has not moved is not yet a drag, and must not become one before
+    // the visitor has decided: a click that rotates the world by a degree would
+    // make every click slightly wrong.
+    if (Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y) < 5) return;
+
+    if (ev.shiftKey || (ev.buttons & 2) !== 0) {
+      // Pan: the gaze walks across the ground in the direction the camera faces,
+      // scaled by how far out the camera is, so a pan moves the same amount of
+      // landscape whether the view is close or wide.
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+      right.y = 0;
+      right.normalize();
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      const k = orbitRadius * 0.0018;
+      driftFocus(focusGoal.x - right.x * dx * k + forward.x * dy * k, focusGoal.z - right.z * dx * k + forward.z * dy * k, 1);
+      cameraMode = "free";
+      return;
+    }
+
     if (cameraMode === "orbit" || cameraMode === "follow" || cameraMode === "top") cameraMode = "free";
     orbitTheta -= dx * 0.006;
     orbitPhi = Math.max(0.08, Math.min(1.45, orbitPhi - dy * 0.005));
   }
+
   function pointerUp(ev: PointerEvent): void {
-    dragging = false;
+    const wasAlone = pointers.size === 1;
+    pointers.delete(ev.pointerId);
+    pinchDist = pointers.size >= 2 ? pinchWidth() : 0;
+    if (pointers.size === 0) {
+      dragging = false;
+      canvas.style.cursor = hoverKey ? "pointer" : "grab";
+    }
     if (canvas.hasPointerCapture(ev.pointerId)) canvas.releasePointerCapture(ev.pointerId);
+    if (!wasAlone) return;
+
+    // A press that barely moved is a click on whatever it landed on. Otherwise it
+    // was a drag, and a drag must not open the thing it finished over.
+    const moved = Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y);
+    if (moved > 6 || performance.now() - downAt.t > 1200) return;
+    const p = ndcFromPointer(ev.clientX, ev.clientY);
+    const { pick, point } = pickAtNdc(p.x, p.y);
+    pickedPick = pick;
+    pickedPoint = point;
+    hoverKey = pick ? JSON.stringify(pick) : "";
+    hoverPick = pick;
+    hoverPoint = point;
+    pickCb?.(pick);
   }
+
+  function pointerLeave(): void {
+    if (dragging) return;
+    hoverPick = null;
+    hoverPoint = null;
+    hoverKey = "";
+    canvas.style.cursor = "grab";
+    hoverCb?.(null, null);
+  }
+
+  /** Throttled, because a ray against six hundred objects does not belong on every pointer event. */
+  function hoverCheck(ev: PointerEvent): void {
+    const now = performance.now();
+    if (now - hoverAt < 80) return;
+    hoverAt = now;
+    const p = ndcFromPointer(ev.clientX, ev.clientY);
+    const { pick, point } = pickAtNdc(p.x, p.y);
+    const key = pick ? JSON.stringify(pick) : "";
+    canvas.style.cursor = pick ? "pointer" : "grab";
+    if (key === hoverKey) return;
+    hoverKey = key;
+    hoverPick = pick;
+    hoverPoint = point;
+    hoverCb?.(pick, pick ? { x: ev.clientX, y: ev.clientY } : null);
+  }
+
   function wheel(ev: WheelEvent): void {
     ev.preventDefault();
-    orbitRadius = Math.max(6, Math.min(78, orbitRadius + ev.deltaY * 0.035));
-  }
-  function click(ev: MouseEvent): void {
-    if (!pickCb) return;
-    const rect = canvas.getBoundingClientRect();
-    const pointer = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(pointer, camera);
-    const hits = ray.intersectObjects(bodyMeshes, true);
-    if (hits.length === 0) {
-      pickCb(null);
-      return;
+    const before = radiusTarget;
+    radiusTarget = clamp(radiusTarget + ev.deltaY * 0.045, MIN_RADIUS, MAX_RADIUS);
+    // A wheel event is not cancelable in some browsers; the distance is eased into
+    // every frame below, so the zoom is smooth whether the wheel is notched or free.
+    if (radiusTarget < before && !reducedMotion) {
+      const p = ndcFromPointer(ev.clientX, ev.clientY);
+      const { point } = pickAtNdc(p.x, p.y);
+      if (point) driftFocus(point.x, point.z, 0.25);
     }
-    // Walk up to the group we registered as a body.
-    let node: THREE.Object3D | null = hits[0].object;
-    while (node && !bodyMeshes.includes(node)) node = node.parent;
-    if (!node) return pickCb(null);
-    for (const [id, entry] of bodies) if (entry.humanoid.group === node) return pickCb(id);
-    pickCb(null);
+    if (cameraMode !== "follow") cameraMode = "free";
+  }
+
+  /** Two taps on a thing: go to it, close enough to read it. */
+  function dblclick(ev: MouseEvent): void {
+    const p = ndcFromPointer(ev.clientX, ev.clientY);
+    const { pick, point } = pickAtNdc(p.x, p.y);
+    pickedPick = pick;
+    pickedPoint = point;
+    hoverKey = pick ? JSON.stringify(pick) : "";
+    hoverPick = pick;
+    hoverPoint = point;
+    pickCb?.(pick);
+    const mark = markFor(pick, point);
+    if (!pick || !mark) return;
+    focusGoal.set(mark.x, 0.8, mark.z);
+    radiusTarget = clamp(zoomFor(pick), MIN_RADIUS, MAX_RADIUS);
+    cameraMode = "free";
   }
 
   canvas.addEventListener("pointerdown", pointerDown);
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
+  canvas.addEventListener("pointercancel", pointerUp);
+  canvas.addEventListener("pointerleave", pointerLeave);
   canvas.addEventListener("wheel", wheel, { passive: false });
-  canvas.addEventListener("click", click);
+  canvas.addEventListener("dblclick", dblclick);
 
   function resize(): void {
     const rect = canvas.getBoundingClientRect();
@@ -715,6 +1022,17 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
       // rather than trusting that the projection was called.
       city: () => city.counts(),
       cameraPosition: () => camera.position.toArray().map((n) => Math.round(n * 10) / 10),
+      /** What a ray at these normalised device coordinates lands on, without a click. */
+      pickAt: (nx: number, ny: number) => pickAtNdc(nx, ny).pick,
+      pick: () => pickedPick,
+      hover: () => hoverPick,
+      mark: () => ({ visible: marker.visible, radius: Math.round(markerScale * 100) / 100, opacity: Math.round(markerMat.opacity * 100) / 100 }),
+      camera: () => ({
+        radius: Math.round(orbitRadius * 10) / 10,
+        radiusTarget: Math.round(radiusTarget * 10) / 10,
+        focus: [Math.round(focusGoal.x * 10) / 10, Math.round(focusGoal.z * 10) / 10],
+        mode: cameraMode,
+      }),
       nearest: () => {
         // Where the drawn bodies are, so a probe can prove the scene carries them
         // rather than trusting a frame count.
@@ -783,6 +1101,31 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     onPick(cb) {
       pickCb = cb;
     },
+    onHover(cb) {
+      hoverCb = cb;
+    },
+    select(pick) {
+      pickedPick = pick;
+      if (!pick) {
+        pickedPoint = null;
+        return;
+      }
+      const mark = markFor(pick, pickedPoint);
+      if (mark) pickedPoint = new THREE.Vector3(mark.x, 0, mark.z);
+      else pickedPoint = null;
+    },
+    zoomToPick() {
+      const pick = pickedPick;
+      if (!pick) return;
+      const mark = markFor(pick, pickedPoint);
+      if (!mark) return;
+      focusGoal.set(mark.x, 0.8, mark.z);
+      radiusTarget = clamp(zoomFor(pick), MIN_RADIUS, MAX_RADIUS);
+      // A tall building is read from the side rather than from above, so the camera
+      // lifts off the horizon a little on the way in.
+      orbitPhi = Math.max(orbitPhi, 1.0);
+      cameraMode = "free";
+    },
     setReducedMotion(reduced) {
       reducedMotion = reduced;
       city.setReducedMotion(reduced);
@@ -800,8 +1143,13 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
       canvas.removeEventListener("pointerdown", pointerDown);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerup", pointerUp);
+      canvas.removeEventListener("pointercancel", pointerUp);
+      canvas.removeEventListener("pointerleave", pointerLeave);
       canvas.removeEventListener("wheel", wheel);
-      canvas.removeEventListener("click", click);
+      canvas.removeEventListener("dblclick", dblclick);
+      marker.geometry.dispose();
+      markerMat.dispose();
+      scene.remove(marker);
       for (const entry of bodies.values()) {
         entry.humanoid.dispose();
         disposeSprite(entry.label);
@@ -823,4 +1171,8 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
 }

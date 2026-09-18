@@ -57,8 +57,50 @@ export type Cityscape = {
   setReducedMotion(on: boolean): void;
   /** What is really in the scene, so a probe can check the place rather than trust it. */
   counts(): { buildings: number; trees: number; streets: number; heights: number[] };
+  /**
+   * Everything here a click can land on, so the renderer can cast one ray at the
+   * place and get an answer for the land, the water, the streets, the trees and
+   * the buildings alike. A thing that is drawn and cannot be asked about is the
+   * one kind of object this world does not have.
+   */
+  pickables(): THREE.Object3D[];
+  /** Which plot a tree instance stands on, or null for the countryside. */
+  treePlot(instanceId: number): { zone: string; index: number; ring: number } | null;
   dispose(): void;
 };
+
+/**
+ * A pick, tagged onto the object itself with `userData`.
+ *
+ * Kept as a plain tag rather than a registry: an object that is removed from the
+ * scene takes its pick with it, so a building the swarm has not raised yet cannot
+ * be clicked by a stale lookup. `userData` is also inherited by walking up the
+ * parents, which is how a beacon on a monument answers for the monument.
+ */
+export type PickTag =
+  | { kind: "agent"; agentId: string }
+  | { kind: "structure"; id: string }
+  | { kind: "zone"; id: string }
+  | { kind: "plot"; zone: string; index: number; ring: number }
+  | { kind: "tree" }
+  | { kind: "street"; zone: string | null; ring: number | null }
+  | { kind: "land" }
+  | { kind: "sea" };
+
+export function tag(object: THREE.Object3D, pick: PickTag): void {
+  object.userData.pick = pick;
+}
+
+/** The pick an object answers for, found by walking up to whoever tagged it. */
+export function pickTagOf(object: THREE.Object3D | null): PickTag | null {
+  let node: THREE.Object3D | null = object;
+  while (node) {
+    const tag = node.userData.pick as PickTag | undefined;
+    if (tag) return tag;
+    node = node.parent;
+  }
+  return null;
+}
 
 /** Deterministic 32 bit hash. The same one the projector uses. */
 function hash(s: string): number {
@@ -275,6 +317,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
 
   const terrain = makeTerrain();
   root.add(terrain);
+  tag(terrain, { kind: "land" });
 
   // ---- the sea --------------------------------------------------------------
   // Wider than the island by a long way, so its own edge is lost in the haze and
@@ -293,6 +336,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
   sea.rotation.x = -Math.PI / 2;
   sea.position.y = -0.42;
   root.add(sea);
+  tag(sea, { kind: "sea" });
   const seaBase = Float32Array.from(seaGeo.attributes.position.array as Float32Array);
 
   // ---- the paved ground the town stands on ----------------------------------
@@ -327,10 +371,23 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
   root.add(canopies);
   trunks.count = 0;
   canopies.count = 0;
+  // Both halves of a tree answer for the tree, and which plot it stands on is
+  // resolved from the instance number when a click lands.
+  tag(trunks, { kind: "tree" });
+  tag(canopies, { kind: "tree" });
   const frozen = new THREE.Object3D();
   let treeCount = 0;
 
-  function plant(x: number, z: number, seedKey: string): void {
+  /**
+   * Where every tree instance stands.
+   *
+   * Kept as a list index-aligned with the instanced meshes, because a click on a
+   * canopy comes back as an instance number and nothing else: without this, a tree
+   * would be a thing you can hit and not a thing you can ask about.
+   */
+  const treePlots: { zone: string; index: number; ring: number }[] = [];
+
+  function plant(x: number, z: number, seedKey: string, plot: { zone: string; index: number; ring: number } | null): void {
     if (treeCount >= TREES) return;
     const h = hash(seedKey);
     const scale = 0.8 + ((h % 100) / 100) * 0.7;
@@ -344,6 +401,8 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     frozen.updateMatrix();
     canopies.setMatrixAt(treeCount, frozen.matrix);
     canopies.setColorAt(treeCount, new THREE.Color(PLACE.leaf).lerp(new THREE.Color(PLACE.leafDry), (h % 1000) / 1000));
+    // A garden stands on a plot; a countryside tree stands on the island.
+    treePlots[treeCount] = plot ?? { zone: "", index: -1, ring: -1 };
     treeCount++;
   }
 
@@ -357,9 +416,11 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     const lamp = new THREE.Mesh(lampGeo, lampMat);
     lamp.position.set(zone.position.x, 0.45, zone.position.z + zone.radius * 0.9);
     root.add(lamp);
+    tag(lamp, { kind: "zone", id: zone.id });
     const bulb = new THREE.Mesh(bulbGeo, bulbMat);
     bulb.position.set(lamp.position.x, 0.95, lamp.position.z);
     root.add(bulb);
+    tag(bulb, { kind: "zone", id: zone.id });
   }
 
   // ---- the buildings --------------------------------------------------------
@@ -406,6 +467,9 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     group.position.set(s.position.x, 0, s.position.z);
     group.rotation.y = s.facing;
     group.add(mesh);
+    // The building answers for the rows beneath it, so clicking a roof, a wall or
+    // the beacon above a monument all land on the same record.
+    tag(group, { kind: "structure", id: s.id });
 
     let beacon: THREE.Mesh | null = null;
     if (s.lit && (s.kind === "monument" || s.kind === "lab")) {
@@ -463,6 +527,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       disc.rotation.x = -Math.PI / 2;
       disc.position.set(zone.position.x, 0.012, zone.position.z);
       pavingGroup.add(disc);
+      tag(disc, { kind: "zone", id: zone.id });
     }
 
     // Which plots are taken, per district, so a street can be drawn where the
@@ -494,6 +559,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
           ring.rotation.x = -Math.PI / 2;
           ring.position.set(zone.position.x, 0.03, zone.position.z);
           streetGroup.add(ring);
+          tag(ring, { kind: "street", zone: zone.id, ring: plot.ring });
           streetCount++;
         }
 
@@ -502,7 +568,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
         // open plot buries the town in woodland and hides the plan the streets are
         // drawn to: a built street with room still on it looks like one.
         if (!occupied.has(i) && hash(`${zone.id}:${i}`) % 3 === 0) {
-          plant(plot.x, plot.z, `${zone.id}:${i}`);
+          plant(plot.x, plot.z, `${zone.id}:${i}`, { zone: zone.id, index: i, ring: plot.ring });
         }
       }
 
@@ -517,6 +583,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
         avenue.rotation.z = -angle - Math.PI / 2;
         avenue.position.set(zone.position.x + Math.cos(angle) * (PLAN.inner * 0.5 + len / 2), 0.03, zone.position.z + Math.sin(angle) * (PLAN.inner * 0.5 + len / 2));
         streetGroup.add(avenue);
+        tag(avenue, { kind: "street", zone: zone.id, ring: null });
         streetCount++;
       }
     }
@@ -529,6 +596,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.025;
       streetGroup.add(ring);
+      tag(ring, { kind: "street", zone: null, ring: null });
       streetCount++;
     }
     for (const zone of real) {
@@ -539,6 +607,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       spoke.rotation.z = -Math.atan2(zone.position.x, zone.position.z);
       spoke.position.set(zone.position.x / 2, 0.025, zone.position.z / 2);
       streetGroup.add(spoke);
+      tag(spoke, { kind: "street", zone: null, ring: null });
       streetCount++;
     }
 
@@ -556,7 +625,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       // contradict the plan the town is actually being built to.
       const inside = zones.some((z) => !z.sealed && Math.hypot(z.position.x - Math.cos(angle) * r, z.position.z - Math.sin(angle) * r) < z.radius + PLAN.districtBonus + 0.4);
       if (inside) continue;
-      plant(Math.cos(angle) * r, Math.sin(angle) * r, `country:${i}`);
+      plant(Math.cos(angle) * r, Math.sin(angle) * r, `country:${i}`, null);
     }
 
     trunks.count = treeCount;
@@ -634,6 +703,19 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     setReducedMotion(on) {
       reduced.on = on;
       if (on) for (const entry of entries.values()) entry.group.scale.y = 1;
+    },
+
+    pickables() {
+      // The land and the water first, so a hit on them is found even where a tree
+      // or a street overlaps: the ray is sorted by distance, not by this order, so
+      // this is only the list of things worth asking about.
+      return [terrain, sea, trunks, canopies, pavingGroup, streetGroup, cityGroup];
+    },
+
+    treePlot(instanceId) {
+      const plot = treePlots[instanceId];
+      if (!plot || plot.index < 0) return null;
+      return plot;
     },
 
     counts() {

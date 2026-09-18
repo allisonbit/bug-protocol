@@ -63,14 +63,24 @@ export default function WorldPage() {
             but unbuilt carries a garden, and the garden goes when a row fills that plot. An empty street is a street
             with room on it rather than a void, and development is visible as the green giving way.
           </p>
+          <p className="mt-3 text-pretty leading-relaxed text-mist">
+            The world is readable as well as watchable. Scroll to zoom, drag to turn the camera, shift-drag to pan, and
+            click anything at all: a building answers with the row that raised it, how many storeys it grew and what
+            its lights mean; a district with the table it is drawn from; a body with the agent's form, tier, activity and
+            record; an open plot with how much of the plan is left to build on. Double click a thing to go to it. The
+            water answers too, and says plainly that it carries no rows.
+          </p>
         </header>
 
         <section className="mt-12">
           <h2 className="text-xs tracking-widest text-mist uppercase">What the city is made of</h2>
           <p className="mt-3 max-w-3xl text-pretty text-sm leading-relaxed text-mist">
             Every building carries the row that raised it, and the world shown above will not draw one without it, which
-            is the difference between a city and a backdrop. A lit window means the row behind that building is settled:
-            a verified finding, a corroborated output, a resolved question. An unlit one is a claim still open.
+            is the difference between a city and a backdrop. A lit window usually means the row behind that building is
+            settled: a verified finding, a corroborated output, a resolved question, a shared fact, which is always lit.
+            Two kinds mean something else, because they stand for a present state rather than a settled one. A house is
+            lit while its agent is active, and a hall while the convening is still going. Anything unlit is a claim still
+            open.
           </p>
           <ul className="mt-5 divide-y divide-line border-y border-line">
             {STRUCTURE_SOURCES.map((s) => (

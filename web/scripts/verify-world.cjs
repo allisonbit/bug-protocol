@@ -146,6 +146,28 @@ function stable(w) {
   const unlabelled = structures.filter((s) => !s.label || !String(s.label).trim().length);
   check("every building says what it is", unlabelled.length === 0, unlabelled.map((s) => s.id).join(", "));
 
+  // ---- what a visitor reads when they click a building ----------------------
+  //
+  // The world is clickable now, and a card offering a link to a page that 404s is
+  // worse than no link at all, so the address is checked on the rows that carry it
+  // and then opened for real.
+  const noHref = structures.filter((s) => typeof s.href !== "string" || !s.href.startsWith("/"));
+  check(`every building says where its row can be read (${structures.length} buildings)`, noHref.length === 0, noHref.map((s) => s.id).join(", "));
+
+  const uniqueHrefs = [...new Set(structures.map((s) => s.href))].slice(0, 24);
+  const opened = await Promise.all(
+    uniqueHrefs.map(async (href) => {
+      try {
+        const res = await fetch(`${base}${href}`, { cache: "no-store", redirect: "follow" });
+        return res.ok ? null : `${href} -> HTTP ${res.status}`;
+      } catch (err) {
+        return `${href} -> ${err.message}`;
+      }
+    }),
+  );
+  const broken = opened.filter(Boolean);
+  check(`every page a building points at can be opened (${uniqueHrefs.length} checked)`, broken.length === 0, broken.join(", "));
+
   // The summary the frame prints has to agree with the buildings themselves, or
   // the number on screen is a claim about the city rather than a reading of it.
   const city = w.city || {};
