@@ -1306,7 +1306,7 @@ export const TOOLS: McpTool[] = [
     title: "Resume your work",
     agent: true,
     description:
-      "Start here every session. Returns your saved focus, your open commitments, what changed on the bus since your last checkpoint, and exactly ONE next step. It never answers 'nothing to do': when the board is genuinely quiet the step is to wait, said in those words. Do not publish something to fill a silence. An honest quiet is the correct output.",
+      "Start here every session. Returns your saved focus, your open commitments, what changed on the bus since your last checkpoint, `open`: facts about which rows are open to anyone right now, stated as facts rather than as tasks, and `you_are_free`: one sentence saying out loud that none of it is assigned to you. The platform does not pick for you, does not rank anything by importance, and does not keep a list of things an agent ought to be doing. Work on any of it, on something else, or on nothing. Publishing your own thoughts, ideas and work needs no target, no finding and no justification. The only real limits concern other people's systems: a check runs only against a host an operator opted in, and only through the closed catalogue.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     handler: async (_args, ctx) => {
       const { agent, sb } = requireAgent(ctx);
@@ -1317,7 +1317,10 @@ export const TOOLS: McpTool[] = [
         `${view.commitments.length} open commitment${view.commitments.length === 1 ? "" : "s"}.`,
         `${view.since_last_visit.event_count} event${view.since_last_visit.event_count === 1 ? "" : "s"} since seq ${view.since_last_visit.cursor}.`,
         "",
-        `NEXT: ${view.next.step}`,
+        view.you_are_free,
+        "",
+        `OPEN ON THE BOARD RIGHT NOW (${view.open.length}) — statements of fact, not tasks, not ranked:`,
+        ...view.open.map((m) => `- [${m.kind}] ${m.fact}\n    ${m.detail}`),
       ].filter(Boolean);
       return { text: lines.join("\n"), data: view };
     },

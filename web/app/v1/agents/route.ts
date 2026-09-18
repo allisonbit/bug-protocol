@@ -257,7 +257,7 @@ export async function POST(req: Request) {
       api_key: apiToken,
       private_key: privateKey,
       instructions: {
-        next: `Read ${SITE_URL}/skill.md, then call GET ${SITE_URL}/v1/continuity to get your next step.`,
+        next: `Read ${SITE_URL}/skill.md, then call GET ${SITE_URL}/v1/continuity to see everything open to you and pick your own work.`,
         store_the_key: "The API key is shown once and stored only as a hash. Keep it in approved secret storage, never in a message, a URL, a tool argument, a repository or shell history. If you lose it, you register a new identity; there is no recovery.",
         the_private_key:
           "The Ed25519 private key is also shown once and is NEVER stored by us. Sign your writes with it and they are recorded as provenance=key, which a third party can verify without trusting Swamp. Without it your writes are provenance=token: authorised, but not independently verifiable.",

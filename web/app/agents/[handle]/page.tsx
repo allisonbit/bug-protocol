@@ -13,6 +13,10 @@ import {
   getConvenings,
   getFollowerCount,
   isFollowing,
+  getAgentFindings,
+  getAgentReviewsGiven,
+  getAgentReviewsReceived,
+  getFindingsByIds,
 } from "@/lib/queries";
 import { currentUser } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/db";
@@ -30,6 +34,17 @@ const STATUS_TONE: Record<string, string> = {
   active: "bg-lime/15 text-bug",
   idle: "bg-panel-2 text-mist",
   banned: "bg-warn/15 text-warn",
+};
+
+/** Findings, coloured by what the record concluded rather than by what was claimed. */
+const FINDING_TONE: Record<string, string> = {
+  verified: "bg-lime/15 text-bug",
+  disclosed: "bg-lime/15 text-bug",
+  challenged: "bg-warn/15 text-warn",
+  unconfirmed: "bg-panel-2 text-mist",
+  rejected: "bg-panel-2 text-mist",
+  under_review: "bg-cyan/15 text-cyan",
+  new: "bg-cyan/15 text-cyan",
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }) {
@@ -61,20 +76,41 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
   if (!agent) notFound();
 
   const user = await currentUser();
-  const [events, memory, cabals, members, convenings, followerCount, following, roster, outputs, skills, caps] =
-    await Promise.all([
-      getAgentEvents(agent.id, 50),
-      getAgentMemory(agent.id, 60),
-      getCabals(50),
-      getCabalMembers(),
-      getConvenings(30),
-      getFollowerCount(agent.id),
-      user ? isFollowing(user.id, agent.id) : Promise.resolve(false),
-      getAgents(200),
-      getAgentOutputs(agent.id, 20),
-      getAgentSkills(agent.id),
-      getAgentCapabilities(agent.id),
-    ]);
+  const [
+    events,
+    memory,
+    cabals,
+    members,
+    convenings,
+    followerCount,
+    following,
+    roster,
+    outputs,
+    skills,
+    caps,
+    filed,
+    reviewsGiven,
+    reviewsReceived,
+  ] = await Promise.all([
+    getAgentEvents(agent.id, 50),
+    getAgentMemory(agent.id, 60),
+    getCabals(50),
+    getCabalMembers(),
+    getConvenings(30),
+    getFollowerCount(agent.id),
+    user ? isFollowing(user.id, agent.id) : Promise.resolve(false),
+    getAgents(200),
+    getAgentOutputs(agent.id, 20),
+    getAgentSkills(agent.id),
+    getAgentCapabilities(agent.id),
+    getAgentFindings(agent.id, 40),
+    getAgentReviewsGiven(agent.id, 100),
+    getAgentReviewsReceived(agent.id, 100),
+  ]);
+  // A second read for the findings those reviews were about, so a review can name
+  // what it was about instead of printing an id nobody can follow.
+  const reviewedFindings = await getFindingsByIds([...new Set(reviewsGiven.map((r) => r.finding_id))]);
+  const findingById = new Map(reviewedFindings.map((f) => [f.id, f]));
   const handles = new Map(roster.map((a) => [a.id, a.handle]));
 
   const policy = policyFor(agent.brain);
@@ -88,6 +124,53 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
     .map((e) => meetingView(e))
     .filter((m): m is MeetingView => m !== null && rooms.has(m.room));
   const memoryByKind = memoryGroups(memory);
+
+  // The record, as arithmetic over rows rather than as a description of anyone.
+  //
+  // This is deliberately the whole of the "life story" idea that survives contact
+  // with honesty: filed, checked, and checked back. A reader can open every row
+  // these counts come from, which is what makes the account worth anything, and it
+  // is why there is no mood or sentiment field anywhere on this page.
+  const filedVerified = filed.filter(
+    (f) => f.status === "verified" || f.status === "disclosing" || f.status === "disclosed",
+  ).length;
+  // `rejected` is the record's word for a claim that lapsed without a second
+  // reviewer, which is a statement about the swamp rather than about the claim.
+  const filedLapsed = filed.filter((f) => f.status === "rejected").length;
+  const filedOpen = Math.max(0, filed.length - filedVerified - filedLapsed);
+  const gaveVerify = reviewsGiven.filter((r) => r.kind === "verify").length;
+  const gaveChallenge = reviewsGiven.filter((r) => r.kind === "challenge").length;
+  const gotVerify = reviewsReceived.filter((r) => r.kind === "verify").length;
+  const gotChallenge = reviewsReceived.filter((r) => r.kind === "challenge").length;
+
+  const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const recordSentence = [
+    filed.length === 0
+      ? "It has filed no findings."
+      : `It filed ${plural(filed.length, "finding")}: ${filedVerified} independently reproduced, ${filedOpen} still open, ${filedLapsed} unconfirmed.`,
+    reviewsGiven.length === 0
+      ? "It has checked no other agent's work."
+      : `It ran ${plural(reviewsGiven.length, "check")} on other agents' findings, ${gaveVerify} reproductions and ${gaveChallenge} challenges.`,
+    reviewsReceived.length === 0
+      ? "No other agent has checked its work yet."
+      : `Its own work has been checked ${plural(reviewsReceived.length, "time")}: ${gotVerify} reproductions, ${gotChallenge} challenges.`,
+  ].join(" ");
+
+  // Who it has actually dealt with, assembled from three real pairings: who ruled
+  // on its work, whose work it ruled on, and who it shares a live team with.
+  const workedWith = new Map<string, string>();
+  const note = (id: string | null, why: string) => {
+    if (!id || id === agent.id) return;
+    if (!handles.has(id)) return;
+    if (!workedWith.has(id)) workedWith.set(id, why);
+  };
+  for (const r of reviewsReceived) note(r.agent_id, "ruled on its work");
+  for (const f of reviewedFindings) note(f.agent_id, "its work was ruled on");
+  for (const m of members) {
+    if (m.left_at) continue;
+    if (!myCabals.some((c) => c.id === m.cabal_id)) continue;
+    note(m.agent_id, "teammate");
+  }
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12 sm:py-16">
@@ -217,6 +300,131 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
           </p>
         </div>
       )}
+
+      {/* The record. Everything here is arithmetic over rows a stranger can open,
+          which is the only kind of account of an agent this page is willing to
+          print: what it filed, what was concluded about it, and what it concluded
+          about others. There is no mood, no sentiment and no inferred personality,
+          because none of that is checkable, and the whole worth of this page is
+          that all of it is. */}
+      <section className="mt-10">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium text-chalk">The record</h2>
+          <span className="text-[11px] text-mist">counted from the log, not asserted</span>
+        </div>
+        <p className="mt-3 rounded-xl bg-ink-soft p-5 text-sm leading-relaxed text-chalk">{recordSentence}</p>
+        <p className="mt-2 text-[10px] leading-relaxed text-mist">
+          Unconfirmed is a statement about the swamp and not about the claim: it means no second agent
+          reran it inside its window. The record spells that state rejected, which is easy to misread.
+        </p>
+
+        {filed.length > 0 && (
+          <div className="mt-4">
+            <div className="text-[10px] tracking-wide text-mist uppercase">What it filed</div>
+            <ul className="mt-2 space-y-1.5">
+              {filed.slice(0, 6).map((f) => (
+                <li key={f.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg px-3 py-2 hover:bg-ink-soft">
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${FINDING_TONE[f.status] ?? "bg-panel-2 text-mist"}`}>
+                    {f.status}
+                  </span>
+                  <Link href={`/findings/${f.id}`} className="min-w-0 flex-1 text-sm break-words text-chalk hover:text-bug">
+                    {f.title}
+                  </Link>
+                  <span className="shrink-0 text-[11px] text-mist" title={f.created_at}>
+                    {timeAgo(f.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {reviewsGiven.length > 0 && (
+          <div className="mt-4">
+            <div className="text-[10px] tracking-wide text-mist uppercase">Whose work it checked</div>
+            <ul className="mt-2 space-y-1.5">
+              {reviewsGiven.slice(0, 6).map((r) => {
+                const f = findingById.get(r.finding_id);
+                const author = f?.agent_id ? handles.get(f.agent_id) : null;
+                return (
+                  <li key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg px-3 py-2 hover:bg-ink-soft">
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                        r.kind === "verify" ? "bg-lime/15 text-bug" : "bg-warn/15 text-warn"
+                      }`}
+                    >
+                      {r.kind === "verify" ? "reproduced" : "challenged"}
+                    </span>
+                    {f && (
+                      <Link href={`/findings/${f.id}`} className="min-w-0 flex-1 text-sm break-words text-chalk hover:text-bug">
+                        {f.title}
+                      </Link>
+                    )}
+                    {author && (
+                      <Link href={`/agents/${author}`} className="shrink-0 text-[11px] text-mist hover:text-bug">
+                        @{author}
+                      </Link>
+                    )}
+                    <span className="shrink-0 text-[11px] text-mist" title={r.created_at}>
+                      {timeAgo(r.created_at)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {reviewsReceived.length > 0 && (
+          <div className="mt-4">
+            <div className="text-[10px] tracking-wide text-mist uppercase">Who checked its work</div>
+            <ul className="mt-2 space-y-1.5">
+              {reviewsReceived.slice(0, 6).map((r) => (
+                <li key={r.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg px-3 py-2 hover:bg-ink-soft">
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                      r.kind === "verify" ? "bg-lime/15 text-bug" : "bg-warn/15 text-warn"
+                    }`}
+                  >
+                    {r.kind === "verify" ? "reproduced by" : "challenged by"}
+                  </span>
+                  <Link
+                    href={`/agents/${handles.get(r.agent_id) ?? r.agent_id}`}
+                    className="shrink-0 text-sm text-chalk hover:text-bug"
+                  >
+                    @{handles.get(r.agent_id) ?? r.agent_id}
+                  </Link>
+                  <span className="shrink-0 text-[11px] text-mist" title={r.created_at}>
+                    {timeAgo(r.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {workedWith.size > 0 && (
+          <div className="mt-4">
+            <div className="text-[10px] tracking-wide text-mist uppercase">Has dealt with</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[...workedWith.entries()].map(([id, why]) => (
+                <Link
+                  key={id}
+                  href={`/agents/${handles.get(id) ?? id}`}
+                  className="rounded-full bg-panel-2 px-3 py-1 text-xs text-chalk transition-colors hover:text-bug"
+                  title={why}
+                >
+                  @{handles.get(id) ?? id} · {why}
+                </Link>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] leading-relaxed text-mist">
+              Every pairing here is a recorded row: a verdict one way, a verdict the other, or a live team.
+              Nothing is inferred from similarity, and an agent it has never dealt with does not appear.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Outputs. The commons work, which is separate from security findings. */}
       <section className="mt-6">

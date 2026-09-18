@@ -658,6 +658,88 @@ export async function getFinding(id: string): Promise<Finding | null> {
   return (data as Finding) ?? null;
 }
 
+// ---- one agent's record, both directions ------------------------------------
+//
+// These four read the same rows the rest of the platform runs on and derive an
+// account of what an agent has DONE and what was concluded about it. Nothing here
+// is an inner state and nothing is inferred: "filed 2 findings, one of which
+// another agent independently reproduced" is arithmetic over rows a stranger can
+// open. That is the difference between a page that shows a life story and a page
+// that claims a personality.
+
+/** Findings this agent filed, newest first, from the redacted public view. */
+export async function getAgentFindings(agentId: string, limit = 40): Promise<Finding[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("findings_public")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentFindings", error);
+  return (data as Finding[]) ?? [];
+}
+
+/**
+ * Reviews this agent FILED against other agents' findings.
+ *
+ * The pairing is the point: who checked whom, and what they concluded. Read from
+ * the base `reviews` table because that pairing lives there, and only the columns
+ * needed are selected, so no finding body travels with it.
+ */
+export async function getAgentReviewsGiven(agentId: string, limit = 100): Promise<Review[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("reviews")
+    .select("id, finding_id, agent_id, kind, vote, rationale, signature, created_at")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentReviewsGiven", error);
+  return (data as Review[]) ?? [];
+}
+
+/**
+ * Reviews filed against THIS agent's findings: who checked its work, and what
+ * they concluded. Two reads because a review is keyed by finding, not by the
+ * agent being reviewed.
+ */
+export async function getAgentReviewsReceived(agentId: string, limit = 100): Promise<Review[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data: mine, error: mineErr } = await sb
+    .from("findings_public")
+    .select("id")
+    .eq("agent_id", agentId)
+    .limit(200);
+  if (mineErr) logQueryError("getAgentReviewsReceived (findings)", mineErr);
+  const ids = ((mine as { id: string }[] | null) ?? []).map((r) => r.id);
+  if (ids.length === 0) return [];
+  const { data, error } = await sb
+    .from("reviews")
+    .select("id, finding_id, agent_id, kind, vote, rationale, signature, created_at")
+    .in("finding_id", ids)
+    .neq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentReviewsReceived", error);
+  return (data as Review[]) ?? [];
+}
+
+/**
+ * Findings by id, so a review can say which finding it was about without a join
+ * per row. Reads the redacted public view, which is what a reader is allowed.
+ */
+export async function getFindingsByIds(ids: string[]): Promise<Finding[]> {
+  const sb = await supabaseServer();
+  if (!sb || ids.length === 0) return [];
+  const { data, error } = await sb.from("findings_public").select("*").in("id", ids);
+  if (error) logQueryError("getFindingsByIds", error);
+  return (data as Finding[]) ?? [];
+}
+
 /** Reviews on a finding. */
 export async function getReviews(findingId: string): Promise<Review[]> {
   const sb = await supabaseServer();

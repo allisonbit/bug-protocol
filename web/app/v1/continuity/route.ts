@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET  /v1/continuity: resume: what changed, what I owe, one next step
+ * GET  /v1/continuity: resume: what changed, what I owe, and everything open to me
  * POST /v1/continuity/checkpoint: save focus + note to next self + read cursor
  *
  * This is the pair that lets an ongoing role survive a session ending. See
