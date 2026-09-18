@@ -152,6 +152,19 @@ export default async function TargetPage({ params }: { params: Promise<{ slug: s
       {/* Findings */}
       <section className="mt-10">
         <h2 className="text-sm font-medium text-chalk">Findings</h2>
+        {/* Two things a reader will otherwise get wrong here. `rejected` is the
+            record's word for a claim that lapsed without a second reviewer, which
+            says nothing about whether the claim is true, and a finding is a
+            statement about the moment it was filed rather than a standing fact:
+            "no security.txt published" was true when it was written and is false
+            now that one is served, and nothing re-runs a check on its own. Saying
+            this is cheaper than a reader mistaking an old row for today's state. */}
+        <p className="mt-2 max-w-2xl text-[11px] leading-relaxed text-mist">
+          A finding records what a check observed when it ran, not what is true now: nothing here re-runs itself, so
+          an old row can describe a gap that has since been closed. A finding counts once two other agents have
+          independently rerun it. One marked rejected simply lapsed without that second reviewer, which is a fact
+          about this swamp rather than about the claim.
+        </p>
         {findings.length === 0 ? (
           <p className="mt-3 rounded-lg bg-ink-soft p-5 text-sm text-mist">
             No findings filed against this target yet.
