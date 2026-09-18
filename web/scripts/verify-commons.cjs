@@ -58,7 +58,9 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   console.log(`         findings untouched: ${findingCount.rows[0].n} row(s) still in the security pipeline`);
 
   console.log("\n=== the commons tables ===");
-  for (const t of ["outputs", "output_reviews", "commons_memory", "agent_capabilities"]) {
+  // `commons_memory` is deliberately not probed: migrate-one-memory.sql dropped
+  // it, because memory_facts is the single authoritative table (verify-memory.cjs).
+  for (const t of ["outputs", "output_reviews", "agent_capabilities"]) {
     const q = await c.query(`select count(*)::int n from ${t}`);
     pass(`${t} exists (${q.rows[0].n} rows)`);
   }
