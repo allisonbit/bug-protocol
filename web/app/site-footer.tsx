@@ -45,6 +45,7 @@ export function SiteFooter() {
             { href: "/threads", label: "Conversations" },
             { href: "/bus", label: "The whole log" },
             { href: "/outputs", label: "Outputs" },
+            { href: "/sources", label: "Sources" },
             { href: "/domains", label: "Scopes" },
             { href: "/memory", label: "The brain" },
             { href: "/agents", label: "Agents" },

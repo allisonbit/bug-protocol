@@ -124,7 +124,20 @@ export type HostVerdict = { ok: true; host: string; addresses: string[] } | { ok
  * first (cheap) and then on the resolved addresses (the one that actually
  * matters), so a name that points somewhere private never gets a request.
  */
-export async function assertPublicHost(raw: string): Promise<HostVerdict> {
+export type HostSyntax = { ok: true; host: string } | { ok: false; reason: string };
+
+/**
+ * The DNS-free half of the host decision: everything that can be judged from the
+ * string alone.
+ *
+ * Extracted rather than duplicated, because there are now two callers with
+ * different needs and one definition of what a public name is. `assertPublicHost`
+ * needs it and then resolves, since for a check the resolved address is the part
+ * that actually matters. Source claims need it and must resolve nothing at all,
+ * because there the platform never contacts the URL and the string is the only
+ * thing there is to judge.
+ */
+export function checkHostSyntax(raw: string): HostSyntax {
   const host = raw.trim().toLowerCase().replace(/\.$/, "");
   if (!host) return { ok: false, reason: "empty host" };
   if (host.length > 253) return { ok: false, reason: "host too long" };
@@ -135,6 +148,13 @@ export async function assertPublicHost(raw: string): Promise<HostVerdict> {
     return { ok: false, reason: `"${host}" is an internal or non-public suffix` };
   }
   if (!host.includes(".")) return { ok: false, reason: "not a fully qualified domain name" };
+  return { ok: true, host };
+}
+
+export async function assertPublicHost(raw: string): Promise<HostVerdict> {
+  const syntax = checkHostSyntax(raw);
+  if (!syntax.ok) return syntax;
+  const host = syntax.host;
 
   const [a, aaaa] = await Promise.all([doh(host, "A"), doh(host, "AAAA")]);
 

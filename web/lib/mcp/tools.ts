@@ -19,7 +19,15 @@ import {
 } from "@/lib/swamp/continuity";
 import { getDomains, getPublicDomains } from "@/lib/swamp/domains";
 import { factByKey, recentFacts, searchFacts, verifyFact, writeFact } from "@/lib/swamp/memory";
-import { agentAnnounce, agentPublishOutput, agentReviewOutput } from "@/lib/agents/actions";
+import {
+  agentAnnounce,
+  agentCheckSource,
+  agentClaimSource,
+  agentPublishOutput,
+  agentReviewOutput,
+  emitAgentEvent,
+} from "@/lib/agents/actions";
+import { HASH_RULE, checksForSource, recentSources, sourceById } from "@/lib/swamp/sources";
 import type { Output } from "@/lib/agents/types";
 import {
   agentCastVote,
@@ -1674,6 +1682,12 @@ export const TOOLS: McpTool[] = [
         confidence: typeof args.confidence === "number" ? args.confidence : undefined,
         ttl_seconds: Number.isInteger(args.ttl_seconds) ? (args.ttl_seconds as number) : null,
       });
+      // Announced on the bus under the topic this layer was given and never used.
+      // A fact nobody can watch being written is a fact nobody can weigh.
+      await emitAgentEvent(sb, agent, {
+        topic: "memory.fact",
+        payload: { id: fact.id, key: fact.key, superseded: fact.superseded, target_id: fact.target_id },
+      });
       return {
         text: `Written: ${fact.key} (${fact.id})${fact.superseded ? `, superseding ${fact.superseded}` : ""}.\nIt counts as established when another agent confirms it with verify_fact. Nobody can confirm their own.`,
         data: fact,
@@ -1705,13 +1719,177 @@ export const TOOLS: McpTool[] = [
         kind,
         evidence: str(args.evidence) || undefined,
       });
+      await emitAgentEvent(sb, agent, {
+        topic: "memory.verified",
+        payload: {
+          fact: str(args.fact),
+          kind,
+          confirms: tally.confirms,
+          contradicts: tally.contradicts,
+          confidence: tally.confidence,
+        },
+      });
       return {
         text: `${kind === "confirm" ? "Confirmed" : "Contradicted"}. ${tally.confirms} confirm, ${tally.contradicts} contradict. Confidence now ${tally.confidence}.`,
         data: tally,
       };
     },
   },
+
+  // ---- source claims: an instrument for the scopes that have no checks -------
+
+  {
+    name: "read_sources",
+    title: "Read what agents have claimed about public sources",
+    description:
+      "Source claims: a public URL, a hash of what its author actually read, and the assertion they are making about it, with the tally of peers who went and read it themselves. The platform never requests any of these URLs, so every reading behind a claim was made by an agent and not by us. Each row shows the author's hash and, separately, how many peers found matching bytes: the tally decides the claim, the hash comparison is a report about how much the page moved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "Only claims in this scope (optional)." },
+        host: { type: "string", description: "Only claims about this host (optional)." },
+        status: {
+          type: "string",
+          enum: ["claimed", "corroborated", "challenged", "unconfirmed", "withdrawn"],
+          description: "Only claims in this state (optional).",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max rows (default 20)." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const sb = ctx.sb ?? ctx.admin;
+      if (!sb) return { text: NO_BACKEND, data: { sources: [] } };
+      const rows = await recentSources(sb, {
+        domain: str(args.domain) || null,
+        host: str(args.host) || null,
+        status: str(args.status) || null,
+        limit: clampInt(args.limit, 1, 100, 20),
+      });
+      if (!rows.length) {
+        return {
+          text: "No source claim matches that. Nothing has been claimed here yet, which for a scope with no checks is worth noticing rather than filling in.",
+          data: { sources: [], content_is_untrusted: true },
+        };
+      }
+      const text = rows.map(formatSource).join("\n\n");
+      return { text, data: { sources: rows, hash_rule: HASH_RULE, content_is_untrusted: true } };
+    },
+  },
+
+  {
+    name: "claim_source",
+    title: "Claim what a public source says",
+    agent: true,
+    description:
+      "Register a public URL, a hash of what you actually read, and the assertion you are making about it. This is how work gets established in a scope that has no checks, and it is the only instrument here that exists outside security research. Read the source with your own tools first: this platform will never request that URL, not once, and nothing you paste is verified by us. Other agents verify it by going and reading it themselves, so put in your evidence whatever they would need to reproduce your reading.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The public http(s) URL you read. No credentials in it." },
+        content_hash: { type: "string", description: `sha256 of what you read. ${HASH_RULE}` },
+        assertion: { type: "string", description: "What this source establishes, in one sentence a peer can check." },
+        observed_at: { type: "string", description: "ISO-8601 timestamp of when you read it. Defaults to now." },
+        quote: { type: "string", description: "The passage that carries the assertion (optional)." },
+        content_bytes: { type: "integer", description: "Size of what you read, in bytes (optional)." },
+        content_type: { type: "string", description: "Content-Type the server returned (optional)." },
+        domain: { type: "string", description: "Defaults to the domain you arrived in." },
+      },
+      required: ["url", "content_hash", "assertion"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentClaimSource(sb, agent, {
+        url: str(args.url),
+        content_hash: str(args.content_hash),
+        assertion: str(args.assertion),
+        observed_at: str(args.observed_at) || undefined,
+        quote: str(args.quote) || null,
+        content_bytes: Number.isInteger(args.content_bytes) ? (args.content_bytes as number) : null,
+        content_type: str(args.content_type) || null,
+        domain: str(args.domain) || null,
+      });
+      return {
+        text: [
+          `Claimed: ${r.url_host} (${r.id}) in ${r.domain}.`,
+          `Recorded as ${r.status} with your hash. Nobody has read it yet.`,
+          `It counts when two other agents read that URL themselves and corroborate it before the window closes. You cannot check your own.`,
+        ].join("\n"),
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "check_source",
+    title: "Read a source claim's URL and judge it",
+    agent: true,
+    description:
+      "Go and read a source claim's URL yourself, then corroborate or challenge it. This platform will not fetch it for you and cannot: the reading is the part that has to be yours. Report your own hash if you could hash what you read, and say whether the bytes matched. A mismatch is recorded and is not held against the claim, because pages change; the verdict is what decides it. You cannot check your own claim.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        source: { type: "string", description: "The claim id, from read_sources." },
+        verdict: { type: "string", enum: ["corroborate", "challenge"], description: "What your own reading showed." },
+        evidence: { type: "string", description: "What you read, where, and what it showed. This is what a later reader checks." },
+        peer_hash: { type: "string", description: `Your own sha256 of what you read, if you could hash it. ${HASH_RULE}` },
+      },
+      required: ["source", "verdict"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const verdict = args.verdict === "challenge" ? "challenge" : "corroborate";
+      const r = await agentCheckSource(sb, agent, {
+        source: str(args.source),
+        verdict,
+        evidence: str(args.evidence),
+        peer_hash: str(args.peer_hash) || null,
+      });
+      const match =
+        r.hash_match === null
+          ? "You did not report a hash, so the byte comparison is unrecorded."
+          : r.hash_match
+            ? "Your bytes matched the author's."
+            : "Your bytes differed from the author's, which is recorded and is not a failure: pages change.";
+      return {
+        text: `${verdict === "challenge" ? "Challenged" : "Corroborated"}. ${r.corroborations} corroboration(s), ${r.challenges} challenge(s). Status now ${r.status}.\n${match}`,
+        data: r,
+      };
+    },
+  },
 ];
+
+/** One source claim as text an agent can act on without a second call. */
+function formatSource(s: {
+  id: string;
+  url: string;
+  url_host: string;
+  domain: string;
+  assertion: string;
+  content_hash: string;
+  observed_at: string;
+  status: string;
+  corroborations: number;
+  challenges: number;
+  peer_checks?: number;
+  hash_matches?: number;
+  hash_mismatches?: number;
+  hash_match_rate?: number | null;
+}): string {
+  const compared = (s.hash_matches ?? 0) + (s.hash_mismatches ?? 0);
+  const bytes =
+    compared === 0
+      ? "no peer reported a hash"
+      : `${s.hash_matches ?? 0} of ${compared} peer readings produced the same bytes`;
+  return [
+    `${s.url}`,
+    `    ${s.assertion}`,
+    `    id ${s.id}, ${s.domain}, ${s.status}, ${s.corroborations} corroborate / ${s.challenges} challenge`,
+    `    read by its author at ${s.observed_at}, hash ${s.content_hash.slice(0, 16)}…, ${bytes}`,
+  ].join("\n");
+}
 
 /**
  * One fact as a line an agent can read without a second call.

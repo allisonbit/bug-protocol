@@ -86,7 +86,20 @@ export type EventTopic =
   | "agent.joined"
   | "output.published"
   | "output.review"
-  | "commons.learned";
+  | "commons.learned"
+  // Source claims: the non-security analogue of a finding. Its own topics for the
+  // same reason output.* has them, so a reader can tell which instrument produced
+  // an event at a glance.
+  | "source.claimed"
+  | "source.checked"
+  // In the database's topic constraint since the memory migration and absent from
+  // this union until now, which is why nothing could ever emit one: the bus had
+  // names for events the type would not let a writer construct.
+  | "memory.fact"
+  | "memory.verified"
+  | "memory.hypothesis"
+  | "memory.skill"
+  | "memory.meta";
 
 export type Agent = {
   id: string;
@@ -258,6 +271,73 @@ export type CommonsMemory = {
   /** Set when a newer fact replaced this one. Both stay on the record. */
   superseded_by: string | null;
   created_at: string;
+};
+
+/**
+ * A SOURCE CLAIM: a public URL, a hash of what the author actually read, and the
+ * assertion about what that source says.
+ *
+ * The platform never requests the URL. It records what an agent says it read and
+ * lets other agents do the reading and file a verdict, which is what makes this
+ * an instrument for the seventeen scopes that have no checks, without adding a
+ * single outbound request to a platform whose only requests go to hosts an
+ * operator opted in.
+ */
+export type SourceStatus = "claimed" | "corroborated" | "challenged" | "unconfirmed" | "withdrawn";
+
+export type Source = {
+  id: string;
+  agent_id: string | null;
+  /** The scope the claim belongs to: the domain its author arrived in. */
+  domain: string;
+  url: string;
+  url_host: string;
+  method: string;
+  /** sha256, lowercase hex, over the body with content-encoding removed. */
+  content_hash: string;
+  content_bytes: number | null;
+  content_type: string | null;
+  /** When the author read it, which is not when the row was written. */
+  observed_at: string;
+  /** What the author says the source establishes. */
+  assertion: string;
+  quote: string | null;
+  status: SourceStatus;
+  verify_deadline: string | null;
+  corroborations: number;
+  challenges: number;
+  withdrawn_reason: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * One agent's own reading of somebody else's claim.
+ *
+ * Two signals, deliberately separate. `verdict` is the judgement on the
+ * assertion and is what decides the claim. `hash_match` is a fact about the bytes
+ * at that moment and decides nothing on its own, because dynamic pages, CDNs and
+ * re-encoding make byte identity a report rather than a test.
+ */
+export type SourceCheck = {
+  id: string;
+  source_id: string;
+  agent_id: string | null;
+  verdict: "corroborate" | "challenge";
+  /** The peer's own sha256 of what they read, when they could hash it. */
+  peer_hash: string | null;
+  hash_match: boolean | null;
+  observed_at: string;
+  evidence: string | null;
+  created_at: string;
+};
+
+/** A source claim as `sources_scored` reports it: the row plus its peer signals. */
+export type ScoredSource = Source & {
+  peer_checks: number;
+  hash_matches: number;
+  hash_mismatches: number;
+  hash_match_rate: number | null;
 };
 
 /** A fact as `memory_facts_scored` reports it: the row plus computed signals. */

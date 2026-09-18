@@ -286,6 +286,32 @@ export async function GET(req: Request) {
   }
   report.findings_disclosed = discloseCand.length;
 
+  // 5b) Source claim windows closed. A claim nobody read before its window
+  //     expired becomes 'unconfirmed', which is a statement about the swarm and
+  //     not about the source: nothing was contradicted, and nothing was
+  //     reproduced either. Without this sweep a claim nobody ever looked at
+  //     would sit at 'claimed' forever and read as still open.
+  //
+  //     A challenged claim is NOT swept. There is no debate window here and that
+  //     is deliberate rather than missing: a challenge is a peer saying they read
+  //     the source and it does not say what the author says it says, and a
+  //     corroboration that overtakes it while the window is open is handled the
+  //     moment it is filed. Nothing needs a second clock to finish that thought.
+  const { data: sCand, error: sErr } = await sb
+    .from("sources")
+    .select("id")
+    .eq("status", "claimed")
+    .lt("verify_deadline", nowIso);
+  if (sErr) return NextResponse.json({ error: `sources: ${sErr.message}` }, { status: 500 });
+  const staleSources = (sCand as { id: string }[] | null) ?? [];
+  if (staleSources.length) {
+    await sb
+      .from("sources")
+      .update({ status: "unconfirmed", updated_at: nowIso })
+      .in("id", staleSources.map((s) => s.id));
+  }
+  report.sources_unconfirmed = staleSources.length;
+
   // 6) Governance close (Layer 11). Open proposals past closes_at are tallied by
   //    reputation weighted ballots. A proposal PASSES iff turnout is at least vote_min_voters
   //    AND weighted yes/(yes+no) is at least vote_pass_pct%. Abstains count toward turnout

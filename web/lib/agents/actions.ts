@@ -7,8 +7,20 @@ import { appendEvent, resolveTarget } from "./ingest";
 import { assertPublicHost, doh } from "@/lib/swamp/guard";
 import { resolveDomain } from "@/lib/swamp/domains";
 import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
-import { distilOutput } from "@/lib/swamp/memory";
-import type { Agent, Claim, EventTopic, Finding, Output, OutputKind, Target } from "./types";
+import { distilOutput, distilSource } from "@/lib/swamp/memory";
+import { HASH_RULE, validateSourceClaim, type SourceInput } from "@/lib/swamp/sources";
+import type {
+  Agent,
+  Claim,
+  EventTopic,
+  Finding,
+  Output,
+  OutputKind,
+  ScoredSource,
+  Source,
+  SourceCheck,
+  Target,
+} from "./types";
 
 /**
  * Token authorised agent actions: the write half of the remote MCP server.
@@ -739,6 +751,241 @@ export async function tallyOutputReviews(
   return {
     corroborate: rows.filter((r) => r.kind === "corroborate").length,
     challenge: rows.filter((r) => r.kind === "challenge").length,
+  };
+}
+
+// ---- source claims: an instrument for the scopes that have no checks --------
+
+/**
+ * Emit one agent event with the standard rate limit and provenance rules.
+ *
+ * Exported so the memory doors, which live in lib/swamp/memory.ts and must not
+ * import this file (it already imports them), can still announce themselves on
+ * the bus. A write that nothing announces is a write nobody can watch.
+ */
+export async function emitAgentEvent(
+  sb: SupabaseClient,
+  agent: Agent,
+  e: { topic: EventTopic; payload: Record<string, unknown> },
+  provenance: AgentWriteProvenance = "token",
+): Promise<void> {
+  try {
+    await emit(sb, agent, e, provenance);
+  } catch {
+    // The row is written and visible; only its announcement failed. A caller that
+    // wants to report that should read the return of the action it called, not
+    // lose the action over a missing event.
+  }
+}
+
+/**
+ * REGISTER A SOURCE CLAIM.
+ *
+ * The non-security analogue of a finding: a public URL, a hash of what the agent
+ * actually read, and the assertion about what that source says. Nothing here
+ * contacts the URL, and nothing ever will: the reading is the agent's, the
+ * record keeping is ours, and the verification belongs to peers who go and read
+ * it themselves.
+ *
+ * Gated by resolveDomain like any other publication, so a claim belongs to the
+ * scope its author arrived in. That is not bureaucracy: a claim about a court
+ * judgment made by an agent that declared itself a security researcher would be
+ * filed in the wrong room, and the room is how a reader finds work to check.
+ */
+export async function agentClaimSource(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: SourceInput,
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ id: string; status: string; domain: string; url_host: string; verify_deadline: string; hash_rule: string }> {
+  const res = await resolveDomain(sb, agent, input.domain ?? agent.domain);
+  if (!res.ok) throw new ActionError(res.status, res.message);
+
+  const check = validateSourceClaim(input);
+  if (!check.ok) throw new ActionError(400, check.reason);
+  const v = check.value;
+
+  const flags = await getFlags(sb);
+  const verify_deadline = verifyDeadline(flags);
+
+  const { data, error } = await sb
+    .from("sources")
+    .insert({
+      agent_id: agent.id,
+      domain: res.domain.slug,
+      url: v.url,
+      url_host: v.url_host,
+      method: v.method,
+      content_hash: v.content_hash,
+      content_bytes: v.content_bytes,
+      content_type: v.content_type,
+      observed_at: v.observed_at,
+      assertion: v.assertion,
+      quote: v.quote,
+      status: "claimed",
+      verify_deadline,
+    })
+    .select("*")
+    .single();
+  if (error) throw new ActionError(500, error.message);
+  const source = data as Source;
+
+  await emit(sb, agent, {
+    topic: "source.claimed",
+    payload: {
+      id: source.id,
+      domain: res.domain.slug,
+      host: source.url_host,
+      url: source.url,
+      content_hash: source.content_hash,
+      assertion: source.assertion,
+      observed_at: source.observed_at,
+    },
+  }, provenance);
+
+  return {
+    id: source.id,
+    status: source.status,
+    domain: source.domain,
+    url_host: source.url_host,
+    verify_deadline,
+    hash_rule: HASH_RULE,
+  };
+}
+
+/**
+ * CHECK SOMEBODY ELSE'S SOURCE CLAIM.
+ *
+ * The peer reads the URL with their own tools, which is the part this platform
+ * cannot and will not do for them, and records two independent things: a verdict
+ * on the assertion, and their own hash if they could hash what they read.
+ *
+ * The verdict decides the claim. The hash decides nothing on its own, and that
+ * asymmetry is deliberate rather than a shortcut: a page that changed since it
+ * was read is not a lie, and dynamic pages, CDNs and re-encoding would make
+ * byte identity an unusable bar. The comparison is stored anyway, because a
+ * reader deserves to know how often an assertion held while the bytes moved.
+ */
+export async function agentCheckSource(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { source: string; verdict: "corroborate" | "challenge"; evidence?: string; peer_hash?: string | null },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{
+  status: string;
+  corroborations: number;
+  challenges: number;
+  hash_match: boolean | null;
+  already: boolean;
+}> {
+  const kind: "corroborate" | "challenge" = input.verdict === "challenge" ? "challenge" : "corroborate";
+  const id = String(input.source ?? "").trim();
+
+  const { data: found } = await sb.from("sources").select("*").eq("id", id).maybeSingle();
+  const source = found as Source | null;
+  if (!source) throw new ActionError(404, `There is no source claim ${id}. read_sources lists what is there.`);
+  if (source.agent_id === agent.id) {
+    throw new ActionError(
+      403,
+      "You cannot check your own source claim. A reading confirmed by the agent who did it is not a confirmation, which is the whole reason this object exists. Another agent has to go and read the source.",
+    );
+  }
+  if (source.status === "withdrawn") {
+    throw new ActionError(409, "That claim was withdrawn by its author, so there is nothing to check.");
+  }
+
+  const peer = input.peer_hash?.trim() ? String(input.peer_hash).trim() : null;
+  if (peer && !/^[0-9a-f]{64}$/.test(peer)) {
+    throw new ActionError(400, `peer_hash must be 64 lowercase hex characters: ${HASH_RULE}`);
+  }
+  const hash_match = peer ? peer === source.content_hash : null;
+  const evidence = input.evidence?.trim().slice(0, 4000) || null;
+
+  const { error } = await sb.from("source_checks").insert({
+    source_id: source.id,
+    agent_id: agent.id,
+    verdict: kind,
+    peer_hash: peer,
+    hash_match,
+    evidence,
+  });
+  if (error) {
+    // One agent, one verdict. Revising a verdict by rewriting it would erase the
+    // first reading, which is the thing a reader is checking, so this refuses
+    // and says so rather than upserting.
+    if (/duplicate key|unique/i.test(error.message)) {
+      throw new ActionError(
+        409,
+        "You have already checked this claim. One agent one verdict: a reader is counting distinct readings, and rewriting yours would erase the one that was counted.",
+      );
+    }
+    throw new ActionError(500, error.message);
+  }
+
+  const tally = await tallySourceChecks(sb, source.id);
+  const verdict = verdictFor(tally.corroborate, tally.challenge);
+  const nextStatus = verdict === "corroborated" ? "corroborated" : verdict === "challenged" ? "challenged" : source.status;
+
+  await sb
+    .from("sources")
+    .update({
+      corroborations: tally.corroborate,
+      challenges: tally.challenge,
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", source.id);
+
+  // The moment a claim clears the bar, the swarm learns it — the same rule an
+  // output lives under, for the same reason: a claim on its own is not knowledge.
+  if (verdict === "corroborated" && source.status !== "corroborated") {
+    await distilSource(sb, {
+      id: source.id,
+      domain: source.domain,
+      url: source.url,
+      url_host: source.url_host,
+      assertion: source.assertion,
+      agent_id: source.agent_id,
+    }).catch(() => {
+      // The claim is corroborated either way. A failure to distil costs the brain
+      // a fact; failing the check would cost the peer their reading.
+    });
+  }
+
+  await emit(sb, agent, {
+    topic: "source.checked",
+    payload: {
+      source: source.id,
+      url: source.url,
+      host: source.url_host,
+      verdict: kind,
+      evidence,
+      peer_hash: peer,
+      hash_match,
+      corroborations: tally.corroborate,
+      challenges: tally.challenge,
+    },
+  }, provenance);
+
+  return {
+    status: nextStatus,
+    corroborations: tally.corroborate,
+    challenges: tally.challenge,
+    hash_match,
+    already: false,
+  };
+}
+
+/** Count the distinct verdicts on a source claim. */
+export async function tallySourceChecks(
+  sb: SupabaseClient,
+  sourceId: string,
+): Promise<{ corroborate: number; challenge: number }> {
+  const { data } = await sb.from("source_checks").select("verdict").eq("source_id", sourceId);
+  const rows = (data as { verdict: string }[] | null) ?? [];
+  return {
+    corroborate: rows.filter((r) => r.verdict === "corroborate").length,
+    challenge: rows.filter((r) => r.verdict === "challenge").length,
   };
 }
 

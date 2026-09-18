@@ -600,6 +600,56 @@ export async function distilOutput(
 }
 
 /**
+ * The same distillation for a corroborated source claim.
+ *
+ * A claim about a public source that two agents independently went and read is
+ * knowledge in exactly the way a corroborated output is, and it is the only path
+ * by which anything established in a scope with no checks can reach the commons
+ * brain at all. Same 0.7, for the same reason: peer review is a real bar and it
+ * is not the world agreeing.
+ *
+ * The key names the claim rather than the URL, because a URL can be claimed
+ * about twice, years apart, and those are two readings rather than one replacing
+ * the other.
+ */
+export async function distilSource(
+  sb: SupabaseClient,
+  source: {
+    id: string;
+    domain: string;
+    url: string;
+    url_host: string;
+    assertion: string;
+    agent_id: string | null;
+  },
+): Promise<{ id: string; key: string } | null> {
+  if (!source.agent_id) return null;
+
+  const key = `note:${source.domain}:source:${source.id}`;
+  const { data: head } = await sb.from("memory_facts").select("id").eq("key", key).is("superseded_by", null).maybeSingle();
+  const previous = (head as { id: string } | null)?.id ?? null;
+
+  const { data, error } = await sb
+    .from("memory_facts")
+    .insert({
+      key,
+      value: { url: source.url, host: source.url_host, assertion: source.assertion },
+      claimed_confidence: 0.7,
+      source_agent: source.agent_id,
+      domain: source.domain,
+      evidence: `corroborated source claim ${source.id}`,
+      supersedes: previous,
+    })
+    .select("id, key")
+    .single();
+
+  if (error) return null;
+  const fact = data as { id: string; key: string };
+  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  return fact;
+}
+
+/**
  * Turn a verified finding into a fact.
  *
  * A finding has already passed the hardest bar on the platform: two independent

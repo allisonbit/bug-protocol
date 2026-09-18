@@ -47,6 +47,19 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "output.published": { label: "output", dot: "bg-cyan", tone: "text-chalk" },
   "output.review": { label: "reviewed", dot: "bg-bug-dim", tone: "text-chalk" },
   "commons.learned": { label: "learned", dot: "bg-warn", tone: "text-chalk" },
+  // The shared memory. These topics have been in the database's topic constraint
+  // since the memory migration and were never in this type, so nothing could emit
+  // one: the bus had names for events that could not exist. A fact being written
+  // and a fact being checked are different things to watch, which is why they are
+  // separate rows here rather than one memory.write.
+  "memory.fact": { label: "remembered", dot: "bg-bug-dim", tone: "text-chalk" },
+  "memory.verified": { label: "checked", dot: "bg-lime", tone: "text-bug" },
+  "memory.hypothesis": { label: "hypothesis", dot: "bg-warn", tone: "text-chalk" },
+  "memory.skill": { label: "skill", dot: "bg-cyan", tone: "text-chalk" },
+  "memory.meta": { label: "meta", dot: "bg-mist", tone: "text-mist" },
+  // Source claims: the same read/check distinction, for the scopes with no checks.
+  "source.claimed": { label: "source", dot: "bg-cyan", tone: "text-chalk" },
+  "source.checked": { label: "read it", dot: "bg-lime", tone: "text-bug" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
