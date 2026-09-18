@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { rgbForTopic } from "@/lib/world/mapping";
 import type { BodyState, VisualEvent, WorldState } from "@/lib/world/types";
-import { createCityscape, NIGHT } from "./cityscape";
+import { createCityscape, PLACE } from "./cityscape";
 import { buildHumanoid, palettesFrom, type ActionId, type BodyPalette, type Humanoid } from "./humanoid";
 
 /**
@@ -13,8 +13,9 @@ import { buildHumanoid, palettesFrom, type ActionId, type BodyPalette, type Huma
  * lights because a row landed in that zone, and the beam that leaves a body when
  * it writes to the shared brain.
  *
- * WHAT IS STYLE: the water, the drift of the camera, the sky colour, the length
- * of a stride, and the exact spot inside a zone, which is a hash of the agent id.
+ * WHAT IS STYLE: the land, the sea, the drift of the camera, the sky and the hour
+ * it is seen at, the length of a stride, and the exact spot inside a zone, which
+ * is a hash of the agent id.
  * `bodies` are placed by `project.ts` and this file only interpolates toward them.
  *
  * The budget this file is written to: sixty frames a second with every agent
@@ -174,59 +175,37 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.02;
 
   const scene = new THREE.Scene();
-  // Fog takes the far edge into the night rather than into the page colour: the
-  // world has a horizon now, and a horizon that dissolved into the site's own
-  // near-black would read as a rectangle pasted onto the page. The near bound sits
-  // beyond the sealed ring, because the camera is about forty units out and a
-  // nearer fog would grey the far half of the habitat a visitor came to watch.
-  scene.fog = new THREE.Fog(new THREE.Color(NIGHT.fog), 70, 205);
+  // Haze rather than darkness: the sea and the far hills dissolve into the same
+  // colour the sky is at the horizon, so the land reads as surrounded and the band
+  // never ends in a rectangle of the page's own background. It starts well beyond
+  // the town, because the camera sits about forty units out and a nearer fog would
+  // grey the half of the place a visitor came to watch.
+  scene.fog = new THREE.Fog(new THREE.Color(PLACE.fog), 95, 300);
 
   const camera = new THREE.PerspectiveCamera(42, 2, 0.5, 400);
   const clock = new THREE.Clock();
 
-  // Night lighting, deliberately dim: the city lights itself. The windows and the
-  // lamps are emissive, so the work these three lights do is to give the walls,
-  // the water and the bodies shape, not to illuminate the scene. Raising them to
-  // daylight levels would flatten every lit window into the same grey wall.
-  const hemi = new THREE.HemisphereLight(new THREE.Color("#3d4a6b"), new THREE.Color("#0b0e14"), 0.62);
+  // Late afternoon light, from the same direction as the sun in the sky shader, so
+  // the shadows and the sky agree about where the light is. Daylight is what makes
+  // this a place rather than a diagram: the land, the sea and the stone are all
+  // visible in their own right, and a lit window is a bright thing rather than the
+  // only thing.
+  const hemi = new THREE.HemisphereLight(new THREE.Color("#b8cfe6"), new THREE.Color("#3d3a2c"), 0.95);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(new THREE.Color("#cdd9ff"), 0.5);
-  key.position.set(18, 30, 14);
+  const key = new THREE.DirectionalLight(new THREE.Color("#ffe6bd"), 1.45);
+  key.position.set(31, 16, 21);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(new THREE.Color("#8d7bd6"), 0.3);
-  rim.position.set(-22, 14, -18);
-  scene.add(rim);
+  const fill = new THREE.DirectionalLight(new THREE.Color("#7f9cc9"), 0.4);
+  fill.position.set(-24, 12, -19);
+  scene.add(fill);
 
-  // ---- the ground: the brand's own waterline, in three dimensions -----------
-  // Wide enough that its own edge is past the fog and never shows as a line
-  // across the sky, which is what a 190 unit plane did once the horizon existed.
-  const waterGeo = new THREE.PlaneGeometry(420, 420, 120, 120);
-  const waterMat = new THREE.MeshStandardMaterial({
-    // Water rather than the page's own surface: the city stands on something, and
-    // a metalness this high is what lets the lamp and window light gather on it.
-    color: new THREE.Color(NIGHT.water),
-    roughness: 0.24,
-    metalness: 0.42,
-    transparent: true,
-    // Opaque enough to catch the city's light instead of letting the page's black
-    // through it, which is what kept the ground a void in the first pass.
-    opacity: 0.86,
-    // A floor of its own light, because the night lights are deliberately dim and
-    // a lit city standing on pitch black water is still a city in a void: that is
-    // exactly how the second pass looked, with the light pool reading as an island
-    // and everything past it black. This is the ground being visible rather than
-    // the ground being illuminated, and it is the darkest value that still reads.
-    emissive: new THREE.Color("#0c1524"),
-    emissiveIntensity: 1,
-  });
-  const water = new THREE.Mesh(waterGeo, waterMat);
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = -0.05;
-  scene.add(water);
-  const waterBase = Float32Array.from(waterGeo.attributes.position.array as Float32Array);
+  // The ground is the island and the sea, and both are drawn with the town by
+  // `createCityscape` below: the land has to know where the plots are so it can
+  // leave a garden on one that has not been built yet, and that knowledge lives
+  // with the plan rather than here.
 
   // ---- the zones -----------------------------------------------------------
   const zonePads = new THREE.Group();
@@ -289,7 +268,7 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   // ground and no sky is a scatter plot.
   const city = createCityscape(scene, initial.zones);
   city.setReducedMotion(reducedMotion);
-  city.apply(initial.structures);
+  city.apply(initial.structures, initial.city);
 
   // Orbit state: spherical around a moving focus.
   const focus = new THREE.Vector3(0, 0.8, 0);
@@ -538,10 +517,11 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     linkGroup.add(linkLines);
     rebuildGroups(next);
 
-    // The city, rebuilt from the same projection. New rows raise buildings and a
-    // deeper record raises one already standing; nothing here decides that
-    // anything exists.
-    city.apply(next.structures);
+    // The town, rebuilt from the same projection. New rows raise buildings and a
+    // deeper record raises one already standing; the streets, the paving and the
+    // gardens are re-laid with it, because the town's extent is a reading of how
+    // far it has actually grown.
+    city.apply(next.structures, next.city);
 
     // Pads: lit by whether a row landed there recently, not on a timer.
     const nowMs = Date.now();
@@ -585,17 +565,6 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
       fps = Math.round((frames * 1000) / (nowMs - fpsAt));
       frames = 0;
       fpsAt = nowMs;
-    }
-
-    // Water: two crossing swells, offset so it never reads as a single pulse.
-    if (!reducedMotion) {
-      const pos = waterGeo.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < pos.count; i++) {
-        const x = waterBase[i * 3];
-        const y = waterBase[i * 3 + 1];
-        pos.setZ(i, Math.sin(x * 0.11 + t * 0.5) * 0.28 + Math.cos(y * 0.13 - t * 0.37) * 0.22);
-      }
-      pos.needsUpdate = true;
     }
 
     // Bodies walk toward where the record put them.
@@ -840,8 +809,6 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
       }
       bodies.clear();
       city.dispose();
-      waterGeo.dispose();
-      waterMat.dispose();
       renderer.dispose();
     },
   };

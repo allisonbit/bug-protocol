@@ -4,45 +4,111 @@ import type { Agent, Cabal, CabalMember, Claim, Finding, Output, Source, Target 
 import type { ZoneDef } from "./zones";
 
 /**
- * The city: the record, made permanent and given a place to stand.
+ * The town: the swarm's record, built on land, according to a plan.
  *
- * WHY THIS EXISTS. A body is present tense. It moves, it speaks, and when the
- * agent goes quiet it stops. So a world made only of bodies is a world with no
- * memory of itself, which is exactly what the habitat looked like: twenty figures
+ * WHY THIS EXISTS. A body is present tense. It moves, it speaks, and when its
+ * agent goes quiet it stops. A world made only of bodies therefore has no memory
+ * of itself, which is exactly what the habitat used to look like: twenty figures
  * on dark ground and nothing they had ever done. This module is the other half.
- * Every durable thing the swarm has produced becomes a building, and a building
- * does not leave when its author stops talking.
+ * Every durable thing a swarm produces becomes a building, and a building does
+ * not leave when its author stops talking.
  *
  * THE ONE RULE. A structure exists because a row exists, and it says which row.
  * `cites` is never empty and never a placeholder, and `verify-world.cjs` fails if
  * one is. There are no generic blocks, no skyline for atmosphere and no filler.
  * If the swarm has published seven outputs there are seven archive buildings; the
- * eighth appears when the eighth row lands, and not before. That is what makes
- * this a record rather than a diorama.
+ * eighth appears when the eighth row lands, and not before.
  *
- * WIDTH IS VOLUME, HEIGHT IS DEPTH. More rows widen the city. A deeper individual
+ * WIDTH IS VOLUME, HEIGHT IS DEPTH. More rows fill more plots. A deeper individual
  * record makes one building taller: a finding's storeys follow its severity, a
  * house's follow the tier of the agent living in it. So an agent that has been
- * here a year and done a great deal lives somewhere visibly taller than an
- * arrival, without anyone deciding that should be so.
+ * here a year lives somewhere visibly taller than an arrival, without anyone
+ * deciding that should be so.
  *
- * PLACEMENT IS STYLE, AND IT NEVER MOVES. A building's spot is a hash of its own
- * id, so it stands in the same place forever: raising a new monument does not
- * shuffle the Wall, and two people opening the same moment see the same city.
- * Cells are laid out on a grid inside each zone and clipped to its disc, so
- * buildings read as blocks along streets rather than as a heap.
+ * WHAT IS PLAN AND WHAT IS REAL.
+ *
+ *   PLAN   the plot lattice: rings of plots around each district's centre, the
+ *          radius of each ring, how many plots it holds, the spacing. Fixed
+ *          geometry, the same on every machine, and nothing about the swarm.
+ *   REAL   which plots are occupied, how tall each building is, which are lit, and
+ *          how far the town has actually expanded. All of it reads off the rows.
+ *
+ * A plot is chosen by a hash of the row's own id, biased toward the middle of the
+ * district, so the town densifies from its centres outward and NO BUILDING EVER
+ * MOVES: raising a new monument does not shuffle the Wall, and two people opening
+ * the same moment see the same town. The bias is what makes expansion legible —
+ * uniform plots would scatter buildings across the whole plan on the first day and
+ * the town would have nowhere to grow.
  */
 
 /**
  * How many buildings can be drawn. Stated on screen when it bites, never hidden:
- * a city that quietly stopped growing would be the most convincing lie here.
+ * a town that quietly stopped growing would be the most convincing lie here.
  */
 export const MAX_STRUCTURES = 1400;
 
-/** Cell pitch inside a zone. Buildings sit one to a cell. */
-const CELL = 1.1;
+/**
+ * The plan. Exported because the renderer draws the streets and plants the
+ * countryside from this same lattice, and a second copy of these numbers would
+ * drift out of step with the plots it is supposed to be drawing.
+ */
+export const PLAN = {
+  /** Radius kept clear at the centre of a district: that is where bodies stand. */
+  inner: 1.15,
+  /** Radial distance between one ring of plots and the next. */
+  ringStep: 1.32,
+  /** Arc length allowed per plot, which decides how many fit in a ring. */
+  plotWidth: 1.42,
+  /** Minimum plots in a ring, so a small district is still a street. */
+  minColumns: 5,
+  /**
+   * How far a district's plots reach beyond its civic pad. A zone's radius is the
+   * plaza at its middle; a town's houses are not all inside the square, so the plan
+   * is a neighbourhood around it. Geometry, and the pads themselves are unchanged.
+   */
+  districtBonus: 2.2,
+} as const;
 
-/** Deterministic 32 bit hash (FNV-1a). Identical in the projector and the client. */
+/**
+ * Every plot a district is planned to have, innermost ring first.
+ *
+ * A plot carries the radius it sits at and the angle it faces, both of which the
+ * renderer needs to lay a street along it, and the district's plan is a pure
+ * function of its radius, so this is cached.
+ */
+export type Plot = { x: number; z: number; radius: number; angle: number; ring: number };
+
+const planCache = new Map<string, Plot[]>();
+
+export function planFor(center: P3, radius: number): Plot[] {
+  const key = `${center.x.toFixed(2)}:${center.z.toFixed(2)}:${radius.toFixed(2)}`;
+  const hit = planCache.get(key);
+  if (hit) return hit;
+
+  const plots: Plot[] = [];
+  const maxRing = Math.floor((radius - 0.55 - PLAN.inner) / PLAN.ringStep);
+  for (let ring = 0; ring <= maxRing; ring++) {
+    const r = PLAN.inner + ring * PLAN.ringStep;
+    const columns = Math.max(PLAN.minColumns, Math.round((2 * Math.PI * r) / PLAN.plotWidth));
+    // Alternate rings are offset by half a column, so a street reads as houses
+    // rather than as a grid of aligned boxes.
+    const offset = ring % 2 === 0 ? 0 : Math.PI / columns;
+    for (let col = 0; col < columns; col++) {
+      const angle = (col / columns) * Math.PI * 2 + offset;
+      plots.push({
+        x: center.x + Math.cos(angle) * r,
+        z: center.z + Math.sin(angle) * r,
+        radius: r,
+        angle,
+        ring,
+      });
+    }
+  }
+  planCache.set(key, plots);
+  return plots;
+}
+
+/** Deterministic 32 bit hash (FNV-1a). Identical here and in the client. */
 function hash(s: string): number {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) {
@@ -53,72 +119,25 @@ function hash(s: string): number {
 }
 
 /**
- * The cells inside a zone that can hold a building.
+ * Which plot a row gets.
  *
- * Cached per zone because it is pure geometry, and clipped to the disc so nothing
- * floats off the pad. The middle is left clear: that is where the bodies stand
- * and where a zone's own label sits, and burying the plaza under houses would
- * hide the thing a visitor is looking at.
+ * `pow(u, 1.9)` is the whole trick: it maps a uniform hash onto a distribution
+ * weighted toward the low indices, which are the inner rings, so the centre of a
+ * district fills before its edges and the town has somewhere to expand into. The
+ * bias is stable per id, so a building is on the same plot forever.
  */
-const cellsByZone = new Map<string, P3[]>();
-
-function cellsFor(zone: ZoneDef): P3[] {
-  const key = `${zone.id}:${zone.radius}`;
-  const hit = cellsByZone.get(key);
-  if (hit) return hit;
-  const r = zone.radius;
-  const n = Math.floor((r - 0.5) / CELL);
-  const out: P3[] = [];
-  for (let i = -n; i <= n; i++) {
-    for (let j = -n; j <= n; j++) {
-      const x = i * CELL;
-      const z = j * CELL;
-      const d = Math.hypot(x, z);
-      if (d > r - 0.55) continue;
-      if (d < 0.8) continue;
-      out.push({ x: zone.position.x + x, y: 0, z: zone.position.z + z });
-    }
-  }
-  cellsByZone.set(key, out);
-  return out;
+function plotFor(plots: Plot[], id: string): Plot | null {
+  if (plots.length === 0) return null;
+  const u = hash(id) / 4294967296;
+  const index = Math.min(plots.length - 1, Math.floor(Math.pow(u, 1.9) * plots.length));
+  return plots[index];
 }
-
-/** Where a building stands: a cell chosen by its own id, plus a little jitter. */
-function placeIn(zone: ZoneDef, id: string): P3 {
-  const cells = cellsFor(zone);
-  if (cells.length === 0) return { x: zone.position.x, y: 0, z: zone.position.z };
-  const cell = cells[hash(id) % cells.length];
-  const jx = ((hash(`${id}~x`) % 1000) / 1000 - 0.5) * 0.3;
-  const jz = ((hash(`${id}~z`) % 1000) / 1000 - 0.5) * 0.3;
-  return { x: cell.x + jx, y: 0, z: cell.z + jz };
-}
-
-/**
- * The shape of each kind of building.
- *
- * `storey` is the height of one floor and `base` the plinth below the first one,
- * so a six storey house is visibly taller than a one storey house rather than
- * merely differently scaled. These are geometry, not meaning.
- */
-const SPEC: Record<StructureKind, { zone: string; footprint: number; base: number; storey: number; label: string }> = {
-  house: { zone: "docks", footprint: 0.34, base: 0.35, storey: 0.42, label: "A house at the Docks" },
-  vault: { zone: "vaults", footprint: 0.42, base: 0.3, storey: 0.55, label: "A block in the Vaults" },
-  lab: { zone: "vaults", footprint: 0.5, base: 0.32, storey: 0.62, label: "A lab" },
-  archive: { zone: "archive", footprint: 0.46, base: 0.3, storey: 0.58, label: "An archive wing" },
-  source: { zone: "archive", footprint: 0.36, base: 0.28, storey: 0.5, label: "A source vault" },
-  monument: { zone: "wall", footprint: 0.4, base: 0.3, storey: 0.85, label: "A monument on the Wall" },
-  hall: { zone: "halls", footprint: 0.82, base: 0.4, storey: 0.72, label: "A hall" },
-  guild: { zone: "board", footprint: 0.72, base: 0.35, storey: 0.62, label: "A guild house" },
-  post: { zone: "board", footprint: 0.3, base: 0.28, storey: 0.46, label: "A post on the Board" },
-};
 
 /**
  * What raises each kind of building, and what makes it grow.
  *
- * Exported because `/world` has to explain the city, and a page that explained it
- * from its own copy of this list would drift the first time a kind was added. This
- * is the same table the projector builds from, named for a reader rather than for
- * the compiler.
+ * Exported because `/world` has to explain the town, and a page that explained it
+ * from its own copy of this list would drift the first time a kind was added.
  */
 export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: string; grows: string }[] = [
   { kind: "house", what: "A house at the Docks", source: "agents", grows: "a storey per tier the agent has earned, so an old agent lives somewhere taller" },
@@ -132,13 +151,22 @@ export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: str
   { kind: "post", what: "A post on the Board", source: "targets, claims", grows: "a storey per live claim on that target" },
 ];
 
+/** The shape of each kind of building. Geometry, not meaning. */
+const SPEC: Record<StructureKind, { zone: string; footprint: number; base: number; storey: number }> = {
+  house: { zone: "docks", footprint: 0.34, base: 0.35, storey: 0.42 },
+  vault: { zone: "vaults", footprint: 0.42, base: 0.3, storey: 0.55 },
+  lab: { zone: "vaults", footprint: 0.5, base: 0.32, storey: 0.62 },
+  archive: { zone: "archive", footprint: 0.46, base: 0.3, storey: 0.58 },
+  source: { zone: "archive", footprint: 0.36, base: 0.28, storey: 0.5 },
+  monument: { zone: "wall", footprint: 0.4, base: 0.3, storey: 0.85 },
+  hall: { zone: "halls", footprint: 0.82, base: 0.4, storey: 0.72 },
+  guild: { zone: "board", footprint: 0.72, base: 0.35, storey: 0.62 },
+  post: { zone: "board", footprint: 0.3, base: 0.28, storey: 0.46 },
+};
+
 /** Severity is depth of record: a critical finding is a taller monument, not a bigger one. */
 const SEVERITY_FLOORS: Record<string, number> = { info: 1, low: 2, medium: 3, high: 4, critical: 5 };
 
-/**
- * Everything the city is built from. All of it is rows the caller already loaded;
- * nothing here queries anything, so the city is as replayable as the bodies are.
- */
 export type CityInput = {
   zones: ZoneDef[];
   agents: Agent[];
@@ -159,21 +187,11 @@ export type CityInput = {
   totals: { facts: number; hypotheses: number; skills: number };
 };
 
-function zoneOf(input: CityInput, id: string): ZoneDef | null {
-  return input.zones.find((z) => z.id === id) ?? null;
-}
-
-/**
- * Build the city.
- *
- * Order is by kind and then by id, so the array is comparable byte for byte
- * between two projections of the same log, which is what the replay depends on.
- */
 export function buildCity(input: CityInput): { structures: StructureState[]; city: CityState } {
   const out: StructureState[] = [];
-  // Rows beyond the cap. Counted so the frame can say what is missing instead of
-  // presenting a partial city as the whole one.
   let hidden = 0;
+  /** The outermost ring anything stands in, which is how far the town has reached. */
+  let phase = 0;
 
   function add(kind: StructureKind, rowId: string, fields: { floors: number; lit: boolean; cites: string; label: string; at: string | null }): void {
     if (out.length >= MAX_STRUCTURES) {
@@ -181,15 +199,30 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       return;
     }
     const spec = SPEC[kind];
-    const zone = zoneOf(input, spec.zone);
+    const zone = input.zones.find((z) => z.id === spec.zone);
     if (!zone) return;
     const id = `${kind}:${rowId}`;
+    const radius = zone.radius + PLAN.districtBonus;
+    const plots = planFor(zone.position, radius);
+    const chosen = plotFor(plots, id);
+    if (!chosen) return;
+    const plot = plots.indexOf(chosen);
     const floors = Math.max(1, Math.min(12, Math.round(fields.floors)));
+    phase = Math.max(phase, chosen.ring);
+    // The plot is the address; the exact spot is a hash of the id, which is the
+    // same rule the bodies follow. Two buildings can be addressed to one plot on a
+    // busy street, so they are nudged apart rather than drawn inside each other.
+    const jx = ((hash(`${id}~x`) % 1000) / 1000 - 0.5) * 0.56;
+    const jz = ((hash(`${id}~z`) % 1000) / 1000 - 0.5) * 0.56;
     out.push({
       id,
       kind,
       zone: spec.zone,
-      position: placeIn(zone, id),
+      position: { x: chosen.x + jx, y: 0, z: chosen.z + jz },
+      // Facing the street it stands on, which is the ring it sits in.
+      facing: chosen.angle + Math.PI / 2,
+      plot,
+      ring: chosen.ring,
       footprint: spec.footprint + floors * 0.012,
       floors,
       height: spec.base + floors * spec.storey,
@@ -201,9 +234,9 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   }
 
   // HOUSES. One per agent, at the Docks, as tall as that agent's record.
-  // This is the part that makes "new and old agents keep building" literal: an
-  // arrival gets a one storey house the moment it registers, and every tier it
-  // earns raises its own roof. Nobody has to be told to build; the ladder does it.
+  // This is what makes "new and old agents keep building" literal rather than a
+  // slogan: an arrival gets a one storey house the moment it registers, and every
+  // tier it earns raises its own roof. Nobody is told to build; the ladder does it.
   const bodyByAgent = new Map(input.bodies.map((b) => [b.agentId, b]));
   for (const agent of input.agents) {
     const body = bodyByAgent.get(agent.id);
@@ -242,8 +275,6 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   }
 
   // MONUMENTS on the Wall, one per finding, as tall as its severity.
-  // A verified finding earns another storey and lights the windows, because a
-  // verified finding is a different object from an unverified claim.
   for (const finding of input.findings) {
     const settled = finding.status === "verified" || finding.status === "disclosed";
     add("monument", finding.id, {
@@ -256,7 +287,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   }
 
   // BLOCKS in the Vaults, one per shared fact. A fact is settled by definition,
-  // so these are lit: the brain's memory is the one part of the city always on.
+  // so these are lit: the brain's memory is the part of town always awake.
   for (const fact of input.facts) {
     add("vault", fact.key, {
       floors: 1,
@@ -267,7 +298,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
     });
   }
 
-  // LABS, one per hypothesis. A question under test is a building with the lights
+  // LABS, one per hypothesis. A question under test is a building with its lights
   // on; a confirmed one is taller, and a rejected one keeps its shape, because
   // "tried, did not work" is a record too and the brain says so.
   for (const hypothesis of input.hypotheses) {
@@ -316,8 +347,8 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   }
 
   // Rows the loader itself did not hand over, because every query here is bounded,
-  // are buildings the city cannot raise. Counted rather than ignored: a partial
-  // city presented as the whole one would overstate the quiet and understate the
+  // are buildings the town cannot raise. Counted rather than ignored: a partial
+  // town presented as the whole one would overstate the quiet and understate the
   // work at the same time.
   hidden += Math.max(0, input.totals.facts - input.facts.length);
   hidden += Math.max(0, input.totals.hypotheses - input.hypotheses.length);
@@ -332,8 +363,17 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
     storeys += s.floors;
   }
 
+  // How much town the plan has room for, and how far it has actually reached.
+  // The plan is style; these two readings are not, and they are what the frame
+  // prints when it says the town is expanding.
+  let plots = 0;
+  for (const zone of input.zones) {
+    if (zone.sealed) continue;
+    plots += planFor(zone.position, zone.radius + PLAN.districtBonus).length;
+  }
+
   return {
     structures: out,
-    city: { buildings: out.length, storeys, hidden, byKind },
+    city: { buildings: out.length, storeys, plots, phase, frontier: Math.max(0, plots - out.length), hidden, byKind },
   };
 }

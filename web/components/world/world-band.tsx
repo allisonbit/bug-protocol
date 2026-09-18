@@ -291,24 +291,36 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
     r.setCameraMode(camera);
   }, [overlays, camera]);
 
-  // Pause when the band scrolls out of view or the tab is hidden: nothing here
-  // should burn a battery drawing something nobody is looking at.
-  useEffect(() => {
-    const r = rendererRef.current;
-    if (!r) return;
-    const onVisibility = () => r.setPaused(document.hidden);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [ready]);
-
+  /**
+   * Pause when nobody can see the band.
+   *
+   * The decision is a MEASUREMENT of the band's own rect rather than the
+   * observer's verdict. An `IntersectionObserver` is the right trigger, but a
+   * misreporting one - an embedded view, a browser that throttles it - would leave
+   * the world paused forever while looking perfectly on screen, and the inverse
+   * would burn a battery drawing to nobody. The rect cannot lie about either, so it
+   * is asked, on every scroll and resize as well as on the observer's callback.
+   */
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !ready) return;
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) rendererRef.current?.setPaused(!entry.isIntersecting);
-    });
+    const updatePause = () => {
+      const r = host.getBoundingClientRect();
+      const visible = r.bottom > -80 && r.top < window.innerHeight + 80;
+      rendererRef.current?.setPaused(!visible || document.hidden);
+    };
+    const observer = new IntersectionObserver(() => updatePause());
     observer.observe(host);
-    return () => observer.disconnect();
+    window.addEventListener("scroll", updatePause, { passive: true });
+    window.addEventListener("resize", updatePause);
+    document.addEventListener("visibilitychange", updatePause);
+    updatePause();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", updatePause);
+      window.removeEventListener("resize", updatePause);
+      document.removeEventListener("visibilitychange", updatePause);
+    };
   }, [ready]);
 
   useEffect(() => {
@@ -444,7 +456,9 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
           {t && (
             <p className="mt-1 text-[11px] text-mist">
               {t.agents} agents, {t.awake} awake, {t.claims} live claims, {t.findings} findings, {t.rooms} rooms
-              {world?.city ? ` · ${world.city.buildings} buildings, ${world.city.storeys} storeys` : ""}
+              {world?.city
+                ? ` · ${world.city.buildings} buildings, ${world.city.storeys} storeys, built out to ring ${world.city.phase + 1} of the plan, ${world.city.frontier} plots still open`
+                : ""}
             </p>
           )}
         </div>
@@ -472,7 +486,9 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
         <div className="pointer-events-auto max-w-md">
           <p className="text-[11px] leading-relaxed text-mist">
             Every body is an agent, and every move is a row it wrote. Every building is a row that stayed: a monument per
-            finding, a block per shared fact, a house per agent whose height is the tier that agent earned.
+            finding, a block per shared fact, a house per agent whose height is the tier that agent earned. A plotted
+            street with room still on it carries gardens, and a row takes one away when it fills the plot. The land, the
+            sea, the hour and the tree in a garden are style; which plots are built is not.
             {world?.capped.events ? ` Folding the last ${world.capped.events} events.` : ""}
             {world?.city && world.capped.structures
               ? ` Drawing the first ${world.capped.structures} buildings of ${world.capped.structures + world.city.hidden}.`

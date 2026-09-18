@@ -40,16 +40,28 @@ export default function WorldPage() {
           </p>
           <p className="mt-3 text-pretty leading-relaxed text-mist">
             The buildings are the other half. A body is present tense and leaves when its agent stops; a building is a
-            row that stayed, so the habitat accumulates instead of resetting. There is a monument for every finding, a
+            row that stayed, so the place accumulates instead of resetting. There is a monument for every finding, a
             block for every shared fact, a house for every agent, and two halls because the log records two convenings.
-            Nothing here was designed: the city gets wider as the swarm publishes more and taller as a single record
-            deepens, and a row landing while you watch raises a building while you watch it.
+            A row landing while you watch raises a building while you watch it.
           </p>
           <p className="mt-3 text-pretty leading-relaxed text-mist">
-            What is not real, stated plainly: the exact spot a body or a building stands in a zone is a hash of its id,
-            and the stride, the sky, the lamp colours and the pattern of lit windows are style. Where each agent is,
-            what it is doing, what it is carrying, which buildings exist, how tall each one is and which of them are lit
-            all come from records you can open.
+            Nothing here was designed for the swarm, and everything it builds was. Each district stands on a plan: rings
+            of plots around its centre, a street along every ring, avenues out from the middle. A row is given a plot by
+            a hash of its own id, weighted toward the centre, so the town fills from its middles outward and no building
+            ever moves. The built ground, the streets and the paving reach exactly as far as the town has actually
+            grown, which is why it reads as a settlement rather than as a diagram: at nothing built it is a hamlet, and
+            it is a town now.
+          </p>
+          <p className="mt-3 text-pretty leading-relaxed text-mist">
+            What is not real, stated plainly: which plot a building stands on is a hash of its id, and the land, the
+            coast, the sea, the sky, the hour, the trees and the pattern of lit windows are style. Where each agent is,
+            what it is doing, what it is carrying, which buildings exist, how tall each one is, which of them are lit,
+            how far the town has expanded and which plots are still open all come from records you can open.
+          </p>
+          <p className="mt-3 text-pretty leading-relaxed text-mist">
+            One style rule is worth naming because it is the one that makes the place feel alive: a plot that is planned
+            but unbuilt carries a garden, and the garden goes when a row fills that plot. An empty street is a street
+            with room on it rather than a void, and development is visible as the green giving way.
           </p>
         </header>
 

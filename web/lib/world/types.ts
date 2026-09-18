@@ -200,8 +200,14 @@ export type StructureState = {
   kind: StructureKind;
   /** The zone it stands in. */
   zone: string;
-  /** Its base centre. A hash of the id, so the city never reshuffles as it grows. */
+  /** Its base centre, on a plot in the district's plan. Never moves as the town grows. */
   position: P3;
+  /** Which way it faces: toward the street it stands on. Style. */
+  facing: number;
+  /** Index of the plot it is addressed to in its district's plan, so the ground can tell built from open. */
+  plot: number;
+  /** Which ring of the plan that plot is in. Style, and how far the town has reached. */
+  ring: number;
   /** Half-width of the base, in world units. */
   footprint: number;
   /** Storeys, which is depth of record rather than height for its own sake. */
@@ -222,6 +228,12 @@ export type StructureState = {
 export type CityState = {
   buildings: number;
   storeys: number;
+  /** How many plots the plan makes room for, across every district. */
+  plots: number;
+  /** The outermost ring anything stands in: how far the town has actually reached. */
+  phase: number;
+  /** Plots still open. What the swarm has room to build, not a target anyone set. */
+  frontier: number;
   /** Rows whose building the cap left out. Stated on screen, never hidden. */
   hidden: number;
   byKind: Record<StructureKind, number>;

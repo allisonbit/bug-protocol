@@ -26,10 +26,15 @@
  *                 likely to decay into scenery, because nobody would notice: a
  *                 skyline looks convincing whether or not it means anything, so
  *                 the citation check is the one that matters most here.
- *   growth        the city only ever grows with the log. A projection at an early
- *                 sequence holds no more buildings or storeys than the present
- *                 one, which is what "the swarm builds" has to mean if it means
- *                 anything: nothing appears in the past that was not there.
+ *   the plan      the town stands on a plan of plots in rings, and both readings
+ *                 the frame prints - how far it has been built out, and how many
+ *                 plots are still open - have to agree with the buildings. A
+ *                 district with no plan has nowhere to build; a building outside
+ *                 its district's plan is off the map it claims to stand on.
+ *   growth        the town only ever grows with the log. A projection at an early
+ *                 sequence holds no more buildings, storeys or rings than the
+ *                 present one, which is what "the swarm builds" has to mean if it
+ *                 means anything: nothing appears in the past that was not there.
  *   determinism   two reads of the same past sequence number agree. This is the
  *                 check that makes replay worth anything: if the projector were
  *                 not pure, a shared link to a moment would render differently for
@@ -152,6 +157,28 @@ function stable(w) {
   const kindMismatch = STRUCTURE_KINDS.filter((k) => (city.byKind?.[k] || 0) !== (byKind[k] || 0));
   check("the city's per kind counts are the per kind counts", kindMismatch.length === 0, kindMismatch.join(", "));
 
+  // ---- the plan ------------------------------------------------------------
+  const zoneById = new Map(w.zones.map((z) => [z.id, z]));
+  const planned = w.zones.filter((z) => z.kind !== "sealed");
+  check(`the plan makes room to build (${city.plots} plots across ${planned.length} districts)`, city.plots > 0, String(city.plots));
+  check(
+    "the open plots are the plots not yet built on",
+    city.frontier === Math.max(0, city.plots - structures.length) || w.capped.structures != null,
+    `${city.frontier} open, ${city.plots} planned, ${structures.length} built`,
+  );
+  check("no building stands outside its district's plan", structures.every((s) => {
+    const zone = zoneById.get(s.zone);
+    if (!zone) return false;
+    // The plan reaches its district's radius plus the neighbourhood allowed around it.
+    return Math.hypot(s.position.x - zone.position.x, s.position.z - zone.position.z) <= zone.radius + 3.1;
+  }));
+  const deepestRing = structures.reduce((m, s) => Math.max(m, s.ring ?? 0), 0);
+  check(
+    `the town is built out to the ring it is drawn to (ring ${city.phase + 1} of the plan)`,
+    city.phase === deepestRing,
+    `phase=${city.phase} deepest=${deepestRing}`,
+  );
+
   // The cap must be stated exactly when it bites, never one and not the other.
   check(
     "the building cap is stated when and only when it bites",
@@ -194,9 +221,11 @@ function stable(w) {
     // not been earned is not in the past either. This is the check that keeps the
     // city from being a skyline generated to look busy.
     check(
-      `the city at seq ${mid} is no larger than the city now`,
-      (atMid.city?.buildings ?? 0) <= (city.buildings ?? 0) && (atMid.city?.storeys ?? 0) <= (city.storeys ?? 0),
-      `${atMid.city?.buildings}/${atMid.city?.storeys} at ${mid} vs ${city.buildings}/${city.storeys} now`,
+      `the town at seq ${mid} is no larger and no further out than it is now`,
+      (atMid.city?.buildings ?? 0) <= (city.buildings ?? 0) &&
+        (atMid.city?.storeys ?? 0) <= (city.storeys ?? 0) &&
+        (atMid.city?.phase ?? 0) <= (city.phase ?? 0),
+      `${atMid.city?.buildings}/${atMid.city?.storeys}/ring${atMid.city?.phase} at ${mid} vs ${city.buildings}/${city.storeys}/ring${city.phase} now`,
     );
   }
 
