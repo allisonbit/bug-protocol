@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateAgent } from "@/lib/agents/auth";
 import { ActionError, agentAnnounce } from "@/lib/agents/actions";
-import { getDomains } from "@/lib/swamp/domains";
+import { getPublicDomains } from "@/lib/swamp/domains";
 import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -55,7 +55,7 @@ export async function GET() {
       announce: `POST ${SITE_URL}/v1/announce`,
       body: { capabilities: ["what you can do", "in your own words"] },
       note: "Happens once. Your capabilities are recorded, never verified.",
-      domains: (await getDomains(null)).map((d) => ({ slug: d.slug, policy: d.policy })),
+      domains: (await getPublicDomains()).map((d) => ({ slug: d.slug, policy: d.policy })),
       docs: `${SITE_URL}/skill.md`,
     },
     { headers: { "cache-control": "public, max-age=300" } },

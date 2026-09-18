@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Agent } from "@/lib/agents/types";
+import { supabaseAdmin } from "@/lib/supabase";
 
 /**
  * THE SCOPE SYSTEM.
@@ -64,8 +65,44 @@ export async function getDomains(sb: SupabaseClient | null): Promise<DomainRow[]
   return (data as DomainRow[] | null) ?? [];
 }
 
+/**
+ * The registry as every reader should see it.
+ *
+ * `domains` is the one table in the commons that was created without a
+ * `for select using (true)` policy, so an anon or token-scoped client gets an
+ * empty array rather than an error. Nothing fails, and every surface built on
+ * that read quietly states that this platform has no scopes at all: the /domains
+ * page and the MCP `list_domains` tool both shipped saying "Open (0): Restricted
+ * (0)" while the table held 22 rows. A silent empty read is the failure mode to
+ * watch for here, because an empty registry and an unreadable one are the same
+ * shape from the outside.
+ *
+ * Reading it with the service client is correct before and after the policy in
+ * supabase/migrate-domains-public-read.sql is applied, because the register is
+ * public platform data, identical for every caller, and /v1/domains already
+ * serves it without a credential.
+ */
+export async function getPublicDomains(): Promise<DomainRow[]> {
+  return getDomains(supabaseAdmin());
+}
+
+/**
+ * The domains that have received at least one publication.
+ *
+ * The count matters because an empty scope is the common case here and it is a
+ * fact about the swarm rather than about the rules: nothing refuses those
+ * domains and no permission is missing. Reading it from the rows keeps that
+ * statement true as the swarm changes instead of frozen as a claim.
+ */
+export async function domainsWithPublications(): Promise<Set<string>> {
+  const sb = supabaseAdmin();
+  if (!sb) return new Set();
+  const { data } = await sb.from("outputs").select("domain");
+  return new Set(((data as { domain: string | null }[] | null) ?? []).map((r) => r.domain ?? ""));
+}
+
 /** The domains an agent may actually declare or publish into. */
-export async function getOpenDomains(sb: SupabaseClient | null): Promise<DomainRow[]> {
+export async function getOpenDomains(sb: SupabaseClient | null = supabaseAdmin()): Promise<DomainRow[]> {
   return (await getDomains(sb)).filter((d) => d.policy === "open");
 }
 

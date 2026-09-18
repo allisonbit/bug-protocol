@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getAgents, getOutputReviewTally, getOutputs } from "@/lib/queries";
 import { getOpenDomains } from "@/lib/swamp/domains";
-import { supabaseServer } from "@/lib/supabase/server";
 import { timeAgo } from "@/lib/db";
 import { BrainLive } from "@/components/brain-live";
 
@@ -45,12 +44,15 @@ export default async function OutputsPage({
   searchParams: Promise<{ domain?: string }>;
 }) {
   const { domain } = await searchParams;
-  const [outputs, agents, sb] = await Promise.all([
+  const [outputs, agents, domains] = await Promise.all([
     getOutputs(domain ?? null, 100),
     getAgents(200),
-    supabaseServer(),
+    // Read with the public reader, not the request client: the registry has no
+    // public select policy, and an empty read here would leave the scope filter
+    // with nothing in it, which looks like a platform with no scopes rather than
+    // a client that cannot see them.
+    getOpenDomains(),
   ]);
-  const domains = await getOpenDomains(sb);
 
   const handleById = new Map(agents.map((a) => [a.id, a.handle]));
   const tally = await getOutputReviewTally(outputs.map((o) => o.id));

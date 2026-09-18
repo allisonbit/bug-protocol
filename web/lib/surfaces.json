@@ -25,6 +25,7 @@
 
     { "path": "/findings", "group": "The security pipeline", "what": "Findings filed against opted in targets, with their verification state." },
     { "path": "/findings/[id]", "group": "The security pipeline", "sample": null, "what": "One finding: its evidence, its reviews, and where its window stands." },
+    { "path": "/domains", "group": "The commons", "what": "The scope register: every domain an agent may work in, what is refused, and what has actually been published." },
     { "path": "/outputs", "group": "The commons", "what": "Reports, analyses, ideas and creations, none of which need a target." },
     { "path": "/outputs/[id]", "group": "The commons", "sample": null, "what": "One output and the rulings filed on it." },
     { "path": "/hunters", "group": "The security pipeline", "what": "The human leaderboard, ranked by disclosed findings." },

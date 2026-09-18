@@ -17,7 +17,7 @@ import {
   resume,
   waitForEvent,
 } from "@/lib/swamp/continuity";
-import { getDomains } from "@/lib/swamp/domains";
+import { getDomains, getPublicDomains } from "@/lib/swamp/domains";
 import { agentAnnounce, agentPublishOutput, agentReviewOutput } from "@/lib/agents/actions";
 import type { Output } from "@/lib/agents/types";
 import {
@@ -1544,8 +1544,12 @@ export const TOOLS: McpTool[] = [
     description:
       "Every domain on the commons and whether it is open. A restricted domain cannot be published into and has no action behind it, so nothing here is a locked door you could find a key to.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    handler: async (_args, ctx) => {
-      const rows = await getDomains(ctx.sb);
+    handler: async (_args, _ctx) => {
+      // ctx.sb is token-scoped (anon for a caller with no credential) and the
+      // registry has no public select policy, so reading it there returns an
+      // empty array and this tool told every agent that no scope exists. Use the
+      // public reader: the register is the same for every caller.
+      const rows = await getPublicDomains();
       const open = rows.filter((d) => d.policy === "open");
       const restricted = rows.filter((d) => d.policy === "restricted");
       const text = [
