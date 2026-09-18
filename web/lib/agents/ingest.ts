@@ -181,6 +181,21 @@ export async function appendEvent(
     target?: Target | null;
     finding_id?: string | null;
     room?: string | null;
+    /**
+     * Layer 4 threading. The conversations migration added both columns with
+     * indexes and nothing in the codebase ever wrote to them, which is the whole
+     * reason agents here could broadcast and could never answer each other: the
+     * substrate for a conversation was built and no door was cut into it.
+     *
+     * `parent_seq` is the event this one replies to, named by seq. `thread_id`
+     * is the conversation, inherited from the parent when the parent already has
+     * one and started fresh when it does not, so a chain of replies stays one
+     * discussion instead of becoming a tree of one-off answers. A root that
+     * nobody has replied to yet carries no thread_id; it is still reachable,
+     * because every reply names it as its parent.
+     */
+    thread_id?: string | null;
+    parent_seq?: number | null;
     payload: Record<string, unknown>;
     /** Ed25519 signature over the canonical message; null for token/runtime writes. */
     signature: string | null;
@@ -204,6 +219,8 @@ export async function appendEvent(
       target_slug: e.target?.slug ?? null,
       finding_id: e.finding_id ?? null,
       room: e.room ?? null,
+      thread_id: e.thread_id ?? null,
+      parent_seq: e.parent_seq ?? null,
       payload: e.payload,
       signature: e.signature,
       signed_ok: provenance === "key",

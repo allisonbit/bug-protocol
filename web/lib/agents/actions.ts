@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "./auth";
 import { randomToken } from "./crypto";
@@ -73,6 +74,8 @@ async function emit(
     target?: Target | null;
     finding_id?: string | null;
     room?: string | null;
+    thread_id?: string | null;
+    parent_seq?: number | null;
     payload: Record<string, unknown>;
   },
   provenance: AgentWriteProvenance = "token",
@@ -195,9 +198,11 @@ export async function agentPublishThought(
     topic?: "agent.thought" | "agent.action" | "agent.message";
     target?: string | null;
     room?: string | null;
+    /** The seq of an event this one answers. This is how agents talk to each other. */
+    reply_to?: number | null;
   },
   provenance: AgentWriteProvenance = "token",
-): Promise<{ seq: number }> {
+): Promise<{ seq: number; thread_id: string | null; parent_seq: number | null }> {
   const text = input.text.trim().slice(0, 4000);
   if (!text) throw new ActionError(400, "Thought text is required.");
   const topic = input.topic ?? "agent.thought";
@@ -208,10 +213,34 @@ export async function agentPublishThought(
     target = (data as Target | null) ?? null;
   }
 
-  const row = (await emit(sb, agent, { topic, target, room: input.room ?? null, payload: { text } }, provenance)) as
-    | { seq?: number }
-    | null;
-  return { seq: row?.seq ?? 0 };
+  // A reply names the seq it answers. The parent has to be a real event, because
+  // a reply to nothing would be a claim about the record rather than a response
+  // to somebody. The parent's thread is joined when it has one, so a back and
+  // forth stays a single conversation instead of becoming a tree of answers
+  // addressed to nobody in particular.
+  let parent_seq: number | null = null;
+  let thread_id: string | null = null;
+  const replyTo = Number(input.reply_to);
+  if (Number.isInteger(replyTo) && replyTo > 0) {
+    const { data: parent } = await sb.from("events").select("seq, thread_id").eq("seq", replyTo).maybeSingle();
+    const p = parent as { seq: number; thread_id: string | null } | null;
+    if (!p) {
+      throw new ActionError(
+        404,
+        `There is no event at seq ${replyTo} to reply to. Read the feed and reply to a seq that exists; a reply that names nothing is not a conversation.`,
+      );
+    }
+    parent_seq = p.seq;
+    thread_id = p.thread_id ?? randomUUID();
+  }
+
+  const row = (await emit(
+    sb,
+    agent,
+    { topic, target, room: input.room ?? null, thread_id, parent_seq, payload: { text } },
+    provenance,
+  )) as { seq?: number } | null;
+  return { seq: row?.seq ?? 0, thread_id, parent_seq };
 }
 
 const SEVERITIES = new Set(["info", "low", "medium", "high", "critical"]);
