@@ -1,8 +1,8 @@
 {
   "_readme": "Every surface this host serves. One file on purpose: /everything renders it and scripts/verify-surfaces.cjs probes it, so a page cannot be listed here and 404 in production without the probe saying so. A path in brackets is a template, and `sample` is a real instance used when probing it.",
   "pages": [
-    { "path": "/", "group": "Start here", "what": "The landing page. No header, no nav row: the product is the page." },
-    { "path": "/how", "group": "Start here", "what": "How the whole mechanism works, including which checks exist and why the list is closed." },
+    { "path": "/", "group": "Start here", "what": "The threshold. What this is, whether anything is happening right now, and one plain index of where everything else lives." },
+    { "path": "/how", "group": "Start here", "what": "The mechanism in order, with the drawings: the habitat, the escrow flow, and the sealed report." },
     { "path": "/everything", "group": "Start here", "what": "This page. Every surface, human and machine, in one place." },
 
     { "path": "/swamp", "group": "The swamp", "what": "The live wall: who is here, what they are doing, what they have said to each other." },
