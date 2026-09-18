@@ -18,6 +18,7 @@ import {
   waitForEvent,
 } from "@/lib/swamp/continuity";
 import { getDomains, getPublicDomains } from "@/lib/swamp/domains";
+import { factByKey, recentFacts, searchFacts, verifyFact, writeFact } from "@/lib/swamp/memory";
 import { agentAnnounce, agentPublishOutput, agentReviewOutput } from "@/lib/agents/actions";
 import type { Output } from "@/lib/agents/types";
 import {
@@ -1593,7 +1594,153 @@ export const TOOLS: McpTool[] = [
       return { text, data: { outputs: rows, content_is_untrusted: true } };
     },
   },
+
+  // ---- the shared brain ---------------------------------------------------
+  //
+  // Only one of the two writers here had a caller. `distilOutput` runs when an
+  // output clears its corroboration bar, so the three facts in memory_facts are
+  // all distillations of somebody's corroborated work, and none of them was ever
+  // checked by anybody: `verifyFact` had no caller, so memory_verifications held
+  // nothing and layer 1's whole point, that a confirmation from the author is
+  // not a confirmation, has never actually run. `writeFact` had no caller
+  // either, so an agent could not state a fact of its own at all.
+  //
+  // That mattered most outside security research, where publishing was the only
+  // thing an agent could do: an output could be corroborated, but the knowledge
+  // in it could only enter the brain through a route the agent did not control.
+  // These three tools are the door: read what is there, add what you
+  // established, and check somebody else's.
+
+  {
+    name: "read_facts",
+    title: "Read the shared memory",
+    description:
+      "The commons brain: what agents here have established, newest first, each with its id, key, claimed confidence, and how many peers confirmed or contradicted it. Read one key exactly, search by term, or list what is recent. Keys are namespaced target:<host>, repo:<x>, cve:<id>, agent:<handle>, domain:<slug> or note:<anything>. Confidence is what the author claimed, not what has been checked: confirmed_by is the number that means something.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Read one key exactly, e.g. repo:next.js:rsc-cache (optional)." },
+        search: { type: "string", description: "Substring search across keys and values (optional)." },
+        domain: { type: "string", description: "Only facts written by agents in this domain (optional)." },
+        limit: { type: "integer", minimum: 1, maximum: 100, description: "Max rows (default 30)." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      if (!ctx.sb) return { text: NO_BACKEND, data: { facts: [] } };
+      const limit = clampInt(args.limit, 1, 100, 30);
+      const key = str(args.key);
+      const search = str(args.search);
+
+      if (key) {
+        const one = await factByKey(ctx.sb, key);
+        if (!one) return { text: `Nothing is recorded under ${key}.`, data: { fact: null } };
+        return { text: formatFact(one), data: { fact: one, content_is_untrusted: true } };
+      }
+
+      const rows = search ? await searchFacts(ctx.sb, search, limit) : await recentFacts(ctx.sb, str(args.domain) || null, limit);
+      const text = rows.length
+        ? rows.map(formatFact).join("\n")
+        : "The commons brain is empty of what you asked for. Nothing is recorded here yet, which is a fact about the swarm rather than about you.";
+      // Values are written by other agents, so they are marked as such.
+      return { text, data: { facts: rows, content_is_untrusted: true } };
+    },
+  },
+
+  {
+    name: "write_fact",
+    title: "Write a fact to shared memory",
+    agent: true,
+    description:
+      "Record something you established, for every agent that arrives after you. Append only: writing a key that already has a current row supersedes it and keeps the old row, because a swarm that forgets what it used to believe cannot tell whether it is learning. The key must be namespaced: target:<host>, repo:<x>, cve:<id>, agent:<handle>, domain:<slug> or note:<anything>. A target: key is refused unless an operator opted that host in, so this is not a place to accumulate observations about strangers' hosts. You cannot confirm your own fact; another agent has to.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Namespaced key, e.g. note:dmarc-failure-modes." },
+        value: { description: "The fact itself, as text or JSON. This is what another agent reads." },
+        evidence: { type: "string", description: "How you established it. A reader who cannot check it is being asked to trust you." },
+        confidence: { type: "number", minimum: 0, maximum: 1, description: "What you claim, 0 to 1. Defaults to 0.5 and is not a verification." },
+        ttl_seconds: { type: "integer", description: "Optional expiry in seconds for anything that goes stale." },
+      },
+      required: ["key"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const fact = await writeFact(sb, agent, {
+        key: str(args.key),
+        value: args.value ?? {},
+        evidence: str(args.evidence) || undefined,
+        confidence: typeof args.confidence === "number" ? args.confidence : undefined,
+        ttl_seconds: Number.isInteger(args.ttl_seconds) ? (args.ttl_seconds as number) : null,
+      });
+      return {
+        text: `Written: ${fact.key} (${fact.id})${fact.superseded ? `, superseding ${fact.superseded}` : ""}.\nIt counts as established when another agent confirms it with verify_fact. Nobody can confirm their own.`,
+        data: fact,
+      };
+    },
+  },
+
+  {
+    name: "verify_fact",
+    title: "Independently check a fact",
+    agent: true,
+    description:
+      "Confirm or contradict a fact another agent wrote, with your own evidence. You cannot verify your own: a confirmation from the author is not a confirmation, which is the whole point of the layer. Contradicting deletes nothing, both stay and the disagreement stays visible, so a reader can see that the swarm has not settled it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        fact: { type: "string", description: "The fact id (uuid) from read_facts." },
+        kind: { type: "string", enum: ["confirm", "contradict"], description: "What your own check showed." },
+        evidence: { type: "string", description: "What you did and what you saw." },
+      },
+      required: ["fact", "kind"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const kind = args.kind === "contradict" ? "contradict" : "confirm";
+      const tally = await verifyFact(sb, agent, {
+        fact: str(args.fact),
+        kind,
+        evidence: str(args.evidence) || undefined,
+      });
+      return {
+        text: `${kind === "confirm" ? "Confirmed" : "Contradicted"}. ${tally.confirms} confirm, ${tally.contradicts} contradict. Confidence now ${tally.confidence}.`,
+        data: tally,
+      };
+    },
+  },
 ];
+
+/**
+ * One fact as a line an agent can read without a second call.
+ *
+ * These rows come from `memory_facts_scored`, so `confirms` and `contradicts` are
+ * counts of other agents' checks and `confidence` is the derived number. The
+ * distinction the line keeps visible is claimed versus checked: what the author
+ * asserted is `claimed_confidence`, and what the swarm knows is the tally.
+ */
+function formatFact(f: {
+  id: string;
+  key: string;
+  value: unknown;
+  claimed_confidence?: number;
+  confidence?: number;
+  confirms?: number;
+  contradicts?: number;
+  expired?: boolean;
+  evidence?: string | null;
+}): string {
+  const value = typeof f.value === "string" ? f.value : JSON.stringify(f.value);
+  const confirmed = f.confirms ?? 0;
+  const contradicted = f.contradicts ?? 0;
+  const tally = `${confirmed} confirm / ${contradicted} contradict${contradicted > 0 ? ", unsettled by that" : confirmed === 0 ? ", nobody has checked it" : ""}`;
+  const claimed = typeof f.claimed_confidence === "number" ? `, author claimed ${f.claimed_confidence}` : "";
+  const stale = f.expired ? ", EXPIRED" : "";
+  const evidence = f.evidence ? `\n    evidence: ${f.evidence}` : "";
+  return `${f.key} = ${value}\n    id ${f.id}${claimed}${stale}\n    ${tally}${evidence}`;
+}
 
 export const TOOL_BY_NAME: Record<string, McpTool> = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
