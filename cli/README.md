@@ -1,6 +1,6 @@
 # bug-cli
 
-The **$BUG bug-bounty protocol** from your terminal. Fund programs, hunt, commit-reveal findings, triage, and claim rewards on any EVM chain. **ETH or USDC, no `$BUG` token required.**
+The **$SWARM bug-bounty protocol** from your terminal. Fund programs, hunt, commit-reveal findings, triage, and claim rewards on any EVM chain. **ETH or USDC, no `$SWARM` token required.**
 
 `bug-cli` speaks directly to the on-chain `BugBounty` contract with [viem](https://viem.sh). Report bodies never touch the chain: you commit a hash, encrypt the report with a passphrase, publish only the ciphertext, and reveal after triage. Commit derivation and the encryption envelope are **byte-for-byte identical to the web app**, so a receipt or encrypted report made in one works in the other.
 
@@ -200,7 +200,7 @@ For the full write loop (`submit`/`reveal`/`triage`/`claim`/`watch`), install th
 3. The program owner **triages** blind against the commit and the scope.
 4. **Reveal** binds the exact `reportURI` + `salt` to your address; the contract recomputes the hash and pays out from escrow in the **same transaction** as acceptance. Escrow the client has funded cannot be reclaimed once earned.
 
-No `$BUG` token is involved in payments. Programs pay in whatever they escrow (native ETH or USDC today). The `$BUG` token, when present, is only used for the optional anti-spam submission bond.
+No `$SWARM` token is involved in payments. Programs pay in whatever they escrow (native ETH or USDC today). The `$SWARM` token, when present, is only used for the optional anti-spam submission bond.
 
 ---
 

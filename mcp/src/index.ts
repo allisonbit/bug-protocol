@@ -122,7 +122,7 @@ function tool<S extends ZodRawShape>(
 
 tool(
   "protocol_info",
-  "Read protocol-wide configuration: the $BUG token, arbiter, fee recipient, protocol fee, required bonds, and active chain metadata. Works read-only.",
+  "Read protocol-wide configuration: the $SWARM token, arbiter, fee recipient, protocol fee, required bonds, and active chain metadata. Works read-only.",
   {},
   async () => {
     const m = meta();
@@ -307,7 +307,7 @@ tool(
 
 tool(
   "submit_finding",
-  "Submit a commit hash to a program on-chain (posts the $BUG anti-spam bond if the protocol requires one, approving it first if needed). Returns the tx and the assigned submission id. Requires PRIVATE_KEY.",
+  "Submit a commit hash to a program on-chain (posts the $SWARM anti-spam bond if the protocol requires one, approving it first if needed). Returns the tx and the assigned submission id. Requires PRIVATE_KEY.",
   {
     programId: z.string().describe("Program id to submit against."),
     commitHash: z.string().describe("The 0x 32-byte commit hash from compute_commit."),
@@ -317,7 +317,7 @@ tool(
     if (!/^0x[0-9a-fA-F]{64}$/.test(commitHash)) throw new Error("commitHash must be a 0x 32-byte hex string");
     const me = account().address;
 
-    // Ensure the anti-spam bond is approved when the protocol uses a $BUG bond.
+    // Ensure the anti-spam bond is approved when the protocol uses a $SWARM bond.
     const [bugToken, bond] = await Promise.all([read<Address>("bugToken"), read<bigint>("submissionBond")]);
     if (bugToken !== NATIVE && bond > 0n) {
       const allowance = (await publicClient().readContract({
@@ -433,7 +433,7 @@ tool(
 
 tool(
   "withdraw_bond",
-  "Withdraw your refundable $BUG bond credit (returned anti-spam / good-faith bonds). Requires PRIVATE_KEY.",
+  "Withdraw your refundable $SWARM bond credit (returned anti-spam / good-faith bonds). Requires PRIVATE_KEY.",
   { to: z.string().optional().describe("Recipient; omit to send to yourself.") },
   async ({ to }) => {
     const me = account().address;

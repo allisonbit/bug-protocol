@@ -20,7 +20,7 @@ export function SiteFooter() {
               token, and nothing on this platform requires holding it. */}
           <div className="mt-5 rounded-lg border border-line bg-ink-soft/60 p-3">
             <div className="text-[10px] tracking-widest text-mist uppercase">
-              $SWAMP on {TOKEN_CHAIN}
+              $SWARM on {TOKEN_CHAIN}
             </div>
             <div className="mt-1.5">
               <Copyable value={TOKEN_ADDRESS} />

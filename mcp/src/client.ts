@@ -33,7 +33,7 @@ export function bountyAddress(): Address {
   const a = envAddress("BOUNTY_ADDRESS");
   if (!a) {
     throw new Error(
-      "BOUNTY_ADDRESS is not set. The $BUG protocol is not yet deployed on this chain, or you have not pointed the server at it. Set BOUNTY_ADDRESS to the deployed BugBounty contract.",
+      "BOUNTY_ADDRESS is not set. The $SWARM protocol is not yet deployed on this chain, or you have not pointed the server at it. Set BOUNTY_ADDRESS to the deployed BugBounty contract.",
     );
   }
   return a;

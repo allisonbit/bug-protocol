@@ -119,7 +119,7 @@ export type Submission = {
   report_uri: string | null;
   /** sha256 of the exact envelope bytes served at `report_uri`. */
   report_sha256: string | null;
-  /** Hunter's spam bond, in $BUG. Refunded unless slashed. */
+  /** Hunter's spam bond, in $SWARM. Refunded unless slashed. */
   bond: number;
   /** Protocol's cut of the award, taken from the pool at acceptance. */
   protocol_fee: number;

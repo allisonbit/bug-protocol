@@ -92,8 +92,8 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="rounded-lg border border-line bg-ink p-4">
-              <div className="text-[11px] tracking-wide text-mist uppercase">$BUG bond credit</div>
-              <div className="mt-1 text-lg text-chalk">{fmtAmount(bal.bondCredit ?? 0n, 18, "$BUG")}</div>
+              <div className="text-[11px] tracking-wide text-mist uppercase">$SWARM bond credit</div>
+              <div className="mt-1 text-lg text-chalk">{fmtAmount(bal.bondCredit ?? 0n, 18, "$SWARM")}</div>
               <Button
                 variant="ghost"
                 className="mt-3 w-full"
@@ -114,7 +114,7 @@ export function WalletDrawer({ onClose }: { onClose: () => void }) {
             )}
             {bal.bugToken && (
               <p className="text-[11px] text-mist">
-                $BUG token <Copyable value={bal.bugToken} display={short(bal.bugToken)} />
+                $SWARM token <Copyable value={bal.bugToken} display={short(bal.bugToken)} />
               </p>
             )}
           </div>

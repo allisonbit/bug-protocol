@@ -32,7 +32,7 @@ export const X_URL = "https://x.com/Swampprotocol";
 export const TELEGRAM_URL = "https://t.me/swampprotocol";
 
 /**
- * The $SWAMP token contract, on Robinhood Chain (4663).
+ * The $SWARM token contract, on Robinhood Chain (4663).
  *
  * Overridable by environment so a redeploy or a different chain is one variable
  * rather than a hunt for a hardcoded address, the same reason everything else in

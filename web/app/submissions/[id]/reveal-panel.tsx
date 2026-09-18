@@ -204,7 +204,7 @@ export function RevealPanel({
               )}
             />
           )}
-          {sub.bond > 0n && <Line label="spam bond" value={fmtAmount(sub.bond, 18, "$BUG")} />}
+          {sub.bond > 0n && <Line label="spam bond" value={fmtAmount(sub.bond, 18, "$SWARM")} />}
           {sub.dupeOf > 0n && <Line label="duplicate of" value={`#${sub.dupeOf}`} />}
           {revealed && <Line label="report" value={<Copyable value={sub.reportURI} display={short(sub.reportURI)} />} />}
         </dl>
@@ -431,7 +431,7 @@ function RewardsCard({
         })}
         {(balances.bondCredit ?? 0n) > 0n && (
           <div className="flex items-center justify-between gap-3 border-t border-line pt-2">
-            <span className="text-xs text-chalk">{fmtAmount(balances.bondCredit ?? 0n, 18, "$BUG bond")}</span>
+            <span className="text-xs text-chalk">{fmtAmount(balances.bondCredit ?? 0n, 18, "$SWARM bond")}</span>
             <Button
               variant="ghost"
               disabled={claim.busy}

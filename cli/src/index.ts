@@ -26,7 +26,7 @@ const program = new Command();
 
 program
   .name("bug")
-  .description("bug-cli: the $BUG bug-bounty protocol from your terminal. Works on any EVM chain, ETH or USDC, no $BUG token required.")
+  .description("bug-cli: the $SWARM bug-bounty protocol from your terminal. Works on any EVM chain, ETH or USDC, no $SWARM token required.")
   .version("0.1.0")
   .option("--chain <id|name>", "chain id or name: robinhood, base, arbitrum, optimism, base-sepolia (env BUG_CHAIN)")
   .option("--rpc <url>", "RPC URL override (env BUG_RPC_URL)")
@@ -102,7 +102,7 @@ program
       console.log(`  escrow pool:   ${fmtAmount(p.pool, a.decimals, a.symbol)}`);
       console.log(`  locked:        ${fmtAmount(p.locked, a.decimals, a.symbol)}`);
       console.log(`  free pool:     ${fmtAmount(full.freePool, a.decimals, a.symbol)}`);
-      console.log(`  client bond:   ${fmtAmount(p.bond, 18, "$BUG")}`);
+      console.log(`  client bond:   ${fmtAmount(p.bond, 18, "$SWARM")}`);
       console.log(`  open reports:  ${full.pending}`);
       console.log(`  triage SLA:    ${humanDuration(p.triageDeadline)}`);
       console.log(`  disclosure:    ${humanDuration(p.disclosureDelay)} after triage`);
@@ -131,7 +131,7 @@ program
       console.log(`  commit hash:   ${s.commitHash}`);
       console.log(`  report URI:    ${s.reportURI || "(not revealed; body still private)"}`);
       console.log(`  award:         ${s.award > 0n ? fmtAmount(s.award, a.decimals, a.symbol) : "n/a"}`);
-      console.log(`  anti-spam bond:${" "}${fmtAmount(s.bond, 18, "$BUG")}`);
+      console.log(`  anti-spam bond:${" "}${fmtAmount(s.bond, 18, "$SWARM")}`);
       if (s.dupeOf > 0n) console.log(`  duplicate of:  #${s.dupeOf}`);
     }),
   );
@@ -147,7 +147,7 @@ program
       const sym = ctx.meta.chain.nativeCurrency.symbol;
       console.log(`Claims for ${short(account)} on ${ctx.meta.label}`);
       console.log(`  claimable rewards: ${fmtAmount(claimableNative, 18, sym)}`);
-      console.log(`  bond credit:       ${fmtAmount(bondCredit, 18, "$BUG")}`);
+      console.log(`  bond credit:       ${fmtAmount(bondCredit, 18, "$SWARM")}`);
     }),
   );
 

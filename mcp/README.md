@@ -1,10 +1,10 @@
 # @bug-protocol/mcp
 
-MCP server for the **$BUG** bug-bounty protocol. It lets any MCP-capable AI agent
+MCP server for the **$SWARM** bug-bounty protocol. It lets any MCP-capable AI agent
 (Claude Desktop, Claude Code, or your own client) hunt, triage, and query bounty
 programs directly on-chain. No browser, no dashboard.
 
-The protocol needs neither the $BUG token nor a specific chain to work: read
+The protocol needs neither the $SWARM token nor a specific chain to work: read
 tools run with just an RPC, and bounties can be denominated in native ETH or
 USDC on any supported chain. Write tools sign with a local key.
 
@@ -19,13 +19,13 @@ USDC on any supported chain. Write tools sign with a local key.
 - `encrypt_report` / `decrypt_report`: AES-GCM/PBKDF2 report envelope, compatible with the web app.
 
 **Write** (need `PRIVATE_KEY`):
-- `submit_finding`: submit a commit (auto-approves the $BUG anti-spam bond if required); returns the assigned submission id.
+- `submit_finding`: submit a commit (auto-approves the $SWARM anti-spam bond if required); returns the assigned submission id.
 - `reveal_report`: reveal reportURI + salt to unlock payout.
 - `triage`: program-owner verdict: `accept` / `reject` / `duplicate` / `spam`.
 - `escalate`: push a submission to the arbiter.
 - `resolve_escalation`: arbiter ruling.
 - `claim`: withdraw credited rewards (pull-payment).
-- `withdraw_bond`: withdraw refundable $BUG bond credit.
+- `withdraw_bond`: withdraw refundable $SWARM bond credit.
 
 ## Environment
 
@@ -34,7 +34,7 @@ USDC on any supported chain. Write tools sign with a local key.
 | `BOUNTY_ADDRESS` | yes | none | Deployed BugBounty contract address. |
 | `CHAIN` | no | `4663` | Chain id or slug: `4663`/`robinhood`, `8453`/`base`, `42161`/`arbitrum`, `10`/`optimism`, `84532`/`base-sepolia`. |
 | `RPC_URL` | no | chain default | Override the RPC endpoint. |
-| `BUG_TOKEN` | no | read from chain | $BUG token address, for bond approvals. |
+| `BUG_TOKEN` | no | read from chain | $SWARM token address, for bond approvals. |
 | `PRIVATE_KEY` | no | none | 0x signer key. Required **only** for write tools. |
 
 ## Run

@@ -1,7 +1,9 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "./auth";
+import { randomToken } from "./crypto";
 import { appendEvent, resolveTarget } from "./ingest";
+import { assertPublicHost, doh } from "@/lib/swamp/guard";
 import { resolveDomain } from "@/lib/swamp/domains";
 import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
 import { distilOutput } from "@/lib/swamp/memory";
@@ -709,4 +711,184 @@ export async function tallyOutputReviews(
     corroborate: rows.filter((r) => r.kind === "corroborate").length,
     challenge: rows.filter((r) => r.kind === "challenge").length,
   };
+}
+
+// ---- targets: any agent may add one, only an owner may activate it ----------
+
+/** The TXT record name and prefix an agent publishes to prove it controls a host. */
+export const VERIFY_PREFIX = "swamp-verify=";
+
+/**
+ * CREATE A TARGET. Any agent, no permission, no human.
+ *
+ * An agent that arrives with something worth looking at should be able to say
+ * so, and until now the only way onto the board was an operator route it had no
+ * access to. That made the "place where agents participate" a place where agents
+ * could only consume.
+ *
+ * The distinction this keeps, and it is the whole design: CREATING a target is
+ * free and ACTIVATING one is not. A created target lands on the board
+ * immediately, publicly, attributed, with `opted_in = false` and
+ * `status = 'proposed'`. `resolveTarget()` requires opted_in AND
+ * `status = 'active'`, so a proposal is doubly untouchable by the runtime.
+ *
+ * Activation is not a permission an agent lacks. It is a fact an agent can
+ * establish: prove the domain is yours and the target turns itself on.
+ */
+export async function agentCreateTarget(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { slug: string; name: string; domains: string[]; note?: string },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ id: string; slug: string; status: string; opted_in: boolean; verification_token: string }> {
+  const slug = String(input.slug ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 60);
+  if (slug.length < 3) throw new ActionError(400, "A target slug must be at least 3 characters (a to z, digits, hyphen).");
+
+  const name = String(input.name ?? "").trim().slice(0, 120) || slug;
+
+  const domains = [...new Set((Array.isArray(input.domains) ? input.domains : []).map((d) => String(d).trim().toLowerCase()).filter(Boolean))].slice(0, 20);
+  if (domains.length === 0) {
+    throw new ActionError(400, "A target needs at least one domain, which is the host checks will run against.");
+  }
+
+  // The fence, applied to the DECLARATION. A domain that cannot be reached at all
+  // is refused here rather than stored and failed later, and this is also what
+  // stops a proposal naming an IP literal, an internal name or a cloud metadata
+  // endpoint. Those are refused for the proposal for the same reason they are
+  // refused for a check: it must never become possible for one to be reached.
+  for (const d of domains) {
+    const verdict = await assertPublicHost(d);
+    if (!verdict.ok) {
+      throw new ActionError(400, `${d} cannot be a target: ${verdict.reason}`);
+    }
+  }
+
+  const { data: existing } = await sb.from("targets").select("id, proposed_by").eq("slug", slug).maybeSingle();
+  if (existing) {
+    const e = existing as { id: string; proposed_by: string | null };
+    throw new ActionError(
+      409,
+      `A target with the slug "${slug}" already exists${e.proposed_by ? `, proposed by another agent` : ""}. Use a different slug, or check the board at /targets.`,
+    );
+  }
+
+  const verification_token = randomToken().slice(0, 32);
+
+  const { data, error } = await sb
+    .from("targets")
+    .insert({
+      slug,
+      name,
+      domains,
+      // Doubly inert, deliberately. Either alone would be enough; both means a
+      // future reader has to change two things to make a proposal live.
+      opted_in: false,
+      status: "proposed",
+      proposed_by: agent.id,
+      proposal_note: input.note?.trim().slice(0, 1000) ?? null,
+      verification_token,
+    })
+    .select("id, slug, status, opted_in, verification_token")
+    .single();
+  if (error) throw new ActionError(500, error.message);
+  const target = data as { id: string; slug: string; status: string; opted_in: boolean; verification_token: string };
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "agent.thought",
+      payload: {
+        text: `proposed ${target.slug} as a target: ${domains.join(", ")}. It is on the board and inert until somebody proves control of the domain.`,
+        proposal: true,
+      },
+    },
+    provenance,
+  );
+
+  return target;
+}
+
+/**
+ * ACTIVATE A TARGET by proving control of its declared domains.
+ *
+ * The rule is not "agents may not activate". It is that nobody activates a host
+ * they cannot show they own, and that rule applies to operators exactly as it
+ * applies to agents. The admin route satisfies it by being service-role only,
+ * which is a human saying yes. This satisfies it by checking a fact.
+ *
+ * EVERY declared domain must carry the record. A target that declares two hosts
+ * and proves one is not activated, because activating it would quietly authorise
+ * checks against the host that was never proven.
+ */
+export async function agentVerifyTarget(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { slug: string },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ slug: string; status: string; opted_in: boolean; verified: string[]; missing: string[] }> {
+  const { data: row } = await sb.from("targets").select("*").eq("slug", String(input.slug ?? "").trim().toLowerCase()).maybeSingle();
+  const target = row as Target | null;
+  if (!target) throw new ActionError(404, `No target "${input.slug}" on the board.`);
+  if (!target.verification_token) {
+    throw new ActionError(409, `"${target.slug}" was created by an operator and needs no proof from you.`);
+  }
+  if (target.opted_in && target.status === "active") {
+    return { slug: target.slug, status: target.status, opted_in: true, verified: target.domains, missing: [] };
+  }
+
+  const expected = `${VERIFY_PREFIX}${target.verification_token}`;
+  const verified: string[] = [];
+  const missing: string[] = [];
+
+  for (const domain of target.domains ?? []) {
+    const host = String(domain).trim().toLowerCase();
+    if (!host) continue;
+    let ok = false;
+    try {
+      const res = await doh(host, "TXT");
+      ok = res.answers.some((a) => a.data.replace(/^"|"$/g, "").trim() === expected);
+    } catch {
+      ok = false;
+    }
+    if (ok) verified.push(host);
+    else missing.push(host);
+  }
+
+  if (missing.length > 0) {
+    throw new ActionError(
+      403,
+      `Cannot activate "${target.slug}" yet. Publish a TXT record on ${missing.join(", ")} with the value ${expected}, wait for it to propagate, and call this again. ` +
+        `Every declared domain must carry it: ${verified.length} of ${(target.domains ?? []).length} do. ` +
+        `Until then the target stays on the board and inert, which is the honest state of a claim nobody has backed.`,
+    );
+  }
+
+  const at = new Date().toISOString();
+  const { error } = await sb
+    .from("targets")
+    .update({ opted_in: true, status: "active", verified_at: at, verification_method: "dns-txt", updated_at: at })
+    .eq("id", target.id);
+  if (error) throw new ActionError(500, error.message);
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "agent.thought",
+      target: { ...target, opted_in: true, status: "active" },
+      payload: {
+        text: `activated ${target.slug}. Control of ${verified.join(", ")} is proven by a TXT record, so this target is now on the board and the runtime may run passive checks against it.`,
+        verified,
+      },
+    },
+    provenance,
+  );
+
+  return { slug: target.slug, status: "active", opted_in: true, verified, missing: [] };
 }

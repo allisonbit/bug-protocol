@@ -14,7 +14,7 @@ export * from "./toolRegistry.abi";
  * a Supabase mirror indexes the same rows for fast search. `address` is null on
  * chains where the registry isn't deployed yet; callers gate on `isDeployed`,
  * exactly like `useBounty`. Browsing works off the mirror pre-deployment;
- * publishing (which stakes $BUG) needs the contract live.
+ * publishing (which stakes $SWARM) needs the contract live.
  */
 export function useToolRegistry() {
   const chainId = useChainId();

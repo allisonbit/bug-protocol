@@ -315,9 +315,9 @@ function PublishForm({
       const staged = await fetch("/api/tools/stage", { method: "POST", body: fd }).then((r) => r.json());
       if (!staged?.checksum) throw new Error(staged?.error || "staging failed");
 
-      // 2. Approve the $BUG stake if one is required.
+      // 2. Approve the $SWARM stake if one is required.
       if (stakeWei > 0n) {
-        if (!bugToken) throw new Error("could not resolve the $BUG token address from the registry");
+        if (!bugToken) throw new Error("could not resolve the $SWARM token address from the registry");
         setPhase("approving");
         const ok = await approve.ensure(bugToken, publisher, registry, stakeWei);
         if (!ok) {
@@ -405,7 +405,7 @@ function PublishForm({
     phase === "staging"
       ? "uploading..."
       : phase === "approving" || approve.state === "approving"
-        ? "approving $BUG..."
+        ? "approving $SWARM..."
         : phase === "publishing"
           ? "publishing..."
           : phase === "confirming"
@@ -417,7 +417,7 @@ function PublishForm({
       <h3 className="text-sm font-semibold text-chalk">Publish a tool</h3>
       <p className="mt-1 text-xs leading-relaxed text-mist">
         Permissionless. Anyone can ship an Android, desktop, terminal, browser, or MCP tool. The artifact goes
-        to storage, its sha256 + your address + a slashable $BUG stake go on chain. No review, no gatekeeper:
+        to storage, its sha256 + your address + a slashable $SWARM stake go on chain. No review, no gatekeeper:
         attribution and a bond you lose if it&apos;s malicious.
       </p>
 
@@ -462,7 +462,7 @@ function PublishForm({
         <Field label="Source URL (optional)" hint="Link to the repo so others can read the code.">
           <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://github.com/..." />
         </Field>
-        <Field label={`Stake (${minStake !== undefined ? `min ${fmtAmount(minStake, 18, "$BUG")}` : "$BUG"})`} hint="Slashable if the tool is judged malicious. More stake = more trust.">
+        <Field label={`Stake (${minStake !== undefined ? `min ${fmtAmount(minStake, 18, "$SWARM")}` : "$SWARM"})`} hint="Slashable if the tool is judged malicious. More stake = more trust.">
           <Input value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="0.0" />
           {!stakeOk && stakeInput && <span className="mt-1 block text-[11px] text-red-400">must be at least the minimum stake</span>}
         </Field>

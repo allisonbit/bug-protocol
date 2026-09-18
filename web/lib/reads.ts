@@ -108,7 +108,7 @@ export function useSubmission(id: bigint | undefined, refetchKey = 0) {
  * Everything the connected account is owed, for the wallet drawer.
  *
  * `extraTokens` lets a submission page pull in the *program's* reward token: a
- * program can escrow ETH, USDC or $BUG, and the drawer alone only ever knew
+ * program can escrow ETH, USDC or $SWARM, and the drawer alone only ever knew
  * about the first two. Without this a hunter paid in a USDC-denominated program
  * saw the award as claimable but had no button that loaded it.
  */

@@ -91,7 +91,7 @@ export const addressUrlOn = (id: number | undefined, a: string) => `${chainMeta(
 
 /**
  * Symbol + decimals for a reward/bond token on a chain. Recognises the native
- * coin (18), the chain's canonical USDC (6), and an optional $BUG address (18).
+ * coin (18), the chain's canonical USDC (6), and an optional $SWARM address (18).
  * Anything else is treated as an 18-decimal ERC-20 named "TOKEN".
  */
 export function assetInfo(chainId: number | undefined, token: string, bugToken?: string | null): { symbol: string; decimals: number } {
@@ -99,6 +99,6 @@ export function assetInfo(chainId: number | undefined, token: string, bugToken?:
   const t = token.toLowerCase();
   if (t === NATIVE) return { symbol: m.chain.nativeCurrency.symbol, decimals: 18 };
   if (m.usdc && t === m.usdc.toLowerCase()) return { symbol: "USDC", decimals: 6 };
-  if (bugToken && t === bugToken.toLowerCase()) return { symbol: "$BUG", decimals: 18 };
+  if (bugToken && t === bugToken.toLowerCase()) return { symbol: "$SWARM", decimals: 18 };
   return { symbol: "TOKEN", decimals: 18 };
 }

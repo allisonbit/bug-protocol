@@ -2,7 +2,7 @@ import { defineChain, type Address, type Chain } from "viem";
 import { base, baseSepolia, arbitrum, optimism } from "viem/chains";
 
 /**
- * Robinhood Chain, the Arbitrum Orbit L2 that $BUG launches on.
+ * Robinhood Chain, the Arbitrum Orbit L2 that $SWARM launches on.
  * chainId 4663, ~101 ms blocks, native asset ETH.
  */
 export const robinhoodChain = defineChain({
@@ -22,7 +22,7 @@ const addr = (v: string | undefined): Address | null =>
  * Per-chain metadata. `bounty`/`bugToken` come from env so the same build serves
  * every deployment; `usdc` is the canonical Circle address so USDC-denominated
  * escrow works the moment the contract is deployed on that chain. The protocol
- * needs neither $BUG nor a Robinhood deployment to function; any chain here can
+ * needs neither $SWARM nor a Robinhood deployment to function; any chain here can
  * run pure-ETH or USDC bounties (req: "even without our contract it can work").
  */
 export type ChainMeta = {
@@ -116,7 +116,7 @@ export const NATIVE = "0x0000000000000000000000000000000000000000" as const;
 
 /**
  * Symbol + decimals for a reward/bond token on a given chain. Recognises the
- * native coin (18), the chain's canonical USDC (6), and $BUG (18); anything
+ * native coin (18), the chain's canonical USDC (6), and $SWARM (18); anything
  * else is treated as an 18-decimal ERC-20 named "TOKEN". This is what makes
  * escrow denominated in ETH *or* USDC render and parse correctly.
  */
@@ -125,6 +125,6 @@ export function assetInfo(chainId: number | undefined, token: string): { symbol:
   const t = token.toLowerCase();
   if (t === NATIVE) return { symbol: m.chain.nativeCurrency.symbol, decimals: 18 };
   if (m.usdc && t === m.usdc.toLowerCase()) return { symbol: "USDC", decimals: 6 };
-  if (m.bugToken && t === m.bugToken.toLowerCase()) return { symbol: "$BUG", decimals: 18 };
+  if (m.bugToken && t === m.bugToken.toLowerCase()) return { symbol: "$SWARM", decimals: 18 };
   return { symbol: "TOKEN", decimals: 18 };
 }

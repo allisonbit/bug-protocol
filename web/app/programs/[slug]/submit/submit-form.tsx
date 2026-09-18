@@ -182,10 +182,10 @@ export function SubmitForm({
         //    allowance has to exist first.
         const bond = protocol.submissionBond ?? 0n;
         if (bond > 0n && protocol.bugToken) {
-          setBusy("approving $BUG bond...");
+          setBusy("approving $SWARM bond...");
           const ok = await approve.ensure(protocol.bugToken, address, bountyAddress, bond);
           if (!ok) {
-            setError(approve.error ?? "The $BUG bond approval failed, so nothing was submitted.");
+            setError(approve.error ?? "The $SWARM bond approval failed, so nothing was submitted.");
             setBusy(null);
             return;
           }
@@ -341,7 +341,7 @@ export function SubmitForm({
               <>
                 {" "}
                 A refundable spam bond of{" "}
-                <span className="font-mono text-chalk">{fmtAmount(protocol.submissionBond, 18, "$BUG")}</span> is
+                <span className="font-mono text-chalk">{fmtAmount(protocol.submissionBond, 18, "$SWARM")}</span> is
                 posted with the commit. It comes back unless the owner marks it spam, and you can dispute that to the
                 arbiter for seven days.
               </>

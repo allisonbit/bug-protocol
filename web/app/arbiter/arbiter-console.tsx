@@ -43,7 +43,7 @@ type QueueItem = {
  * arbiter sign, and the contract rejects anyone else.
  *
  * The one thing it insists on saying out loud: if the pool can't cover the award,
- * the client's $BUG bond is forfeited to the hunter pro rata, as a penalty rather
+ * the client's $SWARM bond is forfeited to the hunter pro rata, as a penalty rather
  * than a make whole. Ruling "valid" is not free, and whoever rules should know it.
  */
 export function ArbiterConsole() {
@@ -191,7 +191,7 @@ function Case({
   const shortfall = valid && award > pool ? award - pool : 0n;
   const clientBond = BigInt(item.program?.bond ?? "0");
   // Forfeited pro rata to the unpaid share of the award. A dimensionless ratio,
-  // because the bond is $BUG and the award is the program's reward token.
+  // because the bond is $SWARM and the award is the program's reward token.
   const bondForfeit = shortfall > 0n && award > 0n ? (clientBond * shortfall) / award : 0n;
 
   const grounds = item.escalatedFromPending
@@ -211,7 +211,7 @@ function Case({
         <div className="text-right text-[11px] text-mist">
           <div>escrow {fmtAmount(pool, info.decimals, info.symbol)}</div>
           <div>open findings {item.program?.pending ?? "?"}</div>
-          <div>client bond {fmtAmount(clientBond, 18, "$BUG")}</div>
+          <div>client bond {fmtAmount(clientBond, 18, "$SWARM")}</div>
         </div>
       </div>
 
@@ -245,7 +245,7 @@ function Case({
         {item.bond !== "0" && (
           <div className="flex gap-2">
             <dt className="text-mist">hunter bond</dt>
-            <dd className="text-chalk">{fmtAmount(BigInt(item.bond), 18, "$BUG")}</dd>
+            <dd className="text-chalk">{fmtAmount(BigInt(item.bond), 18, "$SWARM")}</dd>
           </div>
         )}
       </dl>
@@ -306,9 +306,9 @@ function Case({
         {shortfall > 0n && (
           <p className="rounded border border-amber-500/30 bg-amber-500/[0.06] p-2.5 text-[11px] leading-relaxed text-mist">
             The pool can&apos;t cover this award. Escrow pays{" "}
-            <span className="text-chalk">{fmtAmount(pool, info.decimals, info.symbol)}</span> and the client&apos;s $BUG
+            <span className="text-chalk">{fmtAmount(pool, info.decimals, info.symbol)}</span> and the client&apos;s $SWARM
             bond is forfeited to the hunter pro rata, roughly{" "}
-            <span className="text-chalk">{fmtAmount(bondForfeit, 18, "$BUG")}</span>. That is a penalty on the client,
+            <span className="text-chalk">{fmtAmount(bondForfeit, 18, "$SWARM")}</span>. That is a penalty on the client,
             not a make whole for the hunter: the bond and the reward are different assets.
           </p>
         )}

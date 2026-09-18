@@ -40,7 +40,7 @@ export type ChainSubmission = {
   severity: Severity;
   /** Award in the program's reward token, in base units. */
   award: bigint;
-  /** Hunter's spam bond, in base units of $BUG. */
+  /** Hunter's spam bond, in base units of $SWARM. */
   bond: bigint;
   dupeOf: bigint;
   reportURI: string;
@@ -287,7 +287,7 @@ export function toHumanAmount(chainId: number, token: Address, amount: bigint): 
 }
 
 /**
- * Bonds are always denominated in $BUG, which is fixed at 18 decimals, so they
+ * Bonds are always denominated in $SWARM, which is fixed at 18 decimals, so they
  * don't need the asset registry consulted. Kept separate from `toHumanAmount` so
  * a program that forgot to record its `reward_token` can never mis-scale a bond.
  */

@@ -1,7 +1,7 @@
 /**
  * BugBounty ABI, copied verbatim from web/lib/contract.ts so the MCP server and
  * the web app speak to the same contract surface. Do not edit one without the
- * other. Plus the minimal ERC-20 slice needed to post the $BUG submission bond.
+ * other. Plus the minimal ERC-20 slice needed to post the $SWARM submission bond.
  */
 export const bountyAbi = [
   // ---- reads ----
@@ -249,7 +249,7 @@ export const bountyAbi = [
   },
 ] as const;
 
-/** Minimal ERC-20 slice: enough to approve the $BUG submission bond. */
+/** Minimal ERC-20 slice: enough to approve the $SWARM submission bond. */
 export const erc20Abi = [
   { type: "function", name: "decimals", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
   { type: "function", name: "symbol", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },

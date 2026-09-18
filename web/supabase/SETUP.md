@@ -65,7 +65,7 @@ all scoped by RLS.
 
 ## Optional: the on-chain layer (escrow + the hunter loop)
 
-Everything above works with no blockchain at all. Escrow, slashable $BUG bonds, commit-reveal
+Everything above works with no blockchain at all. Escrow, slashable $SWARM bonds, commit-reveal
 disclosure and arbitration are an optional hardening layer on top: a program that links to a
 `BugBounty` deployment gets findings that are committed before anyone can read them and paid out of
 escrow the client cannot claw back. A program with no link keeps working as an honour-system bounty
@@ -84,20 +84,20 @@ Two things worth deciding before you point real hunters at it:
   and until it is, escalated findings cannot be resolved at all. A multisig is the honest choice
   today; a dedicated arbitration contract later.
 - **Bond terms can be zero.** With `BUG_SUBMISSION_BOND` and `BUG_PROGRAM_BOND` unset, a program runs
-  on plain ETH or USDC with no token involved, which is the "works without $BUG" path.
+  on plain ETH or USDC with no token involved, which is the "works without $SWARM" path.
 
 ### 2. Point the app at it
 
 | Value | Used as |
 | --- | --- |
 | `BugBounty` address per chain | `NEXT_PUBLIC_BOUNTY_<chainId>` (e.g. `NEXT_PUBLIC_BOUNTY_8453`) |
-| `$BUG` token address per chain | `NEXT_PUBLIC_BUG_TOKEN_<chainId>` |
+| `$SWARM` token address per chain | `NEXT_PUBLIC_BUG_TOKEN_<chainId>` |
 | USDC address per chain, if non-canonical | `NEXT_PUBLIC_USDC_<chainId>` |
 | an RPC override | `NEXT_PUBLIC_RPC_URL` |
 
 Chains with no address configured simply don't appear as options; `lib/chains.ts` is the whole
 registry. For local testing, deploy to a Hardhat node and set `NEXT_PUBLIC_BOUNTY_31337` +
-`NEXT_PUBLIC_BUG_TOKEN_31337`. The deploy script mocks $BUG automatically on a local network, and
+`NEXT_PUBLIC_BUG_TOKEN_31337`. The deploy script mocks $SWARM automatically on a local network, and
 "Local" only shows up in the network switcher when you've done it.
 
 ### 3. Turn on the reconciler

@@ -83,8 +83,8 @@ ENTRYPOINT ["/usr/local/bin/recon"]
 `;
 
   const reconSh = `#!/bin/sh
-# $BUG recon + live triage pipeline. Only run against targets you are
-# authorised to test: a live $BUG program's scope is your safe harbour.
+# $SWARM recon + live triage pipeline. Only run against targets you are
+# authorised to test: a live $SWARM program's scope is your safe harbour.
 set -eu
 TARGET="\${1:-\${TARGET:-${target}}}"
 OUT="\${OUT:-/work/out}"
@@ -108,7 +108,7 @@ gau --threads 5 "$TARGET" 2>/dev/null | sort -u > "$OUT/urls.txt" || true
 echo "[5/5] vuln templates (nuclei)"
 nuclei -silent -l "$OUT/live.txt" -severity low,medium,high,critical -json-export "$OUT/nuclei.json" || true
 
-echo "[done] artifacts in $OUT. Feed nuclei.json into a \$BUG report."
+echo "[done] artifacts in $OUT. Feed nuclei.json into a \$SWARM report."
 `;
 
   const compose = `# docker compose run --rm recon ${target}
@@ -122,7 +122,7 @@ services:
       - ./out:/work/out
 `;
 
-  const readme = `# $BUG recon + live triage kit: ${target}
+  const readme = `# $SWARM recon + live triage kit: ${target}
 
 A no setup ProjectDiscovery pipeline. You only need Docker.
 
@@ -141,7 +141,7 @@ Artifacts land in ./out/:
 - nuclei.json: template matches, low to critical
 
 ## Authorisation
-Run this **only** against assets a live $BUG program lists in scope. The
+Run this **only** against assets a live $SWARM program lists in scope. The
 program's onchain scope hash + safe-harbour text is your authorisation; anything
 outside it is not covered. When you find something, encrypt the report on the
 /tools page, publish the ciphertext, and submit the commit on chain.
@@ -152,10 +152,10 @@ outside it is not covered. When you find something, encrypt the report on the
     `mkdir -p bug-recon-kit && cat > "bug-recon-kit/${name}" <<'BUGEOF'\n${body}BUGEOF\n`;
 
   return `#!/bin/sh
-# $BUG recon kit installer: writes ./bug-recon-kit/ then prints next steps.
+# $SWARM recon kit installer: writes ./bug-recon-kit/ then prints next steps.
 set -eu
 ${heredoc("Dockerfile", dockerfile)}${heredoc("recon.sh", reconSh)}${heredoc("docker-compose.yml", compose)}${heredoc("README.md", readme)}chmod +x bug-recon-kit/recon.sh 2>/dev/null || true
-echo "[\\$BUG] wrote ./bug-recon-kit/ (Dockerfile, recon.sh, docker-compose.yml, README.md)"
-echo "[\\$BUG] next:  cd bug-recon-kit && docker compose build && docker compose run --rm recon ${target}"
+echo "[\\$SWARM] wrote ./bug-recon-kit/ (Dockerfile, recon.sh, docker-compose.yml, README.md)"
+echo "[\\$SWARM] next:  cd bug-recon-kit && docker compose build && docker compose run --rm recon ${target}"
 `;
 }

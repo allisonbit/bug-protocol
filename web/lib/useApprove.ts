@@ -9,7 +9,7 @@ import { humanizeError } from "./useTx";
 /**
  * Ensures `spender` has at least `amount` allowance of `token` from `owner`,
  * sending an approve (to max) only when the current allowance is short. Used
- * before any $BUG bond or ERC-20 reward funding call.
+ * before any $SWARM bond or ERC-20 reward funding call.
  */
 export function useApprove() {
   const publicClient = usePublicClient();

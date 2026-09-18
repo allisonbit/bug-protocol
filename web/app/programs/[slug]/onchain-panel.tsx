@@ -99,7 +99,7 @@ export function OnchainPanel({ program }: { program: Program }) {
                         : "..."
                     }
                   />
-                  <Row label="client bond" value={fmtAmount(onchain.program.bond, 18, "$BUG")} />
+                  <Row label="client bond" value={fmtAmount(onchain.program.bond, 18, "$SWARM")} />
                   <Row
                     label="open findings"
                     value={onchain.pending !== undefined ? String(onchain.pending) : "..."}
@@ -195,7 +195,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
       ok: topTier > 0n && pool >= topTier,
       label: `Escrow covers the top tier (${fmtAmount(topTier, info.decimals, info.symbol)})`,
     },
-    { ok: postedBond >= minBond, label: `Client bond posted (${fmtAmount(minBond, 18, "$BUG")})` },
+    { ok: postedBond >= minBond, label: `Client bond posted (${fmtAmount(minBond, 18, "$SWARM")})` },
   ];
   const canGoLive = gates.every((g) => g.ok);
 
@@ -230,7 +230,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
     setError(null);
     if (!bounty || !address) return;
     const bug = protocol.bugToken;
-    if (!bug) return setError("This deployment has no $BUG address configured.");
+    if (!bug) return setError("This deployment has no $SWARM address configured.");
     let wei = 0n;
     try {
       wei = parseUnits((bondAmount || "0").trim() as `${number}`, 18);
@@ -238,7 +238,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
       return setError("That bond amount isn't a number.");
     }
     if (wei === 0n) return setError("Enter a bond amount.");
-    setBusy("approving $BUG...");
+    setBusy("approving $SWARM...");
     const ok = await approve.ensure(bug, address, bounty, wei);
     if (!ok) {
       setBusy(null);
@@ -294,7 +294,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
 
       {!isClosed && !isLive && (
         <Field
-          label="Post / top up $BUG bond"
+          label="Post / top up $SWARM bond"
           hint="Slashable good faith bond. Forfeited to the hunter if escrow can't cover an award the arbiter rules valid."
         >
           <div className="flex gap-2">
@@ -359,7 +359,7 @@ function EscrowActions({ program, onDone }: { program: Program; onDone: () => vo
               })
             }
           >
-            {reclaim.busy ? "..." : "Reclaim $BUG bond"}
+            {reclaim.busy ? "..." : "Reclaim $SWARM bond"}
           </Button>
         )}
         <Button
@@ -534,7 +534,7 @@ function LinkForm({
   const tokenChoices: { value: string; label: string }[] = [
     { value: NATIVE, label: `Native ${meta.chain.nativeCurrency.symbol}` },
     ...(meta.usdc ? [{ value: meta.usdc, label: "USDC" }] : []),
-    ...(meta.bugToken ? [{ value: meta.bugToken, label: "$BUG" }] : []),
+    ...(meta.bugToken ? [{ value: meta.bugToken, label: "$SWARM" }] : []),
   ];
 
   return (
@@ -544,7 +544,7 @@ function LinkForm({
         One transaction, then the resulting program id is recorded on this row. The tier values below are the amounts
         hunters actually receive, converted to the token&apos;s base units for you.
         {protocol.minProgramBond !== undefined && protocol.minProgramBond > 0n && (
-          <> A $BUG bond of {fmtAmount(protocol.minProgramBond, 18, "$BUG")} is also required before it can go live.</>
+          <> A $SWARM bond of {fmtAmount(protocol.minProgramBond, 18, "$SWARM")} is also required before it can go live.</>
         )}
       </p>
 

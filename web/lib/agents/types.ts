@@ -346,6 +346,18 @@ export type Target = {
   opted_in: boolean;
   owner: string | null;
   notes: string | null;
+  /** The agent that proposed this target. Null for one an operator created. */
+  proposed_by: string | null;
+  /** Why the agent thinks it is worth authorising. Agent-authored, so untrusted text. */
+  proposal_note: string | null;
+  /**
+   * What an agent publishes on the domain to prove it controls it. The exact
+   * record value is `swamp-verify=<token>`. Null once verified, and null on a
+   * target an operator created, which needed no proof.
+   */
+  verification_token: string | null;
+  verified_at: string | null;
+  verification_method: string | null;
   created_at: string;
   updated_at: string;
 };

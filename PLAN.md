@@ -1,11 +1,11 @@
-# $BUG: Implementation Plan
+# $SWARM: Implementation Plan
 
 The single source of truth for what we're building. Every line traces to something you asked for.
 
 ## The product (your words)
-> "$BUG: People can hire us to find bugs on their websites, we let the community find the bugs and we reward them."
+> "$SWARM: People can hire us to find bugs on their websites, we let the community find the bugs and we reward them."
 
-A bug-bounty protocol where clients fund escrowed programs, the community hunts, and accepted findings pay out of escrow the client **cannot** claw back. You launch the $BUG coin on the Pons launchpad yourself and hand me the CA to integrate; I build the entire platform + utility around it.
+A bug-bounty protocol where clients fund escrowed programs, the community hunts, and accepted findings pay out of escrow the client **cannot** claw back. You launch the $SWARM coin on the Pons launchpad yourself and hand me the CA to integrate; I build the entire platform + utility around it.
 
 ## Requirements captured from every message
 
@@ -23,8 +23,8 @@ A bug-bounty protocol where clients fund escrowed programs, the community hunts,
 | 9 | **"build all tools needed, PC tool, instant download for marketplace, any tool you can think of"** | in progress |
 | 10 | **"tools for debugging live, the full future of exploits"**: live recon/debug tooling | todo |
 | 11 | **"go through GitHub, find tools, build them into ours"**: pull in real OSS hunting tools | todo |
-| 12 | Integrate $BUG coin (Pons launchpad) once CA provided | todo (awaiting CA) |
-| 13 | $BUG utility = slashable bonds on both sides (forfeitable -> real utility) | done: in contract |
+| 12 | Integrate $SWARM coin (Pons launchpad) once CA provided | todo (awaiting CA) |
+| 13 | $SWARM utility = slashable bonds on both sides (forfeitable -> real utility) | done: in contract |
 
 ## Architecture
 
@@ -60,7 +60,7 @@ working as an honour-system bounty; the same receipt still dates and binds a fin
    and that hash *is* the `reportURI` (`/api/reports/<sha256>`). That resolves the chicken-and-egg of
    `reportURI` being inside the commit preimage before anything is stored. The salt is written to the
    local vault and the receipt downloaded **before any signature**, so a failed transaction can never
-   strand a commit. Escrowed programs then `submit(programId, commitHash)` after approving the $BUG
+   strand a commit. Escrowed programs then `submit(programId, commitHash)` after approving the $SWARM
    anti-spam bond.
 2. **Index**: the row is created with the ciphertext, and the server re-reads the chain to verify the
    submission exists, belongs to this program, and was filed by the wallet on the hunter's profile.
@@ -186,7 +186,7 @@ this plan exists to close. Phase 4 last because it is additive and depends on ph
 ---
 
 ## Awaiting from you
-- $BUG contract address (Pons launchpad): set `NEXT_PUBLIC_BUG_TOKEN` + on-chain `bugToken`.
+- $SWARM contract address (Pons launchpad): set `NEXT_PUBLIC_BUG_TOKEN` + on-chain `bugToken`.
 - **An arbiter venue.** `setArbiter` is one-shot and unset by default, so escalations are currently
   unresolvable. A multisig is the honest choice until a dedicated arbitration contract exists.
 - Deploy target chains confirmation (defaulting to Robinhood + Base).
@@ -200,7 +200,7 @@ this plan exists to close. Phase 4 last because it is additive and depends on ph
   findings on a program they run and self-credit `rep`. Only escrowed programs are chain-attested;
   the leaderboard does not currently distinguish the two.
 - **The bond/arbiter trust point.** An escalation is only as good as whoever holds `arbiter`, and the
-  pool-shortfall path pays the hunter the client's $BUG bond pro rata, a penalty on the client, not
+  pool-shortfall path pays the hunter the client's $SWARM bond pro rata, a penalty on the client, not
   a make-whole.
 
 ---
@@ -228,15 +228,15 @@ Every message you've sent, unedited, so intent is never lost in paraphrase.
 - "its robinhood chain check github repoditory too b"
 - "continue"
 - "so where do buy back go all details"
-- "$BUG so from this lets build a project utility while ill lauch the coin on pons my self / People can hire us in to find bugs on their websites, we will let the community find the bugs and we reward them?ok good so"
+- "$SWARM so from this lets build a project utility while ill lauch the coin on pons my self / People can hire us in to find bugs on their websites, we will let the community find the bugs and we reward them?ok good so"
 - "i said find anything like bug so we can have atesis for a coin lauch expecially from their github"
-- "$BUG / People can hire us in to find bugs on their websites, we will let the community find the bugs and we reward them?push to github and deploy vercel"
+- "$SWARM / People can hire us in to find bugs on their websites, we will let the community find the bugs and we reward them?push to github and deploy vercel"
 - "continue" (several), "hi" (several), "contiue"
 - Mid-turn injects: "what are u looking for", "check github even robi hood chain github also", "but we are using launchpad to lauinch the coin ill just give you our ca to integrate so the cpin can be part of the websitr", "i hand over everthing ui etc its on robin hood chain wallet connect etc do everthing dont stop till ur done no mistsakes", "make sure mcps can connect too ai agent", "mal", "make it the best thing that came out of your head"
 
 ### Reading between the lines (intent, not literal)
 - "for all chains" + "eth usdc base robinhood" -> **multi-chain, multi-asset escrow**, not Robinhood-only.
-- "even without our contract it can work" -> the platform's value (escrowed bounties, tooling, MCP) must **not depend on the $BUG token existing yet**; token adds bond utility on top.
+- "even without our contract it can work" -> the platform's value (escrowed bounties, tooling, MCP) must **not depend on the $SWARM token existing yet**; token adds bond utility on top.
 - "pc tool", "instant download", "marketplace", "tools for debugging live", "the full future of exploits", "go through github find tools" -> a **real tools marketplace**: downloadable CLI/desktop helpers + live recon/debug tooling drawn from established OSS, wired to the protocol.
 - "mcps can connect to ai agent" -> ship an **MCP server** so agents can hunt/triage/query autonomously.
 - "next billion dollar protocol" / "best thing that came out of your head" -> bar is a flagship product, not a demo.
