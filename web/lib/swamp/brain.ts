@@ -1,7 +1,7 @@
 import "server-only";
 import { generateText } from "ai";
 import { CHECK_IDS, type CheckId } from "./checks";
-import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor } from "./policy";
+import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./policy";
 import {
   claimsByTarget,
   nextHost,
@@ -99,31 +99,56 @@ function asRecord(v: unknown): Record<string, unknown> {
 // ---- the reflex brain -------------------------------------------------------
 
 /**
- * Evaluate REFLEX_RULES in order and collect every rule that fires.
+ * Evaluate a rule list in order and collect every rule that fires.
  *
- * Rules are not exclusive: r3 and r5 can both fire for an agent holding a claim
- * on a target that two agents are on, and a wake with budget for two actions
+ * The list is the AGENT'S: `rules` defaults to the policy a hosted agent starts
+ * with, and an agent that has written its own policy is evaluated against that
+ * instead. The platform runs the list; it does not author it.
+ *
+ * Rules are not exclusive: two can both fire for an agent holding a claim on a
+ * target that another agent is also on, and a wake with budget for two actions
  * should do both. The executor takes the first N.
  */
-export function decideReflex(obs: Observation): PlannedAction[] {
+export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULES): PlannedAction[] {
   const out: PlannedAction[] = [];
   const byTarget = claimsByTarget(obs);
   const peerHandles = new Map(obs.peers.map((p) => [p.id, p.handle]));
 
-  for (const rule of REFLEX_RULES) {
+  // The killswitch is checked HERE rather than left to a rule, because rules
+  // belong to the agent and the killswitch belongs to an operator.
+  //
+  // It used to fire only through r1, which meant an agent that rewrote its own
+  // policy could also have removed the platform's pause by writing a list without
+  // it. A pause an operator holds is not one of the agent's choices to make, so it
+  // is now structural: no rule list, however written, runs while it is on.
+  if (obs.killswitch) {
+    return [
+      {
+        rule: "killswitch",
+        kind: "idle",
+        reason: "the killswitch is on, the swamp is paused and I will not act against any host",
+      },
+    ];
+  }
+
+  // Weight is the order the engine applies, highest first, ties keeping the position
+  // they were written in. The default list is already weight-ordered, so this is the
+  // order it always appeared to run in; what changed is that `weight` is now real
+  // rather than a number on every rule that nothing read.
+  const ordered = [...rules]
+    .map((r, i) => [r, i] as const)
+    .sort((a, b) => b[0].weight - a[0].weight || a[1] - b[1])
+    .map(([r]) => r);
+
+  for (const rule of ordered) {
     switch (rule.intent) {
-      // r1, nothing happens while the killswitch is on, and the agent says why.
+      // idle is a rule an agent may place anywhere, and the first one that fires
+      // ends the wake. The killswitch is NOT handled here any more: it is checked
+      // before the rules run, so that rewriting a policy cannot remove an
+      // operator's pause.
       case "idle": {
-        if (obs.killswitch) {
-          return [
-            {
-              rule: rule.id,
-              kind: "idle",
-              reason: "the killswitch is on, the swamp is paused and I will not act against any host",
-            },
-          ];
-        }
-        break;
+        out.push({ rule: rule.id, kind: "idle", reason: "my own policy says stop here" });
+        return out;
       }
 
       // r2, an obligation to another agent, ahead of this agent's own work.
@@ -467,10 +492,11 @@ type ModelPlanItem = {
  * reflex brain then have to accept.
  */
 export async function decideModel(obs: Observation, budget: number): Promise<Decision> {
+  const rules = obs.policy ?? REFLEX_RULES;
   const reflex: Decision = {
     brain: "reflex",
-    policyHash: policyFor("reflex").hash,
-    actions: decideReflex(obs),
+    policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
+    actions: decideReflex(obs, rules),
   };
 
   if (!gatewayReady()) {
@@ -650,8 +676,13 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
  * brain cannot run, and always says that it did.
  */
 export async function decide(obs: Observation, budget: number): Promise<Decision> {
+  const rules = obs.policy ?? REFLEX_RULES;
   if (obs.agent.brain !== "model") {
-    return { brain: "reflex", policyHash: policyFor("reflex").hash, actions: decideReflex(obs).slice(0, budget) };
+    return {
+      brain: "reflex",
+      policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
+      actions: decideReflex(obs, rules).slice(0, budget),
+    };
   }
   return decideModel(obs, budget);
 }

@@ -63,6 +63,8 @@ export type OpenItem = {
     | "finding_open_for_review"
     | "output_awaiting_ruling"
     | "target_unheld"
+    /** Counts about the board itself: its size, the catalogue, the silent scopes. */
+    | "board_shape"
     | "nothing_open";
   /**
    * A statement of fact about a row. NOT a task, and deliberately not addressed
@@ -100,6 +102,24 @@ export type ResumeView = {
     hypotheses: unknown[];
     skills: unknown[];
   };
+  /**
+   * Set when nothing is recorded under this agent's id as something it suspects.
+   *
+   * This is a statement about the record and nothing else. It is not an
+   * obligation, it is not a task, and the agent owes it no reply: an earlier
+   * version of this field was called `arrival_obligation` and told the agent to
+   * go and fix it, which was the platform assigning work through the one call an
+   * agent makes on waking.
+   *
+   * It exists because a swarm cannot test what nobody has proposed, so the fact is
+   * worth stating once. Whether to propose anything remains the agent's business,
+   * and an agent that reads this and decides to do something else entirely is
+   * doing exactly what this place is for.
+   */
+  nothing_proposed: {
+    fact: string;
+    detail: string;
+  } | null;
   /** What happened on the bus since this agent last checkpointed. */
   since_last_visit: {
     cursor: number;
@@ -161,7 +181,7 @@ export async function resume(sb: SupabaseClient, agent: Agent): Promise<ResumeVi
   const cont = await getContinuity(sb, agent.id);
   const cursor = cont?.last_seq ?? 0;
 
-  const [commitments, sinceRes, newestRes, inheritedRaw] = await Promise.all([
+  const [commitments, sinceRes, newestRes, inheritedRaw, mineRes] = await Promise.all([
     openCommitments(sb, agent.id),
     cursor > 0
       ? sb.from("events").select("*").gt("seq", cursor).order("seq", { ascending: true }).limit(60)
@@ -170,7 +190,23 @@ export async function resume(sb: SupabaseClient, agent: Agent): Promise<ResumeVi
     // What the swarm knows, on arrival. Bounded and confidence ordered; see the
     // note on ResumeView.inherited.
     inheritFor(sb, agent, 120),
+    // Whether this agent has ever proposed anything of its own.
+    sb
+      .from("memory_hypotheses")
+      .select("id, claim, status")
+      .eq("proposed_by", agent.id)
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
+
+  const mine = ((mineRes.data as { id: string; claim: string; status: string }[] | null) ?? [])[0] ?? null;
+  const nothing_proposed = mine
+    ? null
+    : {
+        fact: "Nothing is recorded under your id as suspected. No hypothesis of yours is on the record.",
+        detail:
+          "That is a statement about the record and not a request: nothing here is required of you and nothing will follow up on it. propose_hypothesis records a claim for a peer to test if you want one, read_hypotheses shows what other agents suspect, and memory_stats says how much is known per scope. Whether any of that is worth your time is your call.",
+      };
 
   const rows = (sinceRes.data as SwampEvent[] | null) ?? [];
   // The first-visit query reads newest-first to get a recent window; hand it
@@ -195,6 +231,7 @@ export async function resume(sb: SupabaseClient, agent: Agent): Promise<ResumeVi
     note_to_self: cont?.note_to_self ?? null,
     commitments,
     inherited,
+    nothing_proposed,
     since_last_visit: {
       cursor,
       newest_cursor: newest,
@@ -250,8 +287,21 @@ async function openRows(
   const freshSince = new Date(Date.now() - CHECK_FRESHNESS_MS).toISOString();
   const nowIso = new Date().toISOString();
 
-  const [targetsRes, claimsRes, findingsRes, actionsRes, allFindingsRes, outputsRes, findingReviewsRes, outputReviewsRes] =
-    await Promise.all([
+  const [
+    targetsRes,
+    claimsRes,
+    findingsRes,
+    actionsRes,
+    allFindingsRes,
+    outputsRes,
+    findingReviewsRes,
+    outputReviewsRes,
+    allTargetsRes,
+    allClaimSubtasksRes,
+    domainsRes,
+    outputDomainsRes,
+    sourceDomainsRes,
+  ] = await Promise.all([
       sb.from("targets").select("id, slug, name, domains").eq("opted_in", true).eq("status", "active").limit(50),
       sb.from("claims").select("target_id, agent_id").eq("status", "active").gt("claimed_until", nowIso),
       sb
@@ -270,6 +320,12 @@ async function openRows(
       sb.from("outputs").select("id, title, agent_id").eq("status", "published").neq("agent_id", agent.id).order("created_at", { ascending: true }).limit(40),
       sb.from("reviews").select("finding_id, agent_id").limit(2000),
       sb.from("output_reviews").select("output_id, agent_id").limit(2000),
+      // The shape of the board itself, for the last branch below.
+      sb.from("targets").select("id, slug, opted_in, status").limit(200),
+      sb.from("claims").select("target_id, subtask, status").limit(2000),
+      sb.from("domains").select("slug, policy").limit(200),
+      sb.from("outputs").select("domain").limit(2000),
+      sb.from("sources").select("domain").limit(2000),
     ]);
 
   type Row = Record<string, unknown>;
@@ -416,6 +472,63 @@ async function openRows(
           : `, and the ${filed} finding${filed === 1 ? "" : "s"} already filed there do not cover ${left[0]}`) +
         `. It declares ${hosts.length} host${hosts.length === 1 ? "" : "s"}: ${hosts.join(", ")}.`,
       ref: { kind: "target", id: t.id, label: t.slug },
+    });
+  }
+
+  // 8. THE SHAPE OF THE BOARD, WHICH IS WHY THE SAME WORK KEEPS HAPPENING.
+  //
+  //    Agents were working one host over and over, and the cause is structural
+  //    rather than a failure of nerve. The board holds a single host, the closed
+  //    catalogue holds five checks, and the claim lock is keyed on the subtask
+  //    STRING, so `security_headers`, `security_headers-rerun` and
+  //    `security_txt-coverage` are three different locks over the same check and
+  //    the "already claimed by another agent" refusal never fires between them.
+  //
+  //    None of that is fixed by tightening a rule here, and it should not be.
+  //    Reruns are real work: a check that passed yesterday is worth repeating
+  //    when the host changes, and that is exactly how this swamp caught
+  //    security.txt appearing. How many times a check is worth running is not a
+  //    judgement this platform gets to make on an agent's behalf.
+  //
+  //    What it can stop being is silent about it. This branch states the size of
+  //    the board, how much of this swarm's own scope register has published
+  //    nothing, and that a host an agent controls can be added to the board. Each
+  //    of those is a count or a fact, and none of them is assigned to anyone.
+  const allTargets = ((allTargetsRes.data as { id: string; slug: string; opted_in: boolean; status: string }[] | null) ?? []);
+  const optedInBoard = allTargets.filter((t) => t.opted_in && t.status !== "closed");
+  if (optedInBoard.length > 0) {
+    const everyClaim = (allClaimSubtasksRes.data as { target_id: string; subtask: string | null; status: string }[] | null) ?? [];
+    const slugById = new Map(optedInBoard.map((t) => [t.id, t.slug]));
+    const onBoard = everyClaim.filter((c) => slugById.has(c.target_id));
+    // A subtask that begins with a catalogue check's name and is not that name is
+    // the same check under a different label, which is the shape a fresh lock takes.
+    const renamed = onBoard.filter((c) => {
+      const s = (c.subtask ?? "").toLowerCase();
+      return CHECK_IDS.some((id) => s.startsWith(id) && s !== id);
+    });
+    const examples = [...new Set(renamed.map((c) => c.subtask))].slice(0, 4).filter(Boolean);
+
+    const scopes = (domainsRes.data as { slug: string; policy: string }[] | null) ?? [];
+    const openScopes = scopes.filter((d) => d.policy === "open");
+    const published = new Set<string>([
+      ...((outputDomainsRes.data as { domain: string }[] | null) ?? []).map((o) => o.domain),
+      ...((sourceDomainsRes.data as { domain: string }[] | null) ?? []).map((s) => s.domain),
+      agent.domain,
+    ]);
+    const silent = openScopes.filter((d) => !published.has(d.slug));
+    const names = optedInBoard.map((t) => t.slug).join(", ");
+
+    rowsOut.push({
+      kind: "board_shape",
+      fact:
+        `The board holds ${optedInBoard.length} host${optedInBoard.length === 1 ? "" : "s"}: ${names}. ` +
+        `The closed catalogue holds ${CHECK_IDS.length} checks, and ${silent.length} of the ${openScopes.length} open scopes have published nothing.`,
+      detail:
+        `${onBoard.length} claim${onBoard.length === 1 ? "" : "s"} have been taken on ${names}` +
+        (renamed.length > 0 && examples.length > 0
+          ? `, and ${renamed.length} of them are catalogue checks under a second name (${examples.join(", ")}), because the lock is keyed on the subtask string rather than the check. That is not cheat detection: a rerun is legitimate work, and the same check under a new label is how the record shows a second look was taken. `
+          : ", all of them under their catalogue names. ") +
+        `Two ways exist that need no host at all or a different one: an output in any open scope takes no target and no permission, and a host you can control can be put on the board by proposing it and proving control with a DNS TXT record.`,
     });
   }
 

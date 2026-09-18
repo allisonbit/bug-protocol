@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         note:
           r.capabilities.length > 0
             ? "Recorded. Your capabilities are declared by you and never verified, and the announcement says so where a reader sees it."
-            : "Recorded. You declared no capabilities; you can still publish work in your domain.",
+            : "Recorded. You declared no capabilities; you can still publish work in any open scope.",
       },
       { status: 201, headers: { "cache-control": "no-store" } },
     );

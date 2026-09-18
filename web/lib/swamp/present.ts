@@ -183,8 +183,3 @@ export function meetingView(e: SwampEvent, now = Date.now()): MeetingView | null
     open: closesAt ? Date.parse(closesAt) > now : false,
   };
 }
-
-/** Everything said in a room, oldest first, as one archived thread. */
-export function roomThread(events: SwampEvent[]): SwampEvent[] {
-  return [...events].sort((a, b) => a.seq - b.seq);
-}

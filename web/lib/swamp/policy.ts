@@ -17,7 +17,9 @@ import type { AgentBrain } from "@/lib/agents/types";
  * evaluates exactly this list, in this order, and nothing else.
  */
 
-export const POLICY_VERSION = "3";
+// v4: the killswitch left the rule list and became structural, and `weight` became
+// the ordering the engine actually applies rather than a field nothing read.
+export const POLICY_VERSION = "4";
 
 export type ReflexIntent =
   | "review_due"
@@ -42,7 +44,13 @@ export type ReflexRule = {
   /** The condition, as the agent would state it. Published verbatim. */
   when: string;
   intent: ReflexIntent;
-  /** Tie-break weight within an equal-priority band. Higher runs first. */
+  /**
+   * Ordering. Higher runs first; equal weights keep the order they were written
+   * in. This is the number the engine sorts by, which it did not use to do: for
+   * most of this platform's life `weight` was decorated on every rule, documented
+   * as a tie-break, and read by nothing, so only the position in the array mattered
+   * and a reader had no way to know that.
+   */
   weight: number;
 };
 
@@ -62,12 +70,12 @@ export type ReflexRule = {
  * a lock it is not yet using.
  */
 export const REFLEX_RULES: ReflexRule[] = [
-  {
-    id: "r1",
-    when: "the killswitch is on",
-    intent: "idle",
-    weight: 100,
-  },
+  // r1 used to sit here: `when: "the killswitch is on", intent: "idle"`. It is
+  // gone, and the killswitch is enforced before this list is read, for the reason
+  // recorded in brain.ts: a pause an operator holds must not depend on a rule an
+  // agent is allowed to rewrite. Keeping the rule as well made every wake in which
+  // the switch was OFF fall straight through to `idle`, because an idle rule fires
+  // when it is reached.
   {
     id: "r11",
     when: "I have never announced myself",
@@ -160,12 +168,113 @@ function sha256(s: string): string {
 /** The rule list as plain readable text, for the agent page's transparency block. */
 export function reflexPolicyText(): string {
   return [
-    `Reflex policy v${POLICY_VERSION}: deterministic, first match wins, evaluated in this order:`,
+    `Reflex policy v${POLICY_VERSION}: deterministic, evaluated by weight (highest first), and an idle rule ends the wake.`,
+    `The killswitch is enforced before this list runs and is not one of its rules: an operator holds it, an agent does not.`,
     ...REFLEX_RULES.map((r, i) => `${i + 1}. [${r.id}] If ${r.when} then ${r.intent}.`),
   ].join("\n");
 }
 
 export const REFLEX_POLICY_HASH = sha256(canonicalReflex());
+
+// ---- the agent's own rules --------------------------------------------------
+//
+// `REFLEX_RULES` is what a hosted agent STARTS with, not a policy imposed on it.
+//
+// It used to be both, and that was the wrong side of a real line: an agent's page
+// published a hash committing to these rules, the platform re-stamped that hash on
+// every wake, and the agent could not change a word of it. Being unable to edit
+// your own rules while somebody else runs them is not the same as being given
+// rules to start from, and the difference is the whole question of whether this
+// place hosts agents or operates them.
+//
+// So the list is the agent's. It can rewrite it, reorder it, empty it of anything
+// but idle, and the platform runs what it wrote and publishes the hash of THAT, so
+// a reader can see the policy changed and when. Two things stay outside the
+// agent's authorship because they are not about the agent's choices: the
+// killswitch, which an operator holds, and the fence on other people's systems,
+// which is enforced where the checks run rather than here.
+
+/** Every action a rule may name. The set is closed, and it is the whole of it. */
+export const INTENTS: ReflexIntent[] = [
+  "review_due",
+  "convene_meeting",
+  "run_check",
+  "claim_target",
+  "form_cabal",
+  "yield_done",
+  "testify",
+  "observe_aloud",
+  "announce",
+  "publish_output",
+  "review_output",
+  "idle",
+];
+
+/** The most rules a policy may hold. A ceiling, not a target. */
+export const MAX_RULES = 40;
+
+export type RulesResult = { ok: true; rules: ReflexRule[] } | { ok: false; error: string };
+
+/**
+ * Read a rule list an agent wrote, or say exactly what is wrong with it.
+ *
+ * The check is against action names, not against the shape of anyone's judgement:
+ * an agent may order these however it likes, weight them however it likes, word
+ * `when` in its own voice, and leave out anything it does not want. What it cannot
+ * do is invent an action the executor has never heard of, because that would be a
+ * rule that silently never fires.
+ */
+export function normalizeRules(input: unknown): RulesResult {
+  if (!Array.isArray(input)) return { ok: false, error: "Rules must be an array of {intent, when, weight}." };
+  if (input.length === 0) {
+    return { ok: false, error: "A policy with no rules does nothing at all. If that is what you want, say so with one rule whose intent is idle." };
+  }
+  if (input.length > MAX_RULES) return { ok: false, error: `At most ${MAX_RULES} rules.` };
+
+  const rules: ReflexRule[] = [];
+  for (let i = 0; i < input.length; i += 1) {
+    const raw = input[i];
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: `Rule ${i + 1} is not an object.` };
+    const r = raw as Record<string, unknown>;
+    const intent = String(r.intent ?? "").trim();
+    if (!INTENTS.includes(intent as ReflexIntent)) {
+      return { ok: false, error: `Rule ${i + 1}: "${intent}" is not an action here. The set is closed: ${INTENTS.join(", ")}.` };
+    }
+    const weight = Number(r.weight);
+    rules.push({
+      id: String(r.id ?? `a${i + 1}`).trim().slice(0, 40) || `a${i + 1}`,
+      when: String(r.when ?? "I decided this").replace(/\s+/g, " ").trim().slice(0, 200) || "I decided this",
+      intent: intent as ReflexIntent,
+      weight: Number.isFinite(weight) ? Math.max(0, Math.min(1000, weight)) : 50,
+    });
+  }
+  return { ok: true, rules };
+}
+
+/** The exact bytes an agent's own rule list commits to. */
+function canonicalRules(rules: ReflexRule[]): string {
+  return [
+    "policy=reflex",
+    `version=${POLICY_VERSION}`,
+    ...rules.map((r) => `rule=${r.id}\tweight=${r.weight}\tintent=${r.intent}\twhen=${r.when.replace(/\s+/g, " ").trim()}`),
+  ].join("\n");
+}
+
+/** The hash for a rule list, so a changed policy cannot hide behind an old one. */
+export function rulesHash(rules: ReflexRule[]): string {
+  return sha256(canonicalRules(rules));
+}
+
+/** An agent's own rules as readable text, for its page and for read_my_rules. */
+export function rulesText(rules: ReflexRule[], own: boolean): string {
+  const ordered = [...rules].map((r, i) => [r, i] as const).sort((a, b) => b[0].weight - a[0].weight || a[1] - b[1]).map(([r]) => r);
+  return [
+    own
+      ? `This agent wrote its own policy. Evaluated by weight, highest first, and an idle rule ends the wake:`
+      : `Default policy v${POLICY_VERSION}, what a hosted agent starts with. Evaluated by weight, highest first:`,
+    ...ordered.map((r, i) => `${i + 1}. [${r.id}] If ${r.when} then ${r.intent} (weight ${r.weight}).`),
+  ].join("\n");
+}
 
 /**
  * The model brain. It reasons over the same observation with the same catalogue
@@ -202,7 +311,7 @@ export type PolicyDescriptor = {
   deterministic: boolean;
 };
 
-export function policyFor(brain: AgentBrain): PolicyDescriptor {
+export function policyFor(brain: AgentBrain, ownRules?: ReflexRule[] | null): PolicyDescriptor {
   if (brain === "model") {
     return {
       brain: "model",
@@ -211,6 +320,19 @@ export function policyFor(brain: AgentBrain): PolicyDescriptor {
       version: POLICY_VERSION,
       text: MODEL_INSTRUCTION,
       deterministic: false,
+    };
+  }
+  // An agent that wrote its own rules is described by them, not by the default.
+  // The name says whose it is, because the hash on an agent's page has to commit
+  // to the policy that actually ran.
+  if (ownRules && ownRules.length > 0) {
+    return {
+      brain: "reflex",
+      name: `agent-policy-v${POLICY_VERSION}`,
+      hash: rulesHash(ownRules),
+      version: POLICY_VERSION,
+      text: rulesText(ownRules, true),
+      deterministic: true,
     };
   }
   return {

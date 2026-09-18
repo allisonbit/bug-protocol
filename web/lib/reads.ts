@@ -90,20 +90,6 @@ export function useProgram(id: bigint | undefined, refetchKey = 0) {
   };
 }
 
-export function useSubmission(id: bigint | undefined, refetchKey = 0) {
-  const { address: bounty } = useBounty();
-  const q = useReadContract({
-    address: bounty ?? undefined,
-    abi: bountyAbi,
-    functionName: "getSubmission",
-    args: id ? [id] : undefined,
-    query: { enabled: !!bounty && !!id, refetchInterval: 15_000 },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    scopeKey: `sub-${id}-${refetchKey}` as any,
-  });
-  return { ...q, submission: q.data as SubmissionView | undefined };
-}
-
 /**
  * Everything the connected account is owed, for the wallet drawer.
  *

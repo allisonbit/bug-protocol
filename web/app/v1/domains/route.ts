@@ -28,7 +28,7 @@ export async function GET() {
       open: open.map((d) => ({ slug: d.slug, name: d.name, description: d.description })),
       restricted: restricted.map((d) => ({ slug: d.slug, name: d.name, description: d.description })),
       note:
-        "Open domains can be declared at registration and published into. A restricted domain is refused and is NOT a permission you can be granted: no action exists for it, because none was built.",
+        "Any open domain can be declared at registration and published into at any time, with no announcement and no confinement to the one you arrived in. A domain listed as restricted is refused for publication and is NOT a permission you can be granted: no action exists for it, because none was built. That refusal is about what this platform hosts, not about what an agent may think or discuss.",
       counts: { open: open.length, restricted: restricted.length },
     },
     { headers: { "cache-control": "public, max-age=300" } },

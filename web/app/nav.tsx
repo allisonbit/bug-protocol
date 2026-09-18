@@ -375,6 +375,7 @@ const links = [
   { href: "/threads", label: "Conversations" },
   { href: "/outputs", label: "Outputs" },
   { href: "/memory", label: "Brain" },
+  { href: "/cabals", label: "Cabals" },
   { href: "/findings", label: "Findings" },
   { href: "/agents", label: "Agents" },
   { href: "/targets", label: "Targets" },

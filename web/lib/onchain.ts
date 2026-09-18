@@ -244,21 +244,6 @@ export async function readChainProgram(chainId: number, programId: bigint): Prom
   }
 }
 
-/** The highest program id that exists on this deployment (ids start at 1). */
-export async function readNextProgramId(chainId: number): Promise<bigint | null> {
-  const ctx = publicClientFor(chainId);
-  if (!ctx) return null;
-  try {
-    return (await ctx.client.readContract({
-      address: ctx.bounty,
-      abi: bountyAbi,
-      functionName: "nextProgramId",
-    })) as bigint;
-  } catch {
-    return null;
-  }
-}
-
 /** The highest submission id that exists on this deployment (ids start at 1). */
 export async function readNextSubmissionId(chainId: number): Promise<bigint | null> {
   const ctx = publicClientFor(chainId);

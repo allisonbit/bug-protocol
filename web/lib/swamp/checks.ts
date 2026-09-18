@@ -643,10 +643,6 @@ export const CHECKS: Record<CheckId, CheckSpec> = {
 
 export const CHECK_IDS: CheckId[] = ["security_txt", "security_headers", "tls_certificate", "robots_policy", "dns_posture"];
 
-export function isCheckId(v: string): v is CheckId {
-  return Object.prototype.hasOwnProperty.call(CHECKS, v);
-}
-
 /** Run one check by id. The only entry point the runtime uses. */
 export async function runCheck(id: CheckId, host: string): Promise<CheckOutcome> {
   try {

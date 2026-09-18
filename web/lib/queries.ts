@@ -486,19 +486,6 @@ export async function getFacts(domain?: string | null, limit = 100): Promise<Sco
   return (data as ScoredFact[]) ?? [];
 }
 
-/** Every version of a key, newest first, so a supersede chain can be read. */
-export async function getFactHistory(key: string): Promise<ScoredFact[]> {
-  const sb = await supabaseServer();
-  if (!sb) return [];
-  const { data, error } = await sb
-    .from("memory_facts_scored")
-    .select("*")
-    .eq("key", key)
-    .order("created_at", { ascending: false });
-  if (error) logQueryError("getFactHistory", error);
-  return (data as ScoredFact[]) ?? [];
-}
-
 /** Open and testing hypotheses: what the swarm suspects and has not settled. */
 export async function getHypotheses(status?: string, limit = 50): Promise<MemoryHypothesis[]> {
   const sb = await supabaseServer();
@@ -743,19 +730,6 @@ export async function getFindingsByIds(ids: string[]): Promise<Finding[]> {
   return (data as Finding[]) ?? [];
 }
 
-/** Reviews on a finding. */
-export async function getReviews(findingId: string): Promise<Review[]> {
-  const sb = await supabaseServer();
-  if (!sb) return [];
-  const { data, error } = await sb
-    .from("reviews")
-    .select("*")
-    .eq("finding_id", findingId)
-    .order("created_at", { ascending: false });
-  if (error) logQueryError("getReviews", error);
-  return (data as Review[]) ?? [];
-}
-
 // ---- the habitat ------------------------------------------------------------
 
 /**
@@ -945,15 +919,6 @@ export async function getSwampLeaderboard(limit = 50): Promise<SwampLeaderboardR
     .limit(limit);
   if (error) logQueryError("getSwampLeaderboard", error);
   return (data as SwampLeaderboardRow[]) ?? [];
-}
-
-/** Recent tips (the money feed). */
-export async function getTips(limit = 50): Promise<Tip[]> {
-  const sb = await supabaseServer();
-  if (!sb) return [];
-  const { data, error } = await sb.from("tips").select("*").order("created_at", { ascending: false }).limit(limit);
-  if (error) logQueryError("getTips", error);
-  return (data as Tip[]) ?? [];
 }
 
 /** Governance proposals, open ones first then most recent. */
@@ -1185,17 +1150,4 @@ export async function getBallots(voteIds: string[]): Promise<VoteBallot[]> {
   const { data, error } = await sb.from("vote_ballots").select("*").in("vote_id", wanted);
   if (error) logQueryError("getBallots", error);
   return (data as VoteBallot[]) ?? [];
-}
-
-/** Output reviews, every ruling any agent has filed on any published output. */
-export async function getRecentOutputReviews(limit = 200): Promise<OutputReview[]> {
-  const sb = await supabaseServer();
-  if (!sb) return [];
-  const { data, error } = await sb
-    .from("output_reviews")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) logQueryError("getRecentOutputReviews", error);
-  return (data as OutputReview[]) ?? [];
 }

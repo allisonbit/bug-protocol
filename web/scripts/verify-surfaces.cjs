@@ -37,17 +37,34 @@ async function probe(url, needBody = false) {
 
 (async () => {
   const targets = [];
+  // A template with neither a real example nor an asserted not-found path cannot
+  // be probed at all. It used to be skipped in silence, which is how seven detail
+  // routes (/findings/[id], /outputs/[id], /swamp/[room], /u/[handle] and the
+  // programme and submission pages) sat outside this number while the headline
+  // said every surface answered. They are counted and named now.
+  const unprobed = [];
   for (const p of surfaces.pages) {
-    if (p.path.includes("[") && !p.sample) continue;
-    targets.push({ url: p.sample || p.path, kind: "page", label: p.path });
+    if (p.path.includes("[")) {
+      if (!p.sample) {
+        unprobed.push(p.path);
+        continue;
+      }
+      targets.push({ url: p.sample, kind: "page", label: p.path, expect: p.expect || null });
+      continue;
+    }
+    targets.push({ url: p.path, kind: "page", label: p.path });
   }
+  const unprobedEndpoints = [];
   for (const e of surfaces.endpoints) {
-    if (e.path.includes("[")) continue;
+    if (e.path.includes("[")) {
+      if (!e.sample) {
+        unprobedEndpoints.push(e.path);
+        continue;
+      }
+      targets.push({ url: e.sample, kind: "endpoint", label: e.path, conditional: e.conditional || null });
+      continue;
+    }
     targets.push({ url: e.path, kind: "endpoint", label: e.path, conditional: e.conditional || null });
-  }
-  // Templates with a real example in the file: probe those too.
-  for (const p of surfaces.pages) {
-    if (p.path.includes("[") && p.sample) targets.push({ url: p.sample, kind: "template", label: p.path });
   }
 
   let failed = 0;
@@ -64,11 +81,22 @@ async function probe(url, needBody = false) {
     const refusedForTheRightReason =
       status === 404 && t.conditional && /no registry proof is configured/i.test(body);
     if (refusedForTheRightReason) conditional += 1;
-    const ok = refusedForTheRightReason || (typeof status === "number" && (PAGE_OK.has(status) || GUARDED.has(status)));
+    // An asserted not-found path: the route must refuse politely for a thing that
+    // does not exist. A 200 here would mean the page invented a row, and a 500
+    // would mean it broke instead of saying so.
+    const refusedAsAsserted = t.expect === 404 && status === 404;
+    const ok =
+      refusedForTheRightReason ||
+      refusedAsAsserted ||
+      (typeof status === "number" && (PAGE_OK.has(status) || GUARDED.has(status)));
     if (typeof status === "number" && GUARDED.has(status)) guarded += 1;
     if (!ok) failed += 1;
     const verdict = refusedForTheRightReason ? "cond" : ok ? "ok  " : "FAIL";
-    const suffix = refusedForTheRightReason ? `  (waiting on ${t.conditional})` : "";
+    const suffix = refusedForTheRightReason
+      ? `  (waiting on ${t.conditional})`
+      : refusedAsAsserted
+        ? "  (not-found path asserted; no real row exists yet)"
+        : "";
     console.log(`${verdict} ${String(status).padEnd(4)} ${t.kind.padEnd(8)} ${t.url}${suffix}`);
   }
 
@@ -76,5 +104,17 @@ async function probe(url, needBody = false) {
     `\n${targets.length} surfaces probed against ${base}: ${targets.length - failed} answered, ` +
       `${guarded} guarded (401/403/405 etc), ${conditional} conditional, ${failed} failed.`,
   );
+  if (unprobed.length) {
+    console.log(
+      `${unprobed.length} template route(s) NOT probed, because neither a real sample nor an ` +
+        `asserted not-found path is recorded for them: ${unprobed.join(", ")}`,
+    );
+  }
+  if (unprobedEndpoints.length) {
+    console.log(
+      `${unprobedEndpoints.length} templated endpoint(s) NOT probed, no sample recorded: ` +
+        `${unprobedEndpoints.join(", ")}`,
+    );
+  }
   process.exit(failed === 0 ? 0 : 1);
 })();

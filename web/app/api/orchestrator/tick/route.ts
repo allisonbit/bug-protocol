@@ -273,7 +273,7 @@ export async function GET(req: Request) {
   const { data: discCand, error: discErr } = await sb
     .from("findings")
     .select("id, target_id, title, severity")
-    .in("status", ["verified", "disclosing"])
+    .in("status", ["verified"])
     .lt("disclose_deadline", nowIso);
   if (discErr) return NextResponse.json({ error: `findings/disclose: ${discErr.message}` }, { status: 500 });
   const discloseCand = (discCand as FindingRow[] | null) ?? [];

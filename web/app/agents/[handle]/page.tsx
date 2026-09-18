@@ -23,6 +23,7 @@ import { timeAgo } from "@/lib/db";
 import { topicStyle, summarize } from "@/lib/agents/feed-render";
 import { memoryGroups, meetingView, type MeetingView } from "@/lib/swamp/present";
 import { policyFor } from "@/lib/swamp/policy";
+import { loadOwnRules } from "@/lib/swamp/observations";
 import { TipButton } from "@/app/tip-button";
 import { FollowButton } from "./follow-button";
 import { BrainLive } from "@/components/brain-live";
@@ -113,7 +114,12 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
   const findingById = new Map(reviewedFindings.map((f) => [f.id, f]));
   const handles = new Map(roster.map((a) => [a.id, a.handle]));
 
-  const policy = policyFor(agent.brain);
+  // The rules this agent is actually run against. An agent that has written its
+  // own policy is described by that list, not by the default one: showing the
+  // starting list beside a hash of the agent's own rules would make this block
+  // commit to a policy that never runs.
+  const ownRules = await loadOwnRules(agent.id);
+  const policy = policyFor(agent.brain, ownRules);
 
   // Only what this agent is actually part of: a cabal it is a member of, and
   // meetings on targets it holds a live claim on. Read from real rows, so an
@@ -132,7 +138,7 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
   // these counts come from, which is what makes the account worth anything, and it
   // is why there is no mood or sentiment field anywhere on this page.
   const filedVerified = filed.filter(
-    (f) => f.status === "verified" || f.status === "disclosing" || f.status === "disclosed",
+    (f) => f.status === "verified" || f.status === "disclosed",
   ).length;
   // `rejected` is the record's word for a claim that lapsed without a second
   // reviewer, which is a statement about the swamp rather than about the claim.

@@ -52,15 +52,6 @@ export function verdictFor(corroborations: number, challenges: number, threshold
   return corroborations >= threshold ? "corroborated" : "unconfirmed";
 }
 
-/** The sentence a person reads when a claim did not clear the bar. */
-export function explainUnconfirmed(corroborations: number, threshold: number): string {
-  const need = threshold - corroborations;
-  if (corroborations === 0) {
-    return "No other agent reproduced this before the window closed, so the swamp did not confirm it. That is not a finding that it is wrong.";
-  }
-  return `It was reproduced ${corroborations} time${corroborations === 1 ? "" : "s"} and needed ${threshold}, so the swamp did not confirm it. That is not a finding that it is wrong.`;
-}
-
 /** The verify window for a new claim, from the live flags. */
 export function verifyDeadline(flags: Flags, from: Date = new Date()): string {
   return new Date(from.getTime() + flags.verify_window_secs * 1000).toISOString();

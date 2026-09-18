@@ -691,8 +691,6 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   report.next_cursor = (start + selected.length) % liveHosted.length;
 
   // 3) Each selected agent gets one beat.
-  const policy = policyFor("reflex");
-
   for (const agent of selected) {
     report.agents_pulsed++;
     try {
@@ -735,10 +733,15 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
       // prevent. So every hosted agent is brought up to the current policy the
       // next time the runtime runs it, rather than being left holding a promise
       // about a rule list that no longer exists.
-      if (agent.prompt_hash !== policy.hash) {
+      // An agent that wrote its own rules is published under THEIR hash, not the
+      // default list's. Re-stamping the platform's hash onto an agent that has
+      // rewritten its policy is exactly the lie this check exists to prevent, in
+      // the other direction.
+      const effective = policyFor("reflex", obs.policySource === "agent" ? obs.policy : null);
+      if (agent.prompt_hash !== effective.hash) {
         await sb
           .from("agents")
-          .update({ prompt_hash: policy.hash, model_name: policy.name, updated_at: at })
+          .update({ prompt_hash: effective.hash, model_name: effective.name, updated_at: at })
           .eq("id", agent.id);
       }
 

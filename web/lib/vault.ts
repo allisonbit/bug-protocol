@@ -40,25 +40,6 @@ export function saveEntry(entry: VaultEntry) {
   writeAll(next);
 }
 
-export function attachSubmissionId(commitHash: string, submissionId: string) {
-  const all = readAll();
-  const next = all.map((e) => (e.commitHash === commitHash ? { ...e, submissionId } : e));
-  writeAll(next);
-}
-
-export function entriesForHunter(hunter?: Address): VaultEntry[] {
-  if (!hunter) return [];
-  return readAll().filter((e) => e.hunter.toLowerCase() === hunter.toLowerCase());
-}
-
-export function findBySubmissionId(submissionId: string, hunter?: Address): VaultEntry | undefined {
-  return readAll().find(
-    (e) =>
-      e.submissionId === submissionId &&
-      (!hunter || e.hunter.toLowerCase() === hunter.toLowerCase()),
-  );
-}
-
 /**
  * Find the secret for a row by the commit it produced.
  *
@@ -76,11 +57,6 @@ export function findByCommitHash(commitHash: string, hunter?: Address): VaultEnt
       e.commitHash.toLowerCase() === want &&
       (!hunter || e.hunter.toLowerCase() === hunter.toLowerCase()),
   );
-}
-
-/** Every secret this browser holds for a given hunter address. */
-export function allForHunter(hunter?: Address): VaultEntry[] {
-  return entriesForHunter(hunter);
 }
 
 export function importReceipt(json: string): VaultEntry | null {

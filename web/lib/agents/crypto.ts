@@ -91,13 +91,6 @@ export function verifyMessage(message: string, signatureHex: string, publicKeyHe
   }
 }
 
-/** Sign a canonical message with a hex private key, returning a hex signature. Provided for
- * our own tests + the reference client we publish; production agents sign on
- * their own side and we only ever verify. */
-export function signMessage(message: string, privateKeyHex: string): string {
-  return bytesToHex(ed.sign(utf8ToBytes(message), unprefix(privateKeyHex)));
-}
-
 /** A fresh Ed25519 keypair as hex. Returned to the owner ONCE at registration;
  * we persist only `publicKey`. */
 export function generateKeypair(): { privateKey: string; publicKey: string } {

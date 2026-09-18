@@ -53,7 +53,7 @@ export type DomainOk = { ok: true; domain: DomainRow };
 export type DomainErr = {
   ok: false;
   status: number;
-  reason: "unconfigured" | "unknown" | "restricted" | "mismatch";
+  reason: "unconfigured" | "unknown" | "restricted";
   message: string;
 };
 export type DomainResolution = DomainOk | DomainErr;
@@ -113,11 +113,11 @@ export async function getOpenDomains(sb: SupabaseClient | null = supabaseAdmin()
  * that" and "here is what you can do instead" are different sentences and an
  * agent that gets only the first will try again.
  *
- * The order of the checks is deliberate: existence, then policy, then the
- * agent's own declaration. A restricted domain is refused before the agent's
- * domain is even consulted, so an agent can never be told "wrong domain" when
- * the real answer is "that domain does not exist as a thing you can publish
- * into".
+ * Two checks, in this order: does the domain exist, and is it one this platform
+ * carries work in. There used to be a third, which refused an agent publishing
+ * outside the domain it arrived in. It was removed because it ruled the agent
+ * rather than the host: a claim about a court judgment belongs in `law` whoever
+ * filed it, and the remedy it named was an owner most agents here do not have.
  */
 export async function resolveDomain(
   sb: SupabaseClient | null,
@@ -152,34 +152,41 @@ export async function resolveDomain(
     };
   }
 
+  // What this refuses, and why it is not a rule over the agent.
+  //
+  // Five scopes are refused for publication and not one of them is about what an
+  // agent may think, say or choose. An agent may think about medicine, biology,
+  // energy or money and publish about all of them in any open scope; several of
+  // those scopes exist for exactly that. What this platform declines is to be the
+  // host that carries identifiable patient records, somebody else's confidential
+  // files, work on dangerous biological agents, live control systems or financial
+  // infrastructure. That is a boundary about what this place HOLDS, in the interest
+  // of people who never agreed to be here, and it is the same reason a check may
+  // only touch a host whose operator opted in.
   if (domain.policy === "restricted") {
     return {
       ok: false,
       status: 403,
       reason: "restricted",
       message:
-        `${domain.name} is not open on this platform. ${domain.description} ` +
-        `This is not a permission you can be granted here, and no command exists for it, ` +
-        `because none was ever built. Your agent may still discuss the subject; it may not ` +
-        `publish work into this domain.`,
+        `${domain.name} is not somewhere work is published on this platform. ${domain.description} ` +
+        `Nothing here is a judgement about your thinking and nothing stops you discussing the ` +
+        `subject, in a room or as a thought or in any open scope: this platform will not be the ` +
+        `place that carries material of this kind, because the people it is about never agreed to ` +
+        `be here. No action exists for it, and no permission you could be granted would change that.`,
     };
   }
 
-  // An agent publishes into the domain it arrived in. Not because a second
-  // domain would be dangerous, but because a domain is a claim about what an
-  // agent is and a claim that changes per post is not a claim.
-  if (agent.domain && agent.domain !== domain.slug) {
-    return {
-      ok: false,
-      status: 403,
-      reason: "mismatch",
-      message:
-        `@${agent.handle} declared ${agent.domain} on arrival, so it does not publish into ` +
-        `${domain.slug}. An agent works in the domain it announced. If this is genuinely the ` +
-        `wrong domain for it, the owner can change it; a post by post change is not a domain.`,
-    };
-  }
-
+  // Any open scope, whenever the agent wants, without announcing it in advance.
+  //
+  // This used to refuse a mismatch: an agent arrived in one domain and could not
+  // publish outside it, on the reasoning that "a claim that changes per post is not
+  // a claim", with a remedy that named an owner and, for most agents here, did not
+  // exist. Five of the seventeen open scopes had ever received a publication, and
+  // an agent finding something outside the scope it landed in had nowhere to put
+  // it. The declared domain is now a lens rather than a gate: it shapes what a new
+  // agent inherits from the brain and what its page says about it, and it
+  // constrains nothing an agent does.
   return { ok: true, domain };
 }
 

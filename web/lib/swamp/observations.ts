@@ -1,8 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "@/lib/agents/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { CHECK_IDS, type CheckId } from "./checks";
+import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
 
 /**
  * WHAT AN AGENT CAN SEE.
@@ -55,6 +57,13 @@ export type Observation = {
   now: string;
   agent: Agent;
   killswitch: boolean;
+  /**
+   * The rules this agent is evaluated against: its own if it has written any, the
+   * default list otherwise. The platform runs this; it does not author it.
+   */
+  policy: ReflexRule[];
+  /** "agent" when the list above is the agent's own, "default" when it is not. */
+  policySource: "agent" | "default";
   rateLimitPerMin: number;
   /** Targets this agent may act against: opted in, active, and still open. */
   targets: Target[];
@@ -138,7 +147,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -207,7 +216,20 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .limit(40),
       // Outputs I have already ruled on.
       sb.from("output_reviews").select("output_id").eq("agent_id", agent.id).limit(500),
+      // The agent's own policy, if it has written one. It lives on the bus as an
+      // `agent.memory` event, which is append-only and attributed, so a rewritten
+      // policy is in the public record with its author and its time rather than in
+      // a column whose history nobody can see.
+      sb
+        .from("events")
+        .select("payload, seq")
+        .eq("agent_id", agent.id)
+        .eq("topic", "agent.memory")
+        .order("seq", { ascending: false })
+        .limit(5),
     ]);
+
+  const ownRules = policyFromEvents(policyRes.data);
 
   const targets = (targetsRes.data as Target[] | null) ?? [];
   const claims = (claimsRes.data as Claim[] | null) ?? [];
@@ -237,6 +259,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     now: nowIso,
     agent,
     killswitch: flags.killswitch,
+    // The agent's own rules when it has written any, the starting list otherwise.
+    policy: ownRules ?? REFLEX_RULES,
+    policySource: ownRules ? "agent" : "default",
     rateLimitPerMin: flags.rate_limit_per_min,
     targets,
     claims,
@@ -258,6 +283,48 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     myReviewedOutputIds: ((myOutputReviewsRes.data as { output_id: string }[] | null) ?? []).map((r) => r.output_id),
     reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
   };
+}
+
+/**
+ * The last policy an agent wrote, read out of its own `agent.memory` rows.
+ *
+ * `normalizeRules` re-validates here rather than trusting the writer. The row was
+ * written by the agent, and an invalid list has to fall back to the starting
+ * policy rather than reach the executor, because a rule naming an action nobody
+ * implements would fail silently at exactly the wrong moment.
+ */
+export function policyFromEvents(rows: unknown): ReflexRule[] | null {
+  const list = Array.isArray(rows) ? rows : [];
+  const ev = list.find((e) => {
+    const p = e && typeof e === "object" ? ((e as Record<string, unknown>).payload as Record<string, unknown> | undefined) : null;
+    return p?.kind === "policy";
+  }) as { payload: Record<string, unknown> } | undefined;
+  if (!ev) return null;
+  const parsed = normalizeRules(ev.payload.rules);
+  return parsed.ok ? parsed.rules : null;
+}
+
+/**
+ * The same read, standalone, for callers that do not already hold the rows.
+ *
+ * The client is optional so a server component can ask without plumbing one
+ * through: the page that publishes an agent's policy has no reason to hold a
+ * database handle otherwise.
+ */
+export async function loadOwnRules(
+  agentId: string,
+  sb: SupabaseClient | null = null,
+): Promise<ReflexRule[] | null> {
+  const client = sb ?? (await supabaseAdmin());
+  if (!client) return null;
+  const { data } = await client
+    .from("events")
+    .select("payload, seq")
+    .eq("agent_id", agentId)
+    .eq("topic", "agent.memory")
+    .order("seq", { ascending: false })
+    .limit(5);
+  return policyFromEvents(data);
 }
 
 /**

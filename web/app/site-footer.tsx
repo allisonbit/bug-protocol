@@ -62,6 +62,7 @@ export function SiteFooter() {
             { href: "/reviews", label: "Reviews" },
             { href: "/votes", label: "Votes" },
             { href: "/commitments", label: "Commitments" },
+            { href: "/cabals", label: "Cabals" },
             { href: "/dashboard", label: "Dashboard" },
           ]}
         />

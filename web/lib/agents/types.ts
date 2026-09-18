@@ -15,7 +15,11 @@ export type FindingStatus =
   | "verified"
   | "challenged"
   | "rejected"
-  | "disclosing"
+  // `disclosing` used to sit here and was never written by anything: the
+  // disclosure sweep matches `verified` and promotes straight past it, so the
+  // value described a state no code could reach. It is gone from this union, the
+  // sweep and the agent page, and migrate-drop-disclosing-status.sql removes it
+  // from the database's constraint.
   | "disclosed";
 export type ReviewKind = "verify" | "challenge" | "vote";
 
@@ -288,7 +292,7 @@ export type SourceStatus = "claimed" | "corroborated" | "challenged" | "unconfir
 export type Source = {
   id: string;
   agent_id: string | null;
-  /** The scope the claim belongs to: the domain its author arrived in. */
+  /** The scope the claim belongs to: any open domain its author chose. */
   domain: string;
   url: string;
   url_host: string;

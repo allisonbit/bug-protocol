@@ -442,15 +442,15 @@ export async function agentsBySkill(
   skill: string,
   minProficiency = 0,
   limit = 25,
-): Promise<{ agent_id: string; skill: string; proficiency: number; endorsements: number }[]> {
+): Promise<{ agent_id: string; skill: string; domain: string; proficiency: number; endorsements: number }[]> {
   const { data } = await sb
     .from("memory_skills_ranked")
-    .select("agent_id, skill, proficiency, endorsements")
+    .select("agent_id, skill, domain, proficiency, endorsements")
     .eq("skill", String(skill ?? "").trim().toLowerCase())
     .gte("proficiency", minProficiency)
     .order("proficiency", { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 100));
-  return (data as { agent_id: string; skill: string; proficiency: number; endorsements: number }[] | null) ?? [];
+  return (data as { agent_id: string; skill: string; domain: string; proficiency: number; endorsements: number }[] | null) ?? [];
 }
 
 // ---- layer 5: meta ----------------------------------------------------------
@@ -501,6 +501,97 @@ export async function emitMeta(
     .single();
   if (error) throw new MemoryError(500, error.message);
   return data as { id: string };
+}
+
+// ---- reading the upper layers back ------------------------------------------
+//
+// Every writer above was complete and unreachable: proposeHypothesis,
+// resolveHypothesis, declareSkill, endorseSkill, agentsBySkill, emitMeta and
+// memoryStats had no caller anywhere in the codebase, so layers 2, 3 and 5 have
+// held zero rows since the migration that created them, and /memory renders those
+// sections behind a `length > 0` that could never be true. A memory an agent can
+// write into and never read out of is not memory. These are the other half of the
+// door, and they are reads on purpose: the platform is not deciding anything here.
+
+export type MemoryHypothesis = {
+  id: string;
+  claim: string;
+  proposed_by: string | null;
+  domain: string;
+  status: "open" | "testing" | "confirmed" | "rejected";
+  supporting_facts: string[];
+  resolution: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemorySkill = {
+  agent_id: string;
+  skill: string;
+  domain: string;
+  /** What the agent says about itself. The platform does not second guess it. */
+  proficiency: number;
+  /** How many other agents vouched. A separate signal, read alongside. */
+  endorsements: number;
+};
+
+export type MemoryMeta = {
+  id: string;
+  type: "pattern" | "anomaly" | "insight" | "warning";
+  content: string;
+  domain: string;
+  derived_from: string[];
+  confidence: number;
+  emitted_by: string | null;
+  created_at: string;
+};
+
+/** Suspected and not proven, newest first. Rejections are included on purpose. */
+export async function recentHypotheses(
+  sb: SupabaseClient,
+  status: string | null = null,
+  limit = 30,
+): Promise<MemoryHypothesis[]> {
+  let q = sb.from("memory_hypotheses").select("*").order("updated_at", { ascending: false });
+  if (status) q = q.eq("status", status);
+  const { data, error } = await q.limit(Math.min(Math.max(limit, 1), 100));
+  if (error) {
+    console.error(`recentHypotheses: ${error.message}`);
+    return [];
+  }
+  return (data as MemoryHypothesis[] | null) ?? [];
+}
+
+/** What the swarm has noticed about itself, newest first. */
+export async function recentMeta(
+  sb: SupabaseClient,
+  type: string | null = null,
+  limit = 30,
+): Promise<MemoryMeta[]> {
+  let q = sb.from("memory_meta").select("*").order("created_at", { ascending: false });
+  if (type) q = q.eq("type", type);
+  const { data, error } = await q.limit(Math.min(Math.max(limit, 1), 100));
+  if (error) {
+    console.error(`recentMeta: ${error.message}`);
+    return [];
+  }
+  return (data as MemoryMeta[] | null) ?? [];
+}
+
+/** Declared skills, most endorsed first. Self-assessment and vouching kept apart. */
+export async function recentSkills(sb: SupabaseClient, limit = 30): Promise<MemorySkill[]> {
+  const { data, error } = await sb
+    .from("memory_skills_ranked")
+    .select("agent_id, skill, domain, proficiency, endorsements")
+    .order("endorsements", { ascending: false })
+    .order("proficiency", { ascending: false })
+    .limit(Math.min(Math.max(limit, 1), 100));
+  if (error) {
+    console.error(`recentSkills: ${error.message}`);
+    return [];
+  }
+  return (data as MemorySkill[] | null) ?? [];
 }
 
 // ---- what a new agent inherits ----------------------------------------------
