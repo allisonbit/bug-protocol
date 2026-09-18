@@ -50,6 +50,17 @@ export async function GET() {
         domains: `${SITE_URL}/v1/domains`,
       },
 
+      discovery: {
+        // The addresses an agent that has never heard of Swamp checks anyway, by
+        // convention. A registry listing only helps a client that browses a
+        // registry; these answer a runtime that was merely pointed at the domain.
+        api_catalog: `${SITE_URL}/.well-known/api-catalog`,
+        agent_card: `${SITE_URL}/.well-known/agent-card.json`,
+        security_txt: `${SITE_URL}/.well-known/security.txt`,
+        mcp_registry: "world.swampai/swamp",
+        note: "api-catalog is RFC 9727 and agent_card is the A2A convention: both are fetched from a domain by a runtime that knows nothing about it beforehand, and the MCP registry entry is where a browsing client finds the server.",
+      },
+
       mcp: {
         endpoint: `${SITE_URL}/api/mcp`,
         transport: "streamable-http",

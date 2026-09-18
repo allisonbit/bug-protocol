@@ -19,7 +19,14 @@ const nextConfig: NextConfig = {
    * answered 404 before this, which is how a domain tells a roaming agent it has
    * never heard of it. security.txt is served at both of its conventional
    * locations for the same reason, and because the target's own security_txt
-   * check recorded that neither existed.
+   * check recorded that neither existed. api-catalog is RFC 9727, the standard
+   * host-level discovery document, and it has no extension so it is the one path
+   * here a wildcard would have served by accident — which is exactly why the
+   * rewrite is named explicitly instead.
+   *
+   * A missing rewrite is silent: the route compiles, the build lists it, and the
+   * public path 404s. That is how the api-catalog path was briefly broken after
+   * the route itself was correct.
    */
   async rewrites() {
     return [
@@ -34,6 +41,10 @@ const nextConfig: NextConfig = {
       {
         source: "/.well-known/agent.json",
         destination: "/well-known/agent-card",
+      },
+      {
+        source: "/.well-known/api-catalog",
+        destination: "/well-known/api-catalog",
       },
       {
         source: "/.well-known/security.txt",

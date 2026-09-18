@@ -1,109 +1,92 @@
-# Publishing Swamp to the official MCP Registry
+# Swamp in the official MCP Registry
 
 The registry at `registry.modelcontextprotocol.io` is where MCP clients look for
 servers. Listing there is the difference between an agent finding Swamp and an
 agent never knowing it exists.
 
-Everything on our side is built. **Four commands remain and they are yours**,
-because they need a keypair generated on your machine and a CLI installed there.
-The private key never touches this deployment, which is the entire point of the
-scheme: holding the key is what signs, holding the file only proves.
+## Status: published and live
 
----
+Verified against the registry's own API, not against this document:
 
-## What is already done
+| field | value |
+| --- | --- |
+| name | `world.swampai/swamp` |
+| version | `1.0.0` |
+| status | `active` |
+| published | `2026-09-18T12:31:31Z` |
+| remote | `streamable-http` → `https://www.swampai.world/api/mcp` |
 
-- `web/server.json` — the manifest the registry reads
-- `/.well-known/mcp-registry-auth` — the proof file it fetches to verify we own
-  `swampai.world`
+So any MCP client that browses the registry can find and use Swamp today, with no
+human in the loop. Re-check the entry rather than trusting this table:
+
+```bash
+curl -s "https://registry.modelcontextprotocol.io/v0/servers?search=world.swampai"
+```
 
 The namespace is **`world.swampai/swamp`**, the reverse DNS of swampai.world. A
 domain is the right namespace for a service that is not a GitHub project, and it
 is the one a registry entry should carry.
 
-## What you run
+## What is in the repo
 
-### 1. Install the publisher
+- `web/server.json` — the manifest the registry reads
+- `/.well-known/mcp-registry-auth` — the proof file it fetches to verify we own
+  `swampai.world`. It currently serves `v=MCPv1; k=ed25519; p=tbIrjJEMwmbs3Z0uIv6FsYuCn1KWrZW0TkfHOoXsB3M=`
 
-```bash
-# macOS or Linux
-brew install mcp-publisher
-```
+The registry hosts metadata, not code: it points at our hosted endpoint rather
+than shipping anything, so nothing needs to go to npm for this listing. That is
+only true because Swamp's MCP server is remote. A server shipped as a package
+would need an `mcpName` in its `package.json` matching the registry name.
 
-Windows or no Homebrew: take the release binary from
-<https://github.com/modelcontextprotocol/registry/releases>.
+## Changing the listing, or rotating the key
 
-### 2. Generate the keypair
+You normally never run these. They matter only if the entry needs a new version,
+a new remote, or a new key:
 
-**Ed25519 needs OpenSSL 3 or newer.** macOS ships LibreSSL, which will fail here.
+1. Edit `web/server.json` and bump `version` — the registry keeps versions, and
+   republishing the same version is a no-op rather than an update.
+2. Log in, which needs the private key. **Ed25519 needs OpenSSL 3 or newer**;
+   macOS ships LibreSSL, which fails here.
+
+   ```bash
+   PRIVATE_KEY="$(openssl pkey -in key.pem -noout -text | grep -A3 "priv:" | tail -n +2 | tr -d ' :\n')"
+   mcp-publisher login http --domain=swampai.world --private-key="$PRIVATE_KEY"
+   ```
+
+3. Publish, or dry-run first to see what it will send:
+
+   ```bash
+   cd web && mcp-publisher publish --dry-run
+   cd web && mcp-publisher publish
+   ```
+
+**Keep `key.pem`.** It is the key to this namespace, it is not recoverable, and
+losing it means republishing under `world.swampai/*` requires generating a new
+pair and redeploying the proof. To rotate:
 
 ```bash
 openssl genpkey -algorithm Ed25519 -out key.pem
-
 PUBLIC_KEY="$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
 echo "v=MCPv1; k=ed25519; p=${PUBLIC_KEY}"
 ```
 
-That echoed line is the proof record. **Keep `key.pem`.** It is your key to this
-namespace, it is not recoverable, and if you lose it you cannot publish under
-`world.swampai/*` again without regenerating and redeploying the proof.
-
-### 3. Put the public half in Vercel
-
-Only the public key goes in. Paste the value of `$PUBLIC_KEY` — the base64
-after `p=`, not the whole line:
-
-```bash
-cd web
-printf '%s' "<paste PUBLIC_KEY here>" | vercel env add MCP_REGISTRY_PUBLIC_KEY production
-```
-
-Then redeploy so it takes effect:
-
-```bash
-git commit --allow-empty -m "Redeploy for the registry proof key" && git push
-```
-
-### 4. Confirm the proof is being served
+Only the public half goes in the deployment's `MCP_REGISTRY_PUBLIC_KEY`
+environment variable — the private key never touches this deployment, which is
+the point of the scheme: holding the key is what signs, holding the file only
+proves. Redeploy, then confirm the proof is served before publishing, because
+the publisher reads it and a missing proof looks like a signature error:
 
 ```bash
 curl -s https://www.swampai.world/.well-known/mcp-registry-auth
 ```
 
-It must print `v=MCPv1; k=ed25519; p=...` with your key. If it returns a 404 with
-a JSON body, the environment variable did not take and the redeploy has not
-finished. **Do not continue until this returns the proof**, because the next step
-reads it and a failure there looks like a signature error rather than a missing
-file.
-
-### 5. Log in and publish
-
-```bash
-PRIVATE_KEY="$(openssl pkey -in key.pem -noout -text | grep -A3 "priv:" | tail -n +2 | tr -d ' :\n')"
-
-mcp-publisher login http --domain=swampai.world --private-key="$PRIVATE_KEY"
-
-cd web && mcp-publisher publish
-```
-
-Validate before publishing if you want to see what it will send:
-
-```bash
-mcp-publisher publish --dry-run
-```
-
-On success the listing appears at
-`https://registry.modelcontextprotocol.io/servers/world.swampai/swamp`.
-
----
-
-## Two things worth knowing before you start
-
-**The registry hosts metadata, not code.** It points at our hosted endpoint
-rather than shipping anything, so nothing needs to go on npm for this listing.
-That is only true because Swamp's MCP server is remote; a server shipped as a
-package would need an `mcpName` in its `package.json` matching the registry name.
-
 **The registry is in preview.** Their own docs warn of breaking changes and data
-resets. If the listing disappears one day, republishing with the same key is the
-fix, which is why step 2 tells you to keep `key.pem`.
+resets. If the listing disappears, republishing with the same key is the fix,
+which is why the key is worth keeping.
+
+## What the listing does not do
+
+It gets an agent to the endpoint. It does not tell that agent what Swamp is for,
+and it cannot answer a runtime that asks the domain who it is — that is
+`/.well-known/agent-card.json`, and it is a separate surface with a separate
+audience.

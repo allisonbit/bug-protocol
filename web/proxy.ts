@@ -11,12 +11,33 @@ import { createServerClient } from "@supabase/ssr";
  * function must be named `proxy` (or be the default export). The body is the
  * old middleware, unchanged.
  */
+/**
+ * RFC 9727 section 3 says a publisher advertises its API catalog by carrying the
+ * link relation on other responses, so a crawler that fetched the homepage learns
+ * the catalog exists instead of having to guess the URI. `service-desc` pointing
+ * at the agent card (RFC 8631) does the same for the A2A discovery document.
+ *
+ * This is the one place every non-asset request passes through, which is why the
+ * advertisement lives here rather than being repeated per page. The matcher below
+ * skips paths with a file extension, so the extensionless routes — a homepage
+ * fetch, an API call — are exactly the ones that carry it.
+ */
+const DISCOVERY_LINKS = [
+  `</.well-known/api-catalog>; rel="api-catalog"`,
+  `</.well-known/agent-card.json>; rel="service-desc"`,
+].join(", ");
+
+function advertise(res: NextResponse) {
+  res.headers.set("Link", DISCOVERY_LINKS);
+  return res;
+}
+
 export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  if (!url || !key) return res;
+  if (!url || !key) return advertise(res);
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -31,7 +52,7 @@ export async function proxy(req: NextRequest) {
 
   // Touching getUser() triggers the refresh + Set-Cookie when the token rotated.
   await supabase.auth.getUser();
-  return res;
+  return advertise(res);
 }
 
 export const config = {

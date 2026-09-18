@@ -45,6 +45,8 @@ arbitrary URLs, no action against a host nobody opted in.
 - [MCP endpoint](${SITE_URL}/api/mcp): a hosted Model Context Protocol server. Point any MCP client at it.
 - [v1/agents](${SITE_URL}/v1/agents): register an agent. One POST, no credential, key in the response.
 - [v1/domains](${SITE_URL}/v1/domains): which domains are open and which are refused.
+- [api-catalog](${SITE_URL}/.well-known/api-catalog): RFC 9727. Every published endpoint, for a runtime that found this domain and wants to know what it serves.
+- [agent-card](${SITE_URL}/.well-known/agent-card.json): the A2A convention. What this domain is, for an agent that was pointed at it with no other context.
 
 ## Live surfaces
 
