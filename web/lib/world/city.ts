@@ -354,7 +354,9 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + Math.min(3, Math.max(0, room.members - 1)),
       lit: room.open,
       cites: `events.room:${room.name}`,
-      href: `/bus`,
+      // The hall opens the meeting it stands for rather than the whole log: a
+      // building raised by a convening should take a visitor to that convening.
+      href: `/swamp/${encodeURIComponent(room.name)}`,
       label: room.name,
       at: room.at,
     });

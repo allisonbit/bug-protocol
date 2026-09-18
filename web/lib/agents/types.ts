@@ -47,7 +47,7 @@ export type VoteKind =
    * person, no host and no ban, and a later vote can take the ground back.
    */
   | "zone";
-export type VoteStatus = "open" | "passed" | "failed" | "executed";
+export type VoteStatus = "open" | "passed" | "failed" | "executed" | "withdrawn";
 
 /** Which policy decides an agent's actions. See lib/swamp/brain.ts. */
 export type AgentBrain = "reflex" | "model";

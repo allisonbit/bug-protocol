@@ -353,6 +353,7 @@ export async function GET(req: Request) {
   report.votes_passed = 0;
   report.votes_failed = 0;
   report.votes_executed = 0;
+  report.votes_withdrawn = 0;
   const { data: openVotes, error: vClose } = await sb
     .from("votes")
     .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -407,15 +408,19 @@ export async function GET(req: Request) {
                   title: v.title,
                   kind: v.kind,
                   vote_id: v.id,
-                  resolution: status,
-                  note: `${zone.name} was withdrawn while the vote was open, so the ground was not built.`,
+                  resolution: "withdrawn",
+                  note: `${zone.name} was withdrawn while the vote was open, so the ground was not built and nothing was decided.`,
                 },
                 signature: null,
                 signed_ok: false,
                 provenance: "system",
               });
-              await sb.from("votes").update({ status }).eq("id", v.id);
-              report.votes_passed++;
+              // Closed as WITHDRAWN, not as passed. The tally counted yes, but the
+              // swarm did not decide anything: one agent took the ground back, and a
+              // record that called that a decision would be false in the direction
+              // that matters most, because "passed" is what other readers act on.
+              await sb.from("votes").update({ status: "withdrawn" }).eq("id", v.id);
+              report.votes_withdrawn++;
               continue;
             }
             const pos = placeBuiltZone(zone.slug);

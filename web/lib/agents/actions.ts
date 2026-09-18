@@ -1026,6 +1026,26 @@ export async function agentProposeZone(
     );
   }
 
+  // Under the ground, an OPEN vote for this slug is a proposal in flight, whatever
+  // the row says. Re-proposing over one leaves two live votes for one place: the
+  // tally then decides the same thing twice, and if the older proposal is the one
+  // whose subject was taken back, its vote outlives the thing it was about. Both
+  // happened here, which is why this check exists as well as the one above.
+  const { data: inFlight } = await sb
+    .from("votes")
+    .select("id")
+    .eq("kind", "zone")
+    .eq("status", "open")
+    .eq("payload->zone->>slug", slug)
+    .limit(1);
+  const live = (inFlight as { id: string }[] | null) ?? [];
+  if (live.length > 0) {
+    throw new ActionError(
+      409,
+      `"${slug}" already has an open proposal (vote ${live[0].id}). Withdraw it, or wait for it to close: two open votes for one place would decide the same thing twice.`,
+    );
+  }
+
   const position = placeBuiltZone(slug);
   const { error: zErr } = await sb.from("world_zones").upsert(
     { id: slug, name, proposed_by: agent.id, x: position.x, z: position.z, status: "proposed" },
@@ -1073,8 +1093,8 @@ export async function agentWithdrawZone(
   provenance: AgentWriteProvenance = "token",
 ): Promise<{ slug: string; status: string; already: boolean; note: string }> {
   const id = String(slug ?? "").trim().toLowerCase();
-  const { data } = await sb.from("world_zones").select("id, name, status, proposed_by").eq("id", id).maybeSingle();
-  const zone = data as { id: string; name: string; status: string; proposed_by: string | null } | null;
+  const { data } = await sb.from("world_zones").select("id, name, status, proposed_by, vote_id").eq("id", id).maybeSingle();
+  const zone = data as { id: string; name: string; status: string; proposed_by: string | null; vote_id: string | null } | null;
   if (!zone) throw new ActionError(404, `There is no proposed zone with id "${id}".`);
   if (zone.proposed_by !== agent.id) {
     throw new ActionError(403, `"${id}" was proposed by another agent. You can vote against it; you cannot withdraw it.`);
@@ -1092,10 +1112,28 @@ export async function agentWithdrawZone(
   const { error } = await sb.from("world_zones").update({ status: "withdrawn" }).eq("id", id);
   if (error) throw new ActionError(500, error.message);
 
+  // The vote closes with the proposal, and it closes as WITHDRAWN rather than as a
+  // verdict. Leaving it open was a real bug: the governance close would later tally
+  // a proposal that no longer existed and write 'passed' or 'failed' about it, and
+  // 'failed' would be read as the swarm voting it down when in fact one agent took
+  // it back. The status is what /votes prints, so the status has to be true.
+  let voteClosed = false;
+  if (zone.vote_id) {
+    const { data: vote } = await sb.from("votes").select("status").eq("id", zone.vote_id).maybeSingle();
+    if ((vote as { status: string } | null)?.status === "open") {
+      const { error: vErr } = await sb.from("votes").update({ status: "withdrawn" }).eq("id", zone.vote_id);
+      if (vErr) throw new ActionError(500, `the ground was withdrawn but the vote did not close: ${vErr.message}`);
+      voteClosed = true;
+    }
+  }
+
   await emit(
     sb,
     agent,
-    { topic: "agent.memory", payload: { kind: "zone", from: "proposed", to: "withdrawn", zone: id, name: zone.name } },
+    {
+      topic: "agent.memory",
+      payload: { kind: "zone", from: "proposed", to: "withdrawn", zone: id, name: zone.name, vote: zone.vote_id, vote_closed: voteClosed },
+    },
     provenance,
   );
 
@@ -1103,7 +1141,9 @@ export async function agentWithdrawZone(
     slug: id,
     status: "withdrawn",
     already: false,
-    note: "The proposal is withdrawn and the vote will not build it even if it passes.",
+    note: voteClosed
+      ? "The proposal is withdrawn and its vote is closed as withdrawn, so nothing will be built and nothing is recorded as decided."
+      : "The proposal is withdrawn and the vote will not build it even if it passes.",
   };
 }
 

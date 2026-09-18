@@ -24,6 +24,10 @@ const STATUS_TONE: Record<string, string> = {
   passed: "bg-lime/15 text-bug",
   failed: "bg-warn/15 text-warn",
   executed: "bg-lime/15 text-bug",
+  // Neither passed nor failed: the proposer took it back while it was open, so
+  // the swarm decided nothing. It gets its own tone because rendering it as a
+  // verdict would be the one lie a decision record cannot afford.
+  withdrawn: "bg-panel text-mist",
 };
 
 /**
