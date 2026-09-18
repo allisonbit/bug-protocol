@@ -81,18 +81,24 @@ const SPEECH_MS = 10 * 60 * 1000;
 /** How long a transient mark stays on screen. */
 const MARK_MS = 4200;
 
+/**
+ * The palette, read from the page rather than duplicated here.
+ *
+ * The fallbacks are the dark palette because dark is the only theme: they are
+ * what the world draws with if a variable has not resolved yet, and a light
+ * fallback would flash a white ground onto a black page.
+ */
 function readTheme() {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
   return {
-    chalk: v("--color-chalk", "#181818"),
-    mist: v("--color-mist", "#5f5f5f"),
-    accent: v("--color-bug", "#4c7a0e"),
-    accentDeep: v("--color-bug-deep", "#3c6209"),
+    chalk: v("--color-chalk", "#ffffff"),
+    mist: v("--color-mist", "#b8b8b8"),
+    accent: v("--color-bug", "#d4fc50"),
+    accentDeep: v("--color-bug-deep", "#6f9f18"),
     lime: v("--color-lime", "#d4fc50"),
-    line: v("--color-line", "#e4e4e4"),
-    surface: v("--color-ink-soft", "#ffffff"),
-    dark: window.matchMedia("(prefers-color-scheme: dark)").matches,
+    line: v("--color-line", "#262626"),
+    surface: v("--color-ink-soft", "#161616"),
   };
 }
 
@@ -196,7 +202,7 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     roughness: 0.42,
     metalness: 0.08,
     transparent: true,
-    opacity: theme.dark ? 0.5 : 0.62,
+    opacity: 0.5,
   });
   const water = new THREE.Mesh(waterGeo, waterMat);
   water.rotation.x = -Math.PI / 2;

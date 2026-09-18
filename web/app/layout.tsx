@@ -32,11 +32,11 @@ export const metadata: Metadata = {
 
 // Paint the mobile browser chrome in the page's own surface colour rather than
 // the default white/black, so the top of the app looks continuous when scrolled.
+// One value and no media query, because the site is dark only: a light entry
+// here would tint a phone's own browser chrome white above a black page.
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f4" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d0d0d" },
-  ],
+  themeColor: "#0d0d0d",
+  colorScheme: "dark",
 };
 
 /**

@@ -1,14 +1,20 @@
 @import "tailwindcss";
 
 /*
- * Design system: matched to the Pons family (ponsfamily.com).
- * Light is the default; dark follows the OS via prefers-color-scheme, exactly
- * like the reference. The whole app is built on these semantic tokens, so the
- * palette is remapped here in one place and every page inherits it.
+ * Design system. Dark only.
  *
- * Signature: electric lime (#d4fc50) as a button/accent FILL on warm near-white
- * (or near-black) surfaces, Inter for UI, Instrument Serif for display, very
- * round cards, and a soft "liquid glass" nav.
+ * There is one theme here and it is dark. It does not follow the operating
+ * system and there is no light variant to fall back to: a reader whose OS is
+ * set to light gets the same near-black habitat as everyone else. That is the
+ * decision, not a half-finished toggle, so nothing below is guarded by
+ * prefers-color-scheme and no token is defined twice for a second palette.
+ *
+ * The whole app is built on these semantic tokens, so the palette lives here in
+ * one place and every page inherits it.
+ *
+ * Signature: electric lime (#d4fc50) as a button/accent FILL on near-black
+ * surfaces, Inter for UI, Instrument Serif for display, very round cards, and a
+ * soft "liquid glass" nav.
  */
 
 @theme {
@@ -24,76 +30,47 @@
   --radius-2xl: 1.625rem;
   --radius-3xl: 2rem;
 
-  /* ---- Surfaces (LIGHT is the default theme) ---- */
-  --color-ink: #f4f4f4;        /* page background            (bg-ink / body) */
-  --color-ink-soft: #ffffff;   /* cards on the page          (bg-ink-soft)   */
-  --color-panel: #ffffff;      /* menus, inputs, popovers     (bg-panel)      */
-  --color-panel-2: #ececec;    /* pressed / secondary panel   (bg-panel-2)    */
-  --color-line: #e4e4e4;        /* hairline: cards, inputs, dividers      (bg-line) */
-  --color-line-soft: #ededed;   /* quieter divider inside a card          */
-  --color-line-strong: #d2d2d2; /* emphasis: active tab, focused row      */
+  /* ---- Surfaces ---- */
+  --color-ink: #0d0d0d;        /* page background            (bg-ink / body) */
+  --color-ink-soft: #161616;   /* cards on the page          (bg-ink-soft)   */
+  --color-panel: #1c1c1c;      /* menus, inputs, popovers     (bg-panel)      */
+  --color-panel-2: #1f1f1f;    /* pressed / secondary panel   (bg-panel-2)    */
+  --color-line: #262626;        /* hairline: cards, inputs, dividers      (bg-line) */
+  --color-line-soft: #1f1f1f;   /* quieter divider inside a card          */
+  --color-line-strong: #3a3a3a; /* emphasis: active tab, focused row      */
 
   /* ---- Text ---- */
-  --color-mist: #5f5f5f;        /* secondary text  */
-  --color-mist-bright: #3d3d3d; /* emphasized secondary */
-  --color-chalk: #181818;       /* primary text */
+  --color-mist: #b8b8b8;        /* secondary text  */
+  --color-mist-bright: #dcdcdc; /* emphasized secondary */
+  --color-chalk: #ffffff;       /* primary text */
 
   /* ---- Accent ---- */
-  /* `bug` is the READABLE accent (text, icons, dots, borders): a deep lime on
-     light, the bright lime on dark. `lime` is the loud FILL for CTAs, always
-     bright; `graphite` is the dark label that sits on top of it. */
-  --color-bug: #4c7a0e;
-  --color-bug-dim: #6f9f18;
-  --color-bug-deep: #3c6209;
-  --color-cyan: #8bb524;        /* second gradient stop (kept lime-family) */
-  --color-warn: #b26a00;
+  /* `bug` is the READABLE accent (text, icons, dots, borders): the bright lime,
+     because every surface behind it is near-black. `lime` is the loud FILL for
+     CTAs; `graphite` is the dark label that sits on top of it. */
+  --color-bug: #d4fc50;
+  --color-bug-dim: #9ac93a;
+  --color-bug-deep: #6f9f18;
+  --color-cyan: #eaff8a;        /* second gradient stop (kept lime-family) */
+  --color-warn: #f5a623;
 
   --color-lime: #d4fc50;
-  --color-lime-hover: #c4ef3c;
+  --color-lime-hover: #e2ff66;
   --color-graphite: #111111;
 
   /* Elevation. A card can separate with a shadow where a full border would be too
      heavy, useful on the softer surfaces (bg-ink) and for floating menus. */
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 6px -2px rgb(0 0 0 / 0.05);
-  --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.28);
-}
-
-/* ---- Dark theme: the OS decides, just like ponsfamily.com ----
-   These plain (unlayered) rules override Tailwind's themed :root vars, so every
-   bg, text and border utility re-resolves against the dark palette.
-   (Keep the glob syntax out of this comment, an asterisk followed by a slash
-   closes it early and the rest of the sentence is parsed as CSS.) */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-ink: #0d0d0d;
-    --color-ink-soft: #161616;
-    --color-panel: #1c1c1c;
-    --color-panel-2: #1f1f1f;
-    --color-line: #262626;
-    --color-line-soft: #1f1f1f;
-    --color-line-strong: #3a3a3a;
-
-    --color-mist: #b8b8b8;
-    --color-mist-bright: #dcdcdc;
-    --color-chalk: #ffffff;
-
-    --color-bug: #d4fc50;
-    --color-bug-dim: #9ac93a;
-    --color-bug-deep: #6f9f18;
-    --color-cyan: #eaff8a;
-    --color-warn: #f5a623;
-
-    --color-lime: #d4fc50;
-    --color-lime-hover: #e2ff66;
-    --color-graphite: #111111;
-
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.4);
-    --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.85);
-  }
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-lift: 0 12px 30px -18px rgb(0 0 0 / 0.85);
 }
 
 html {
-  color-scheme: light dark;
+  /* One theme, and this states it to the user agent rather than to the page:
+     form controls, scrollbars, the canvas backdrop and the overscroll area are
+     painted by the browser, not by CSS, so without this a native select or a
+     scrollbar arrives as a white rectangle on a near-black page. */
+  color-scheme: dark;
+  background: var(--color-ink);
 }
 
 body {
@@ -111,7 +88,7 @@ body {
 }
 
 /* Ambient top wash so heroes feel lit, not flat: a soft lime bloom that reads
-   on both a near-white and a near-black page. */
+   as light falling on the near-black page rather than as a shape on it. */
 .aurora {
   position: relative;
 }
@@ -315,9 +292,11 @@ body {
    animated surfaces all drop out, because a PDF with a hamburger icon in it is
    a screenshot rather than a document.
 
-   The ground is forced to white and the ink to black rather than relying on the
-   theme, because a dark-mode reader saving a page should get a printable
-   document, not a dark rectangle that empties a toner cartridge. */
+   The ground is forced to white and the ink to black rather than following the
+   page, because a saved page is a document rather than a screen: it should not
+   be a dark rectangle that empties a toner cartridge. This is the ONLY place
+   white is allowed anywhere in this file, it is unreachable on screen, and the
+   site itself is dark only. */
 @media print {
   header,
   footer,

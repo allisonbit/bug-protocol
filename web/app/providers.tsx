@@ -4,9 +4,9 @@ import "@rainbow-me/rainbowkit/styles.css";
 
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { RainbowKitProvider, darkTheme, lightTheme, type Theme } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, darkTheme, type Theme } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Chain } from "viem";
 import { SUPPORTED_CHAINS } from "@/lib/chains";
 import { AuthProvider } from "@/lib/auth-context";
@@ -52,45 +52,25 @@ const config = createConfig({
  */
 const ACCENT = "#d4fc50";
 
-function themed(dark: boolean): Theme {
-  return dark
-    ? darkTheme({
-        accentColor: ACCENT,
-        accentColorForeground: "#0d0d0d",
-        borderRadius: "large",
-        overlayBlur: "small",
-        fontStack: "system",
-      })
-    : lightTheme({
-        accentColor: ACCENT,
-        accentColorForeground: "#0d0d0d",
-        borderRadius: "large",
-        overlayBlur: "small",
-        fontStack: "system",
-      });
-}
+const WALLET_THEME: Theme = darkTheme({
+  accentColor: ACCENT,
+  accentColorForeground: "#0d0d0d",
+  borderRadius: "large",
+  overlayBlur: "small",
+  fontStack: "system",
+});
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
-  // The site is light by default and follows the operating system, and the
-  // wallet modal has to do the same or it will be the one surface that stays
-  // bright in a dark room. RainbowKit takes its theme as a prop, not as CSS, so
-  // the choice is made here and kept in step with the media query.
-  const [theme, setTheme] = useState<Theme>(() => themed(false));
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const pick = () => setTheme(themed(mq.matches));
-    pick();
-    mq.addEventListener?.("change", pick);
-    return () => mq.removeEventListener?.("change", pick);
-  }, []);
-
+  // RainbowKit takes its theme as a prop rather than from CSS, which makes the
+  // wallet modal the one surface that could stay bright while the page went
+  // dark. The site is dark only, so this is a constant: there is no media query
+  // left to keep in step with, and nothing to render light and then flip.
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={theme} modalSize="compact" appInfo={{ appName: "Swamp" }}>
+        <RainbowKitProvider theme={WALLET_THEME} modalSize="compact" appInfo={{ appName: "Swamp" }}>
           <AuthProvider>{children}</AuthProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
