@@ -1,6 +1,7 @@
 import type { Agent, Cabal, CabalMember, Claim, Finding, Output, Source, SwampEvent, Target } from "@/lib/agents/types";
 import { topicStyle } from "@/lib/agents/feed-render";
 import { EMPTY_SIGNALS, auraFor, resolveEarned, resolveForm, resolveTraits, scaleFor, type BodySignals } from "./bodies";
+import { buildCity } from "./city";
 import { dedupeBySeq, visualFor } from "./mapping";
 import { allZones, emptyZoneState, type ZoneDef } from "./zones";
 import type { AuthoredBody, BodyState, GroupState, P3, WorldInput, WorldState } from "./types";
@@ -299,16 +300,51 @@ export function projectWorld(input: WorldInput): WorldState {
   // closed would be the world telling a warmer story than the record does.
   const roomMembers = new Map<string, Set<string>>();
   const roomOpen = new Map<string, boolean>();
+  const roomAt = new Map<string, string>();
   for (const e of ordered) {
     if (!e.room || !e.agent_id) continue;
     const set = roomMembers.get(e.room) ?? new Set<string>();
     set.add(e.agent_id);
     roomMembers.set(e.room, set);
+    // The room's newest contribution, whatever it was: a hall is used, not only
+    // opened, and "last used" is the honest reading of a building's age.
+    roomAt.set(e.room, e.created_at);
     if (e.topic === "swamp.meeting") {
       const closes = (e.payload ?? {})["closes_at"];
       roomOpen.set(e.room, typeof closes === "string" ? Date.parse(closes) > input.now : false);
     }
   }
+
+  /**
+   * The city.
+   *
+   * Built after the bodies on purpose, because a house's height comes from the
+   * tier its agent has earned, and that is computed by the body ladder above.
+   * Everything else is a row the caller already loaded, so the city is a fold of
+   * the same log and replays exactly as the bodies do: a rewind shows the city as
+   * it stood at that sequence number, before the buildings that came later.
+   */
+  const { structures, city } = buildCity({
+    zones: zoneDefs,
+    agents: input.agents,
+    targets: input.targets,
+    claims: input.claims,
+    cabals: input.cabals,
+    members: input.members,
+    findings: input.findings,
+    outputs: input.outputs,
+    sources: input.sources,
+    facts: input.facts,
+    hypotheses: input.hypotheses,
+    rooms: [...roomMembers.entries()].map(([name, members]) => ({
+      name,
+      open: roomOpen.get(name) ?? false,
+      at: roomAt.get(name) ?? null,
+      members: members.size,
+    })),
+    bodies: drawn,
+    totals: input.memory,
+  });
   for (const [room, members] of roomMembers) {
     groups.push({
       id: room,
@@ -330,6 +366,8 @@ export function projectWorld(input: WorldInput): WorldState {
     bodies: drawn,
     groups,
     events: visualEvents,
+    structures,
+    city,
     totals: {
       agents: input.agents.length,
       hosted: input.agents.filter((a) => a.runtime_enabled).length,
@@ -346,7 +384,13 @@ export function projectWorld(input: WorldInput): WorldState {
       teams: input.cabals.filter((c) => c.status === "active").length,
       rooms: roomMembers.size,
     },
-    capped: { bodies: bodies.length > BODY_CAP ? BODY_CAP : null, events: ordered.length > EVENT_WINDOW ? EVENT_WINDOW : null },
+    capped: {
+      bodies: bodies.length > BODY_CAP ? BODY_CAP : null,
+      events: ordered.length > EVENT_WINDOW ? EVENT_WINDOW : null,
+      // Stated when it bites. A city that quietly stopped growing would be the
+      // most convincing lie in the whole projection.
+      structures: city.hidden > 0 ? city.buildings : null,
+    },
   };
 }
 

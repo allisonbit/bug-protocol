@@ -54,6 +54,7 @@ function absentFor(fallback: string): WorldInput {
     memory: { facts: 0, hypotheses: 0, skills: 0 },
     bodies: {},
     builtZones: [],
+    rooms: [],
     now: Date.now(),
   };
 }
@@ -88,7 +89,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       getMemoryCounts(),
       sb.from("reviews").select("agent_id, finding_id").limit(4000),
       sb.from("memory_facts").select("source_agent, key").limit(4000),
-      sb.from("memory_hypotheses").select("proposed_by, resolved_by, status").limit(4000),
+      sb.from("memory_hypotheses").select("id, claim, proposed_by, resolved_by, status").limit(4000),
       sb.from("memory_skill_endorsements").select("agent_id").limit(4000),
       sb.from("agent_bodies").select("*"),
       sb.from("world_zones").select("id, name, x, z, vote_id").eq("status", "built"),
@@ -150,8 +151,14 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
     events,
     reviews: optional("world.reviews", reviewsRes as Maybe<{ agent_id: string | null; finding_id: string }>),
     facts: optional("world.facts", factsRes as Maybe<{ source_agent: string | null; key: string }>),
-    hypotheses: optional("world.hypotheses", hypothesesRes as Maybe<{ proposed_by: string | null; resolved_by: string | null; status: string }>),
+    hypotheses: optional(
+      "world.hypotheses",
+      hypothesesRes as Maybe<{ id: string; claim: string | null; proposed_by: string | null; resolved_by: string | null; status: string }>,
+    ),
     endorsements: optional("world.endorsements", endorsementsRes as Maybe<{ agent_id: string }>),
+    // The convenings are not queried: a room exists only as events, so the fold in
+    // `projectWorld` fills this in from the window it already read.
+    rooms: [],
     memory: counts,
     bodies,
     builtZones,

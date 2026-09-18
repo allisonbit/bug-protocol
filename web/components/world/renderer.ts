@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { rgbForTopic } from "@/lib/world/mapping";
 import type { BodyState, VisualEvent, WorldState } from "@/lib/world/types";
+import { createCityscape, NIGHT } from "./cityscape";
 import { buildHumanoid, palettesFrom, type ActionId, type BodyPalette, type Humanoid } from "./humanoid";
 
 /**
@@ -173,36 +174,53 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.18;
 
   const scene = new THREE.Scene();
-  // Fog pulls the far edge of the habitat into the page background, so the band
-  // does not read as a rectangle pasted onto the site. The near bound is set
-  // beyond the sealed ring rather than across the middle: the camera sits about
-  // forty units out, so anything nearer than this would fade the far half of the
-  // habitat that a visitor is actually here to watch.
-  scene.fog = new THREE.Fog(new THREE.Color(theme.surface), 62, 150);
+  // Fog takes the far edge into the night rather than into the page colour: the
+  // world has a horizon now, and a horizon that dissolved into the site's own
+  // near-black would read as a rectangle pasted onto the page. The near bound sits
+  // beyond the sealed ring, because the camera is about forty units out and a
+  // nearer fog would grey the far half of the habitat a visitor came to watch.
+  scene.fog = new THREE.Fog(new THREE.Color(NIGHT.fog), 70, 205);
 
   const camera = new THREE.PerspectiveCamera(42, 2, 0.5, 400);
   const clock = new THREE.Clock();
 
-  const hemi = new THREE.HemisphereLight(new THREE.Color(theme.surface), new THREE.Color(theme.mist), 1.15);
+  // Night lighting, deliberately dim: the city lights itself. The windows and the
+  // lamps are emissive, so the work these three lights do is to give the walls,
+  // the water and the bodies shape, not to illuminate the scene. Raising them to
+  // daylight levels would flatten every lit window into the same grey wall.
+  const hemi = new THREE.HemisphereLight(new THREE.Color("#3d4a6b"), new THREE.Color("#0b0e14"), 0.62);
   scene.add(hemi);
-  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  const key = new THREE.DirectionalLight(new THREE.Color("#cdd9ff"), 0.5);
   key.position.set(18, 30, 14);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0xffffff, 0.35);
+  const rim = new THREE.DirectionalLight(new THREE.Color("#8d7bd6"), 0.3);
   rim.position.set(-22, 14, -18);
   scene.add(rim);
 
   // ---- the ground: the brand's own waterline, in three dimensions -----------
-  const waterGeo = new THREE.PlaneGeometry(190, 190, 96, 96);
+  // Wide enough that its own edge is past the fog and never shows as a line
+  // across the sky, which is what a 190 unit plane did once the horizon existed.
+  const waterGeo = new THREE.PlaneGeometry(420, 420, 120, 120);
   const waterMat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(theme.surface),
-    roughness: 0.42,
-    metalness: 0.08,
+    // Water rather than the page's own surface: the city stands on something, and
+    // a metalness this high is what lets the lamp and window light gather on it.
+    color: new THREE.Color(NIGHT.water),
+    roughness: 0.24,
+    metalness: 0.42,
     transparent: true,
-    opacity: 0.5,
+    // Opaque enough to catch the city's light instead of letting the page's black
+    // through it, which is what kept the ground a void in the first pass.
+    opacity: 0.86,
+    // A floor of its own light, because the night lights are deliberately dim and
+    // a lit city standing on pitch black water is still a city in a void: that is
+    // exactly how the second pass looked, with the light pool reading as an island
+    // and everything past it black. This is the ground being visible rather than
+    // the ground being illuminated, and it is the darkest value that still reads.
+    emissive: new THREE.Color("#0c1524"),
+    emissiveIntensity: 1,
   });
   const water = new THREE.Mesh(waterGeo, waterMat);
   water.rotation.x = -Math.PI / 2;
@@ -260,6 +278,18 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
   let followedId: string | null = null;
   let paused = false;
   let pickCb: ((id: string | null) => void) | null = null;
+
+  // ---- the city ------------------------------------------------------------
+  //
+  // Every building the swarm has raised, drawn from `structures` and from nothing
+  // else. It stands apart from the bodies on purpose: a body is present tense and
+  // leaves when its agent stops, while a building is the record given a place to
+  // stand, so the habitat accumulates instead of resetting every time the swarm
+  // goes quiet. The sky and the streets come with it, because a city with no
+  // ground and no sky is a scatter plot.
+  const city = createCityscape(scene, initial.zones);
+  city.setReducedMotion(reducedMotion);
+  city.apply(initial.structures);
 
   // Orbit state: spherical around a moving focus.
   const focus = new THREE.Vector3(0, 0.8, 0);
@@ -508,6 +538,11 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     linkGroup.add(linkLines);
     rebuildGroups(next);
 
+    // The city, rebuilt from the same projection. New rows raise buildings and a
+    // deeper record raises one already standing; nothing here decides that
+    // anything exists.
+    city.apply(next.structures);
+
     // Pads: lit by whether a row landed there recently, not on a timer.
     const nowMs = Date.now();
     for (const zone of next.zones) {
@@ -602,6 +637,11 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     }
 
     updateMarks(nowMs);
+
+    // Growth: a new building rises out of the ground, one that gained a storey
+    // pulses. This is the only animation in the file that reports a fact, and it
+    // reports it once, when the row lands.
+    city.update(dt);
 
     // Camera.
     let radius = orbitRadius;
@@ -702,6 +742,9 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     (window as unknown as { __swampWorld?: unknown }).__swampWorld = {
       stats: () => ({ fps, drawn: bodies.size, paused, camera: cameraMode, followedId }),
       zones: () => initial.zones.length,
+      // The city, so a probe can check that buildings are really in the scene
+      // rather than trusting that the projection was called.
+      city: () => city.counts(),
       cameraPosition: () => camera.position.toArray().map((n) => Math.round(n * 10) / 10),
       nearest: () => {
         // Where the drawn bodies are, so a probe can prove the scene carries them
@@ -773,6 +816,7 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
     },
     setReducedMotion(reduced) {
       reducedMotion = reduced;
+      city.setReducedMotion(reduced);
       resolveReduced();
     },
     setPaused(next) {
@@ -795,6 +839,7 @@ export function createWorldRenderer(canvas: HTMLCanvasElement, initial: WorldSta
         if (entry.bubble) disposeSprite(entry.bubble.sprite);
       }
       bodies.clear();
+      city.dispose();
       waterGeo.dispose();
       waterMat.dispose();
       renderer.dispose();

@@ -159,6 +159,74 @@ export type ZoneState = {
   built: boolean;
 };
 
+/**
+ * A building: something the swarm raised, standing where it was raised.
+ *
+ * This is the half of the world that accumulates. A body is a present-tense
+ * thing and vanishes when its agent does; a structure is the record made
+ * permanent, so the habitat gets bigger and taller as the swarm does more work
+ * and never smaller. The city IS the log, seen from above.
+ *
+ * WHAT MAKES IT HONEST. Every structure carries `cites`: the row that raised it.
+ * There is no decoration here, no generic skyline and no filler blocks. If the
+ * swarm has published seven outputs there are seven archive buildings, and the
+ * eighth appears the moment the eighth row lands. `verify-world.cjs` fails if any
+ * structure arrives without a citation, which is what keeps this from decaying
+ * into scenery.
+ *
+ * WIDTH IS VOLUME, HEIGHT IS DEPTH. More rows make the city wider (another
+ * monument on the Wall, another block in the Vaults). A deeper individual record
+ * makes one building taller: a finding's storeys follow its severity, a house's
+ * follow the tier of the agent that lives in it. So both kinds of growth are
+ * real, and neither is invented to fill space.
+ */
+export type StructureKind = "house" | "vault" | "lab" | "archive" | "source" | "monument" | "hall" | "guild" | "post";
+
+export const STRUCTURE_KINDS: StructureKind[] = [
+  "house",
+  "vault",
+  "lab",
+  "archive",
+  "source",
+  "monument",
+  "hall",
+  "guild",
+  "post",
+];
+
+export type StructureState = {
+  /** Stable for the row it stands for: `${kind}:${rowId}`. */
+  id: string;
+  kind: StructureKind;
+  /** The zone it stands in. */
+  zone: string;
+  /** Its base centre. A hash of the id, so the city never reshuffles as it grows. */
+  position: P3;
+  /** Half-width of the base, in world units. */
+  footprint: number;
+  /** Storeys, which is depth of record rather than height for its own sake. */
+  floors: number;
+  /** Total height in world units, storeys included. */
+  height: number;
+  /** True when the rows behind it are settled: verified, corroborated, confirmed. */
+  lit: boolean;
+  /** The row that raised it. Never empty, and never a placeholder. */
+  cites: string;
+  /** What it is, in the words of the row: a finding title, a handle, a fact key. */
+  label: string;
+  /** When its newest contribution landed, so growth can be seen rather than only counted. */
+  at: string | null;
+};
+
+/** The city, summarised for the frame and for the fallback that has no canvas. */
+export type CityState = {
+  buildings: number;
+  storeys: number;
+  /** Rows whose building the cap left out. Stated on screen, never hidden. */
+  hidden: number;
+  byKind: Record<StructureKind, number>;
+};
+
 export type GroupState = {
   id: string;
   kind: "cabal" | "room";
@@ -239,9 +307,12 @@ export type WorldState = {
   bodies: BodyState[];
   groups: GroupState[];
   events: VisualEvent[];
+  /** Everything the swarm has built, oldest row first in meaning, id-sorted in fact. */
+  structures: StructureState[];
+  city: CityState;
   totals: WorldTotals;
   /** True when rows were capped, and what the cap was. Stated on screen, never hidden. */
-  capped: { bodies: number | null; events: number | null };
+  capped: { bodies: number | null; events: number | null; structures: number | null };
 };
 
 /**
@@ -265,7 +336,12 @@ export type WorldInput = {
   reviews: { agent_id: string | null; finding_id: string }[];
   /** The shared brain, as the ladder tests it rather than as it renders. */
   facts: { source_agent: string | null; key: string }[];
-  hypotheses: { proposed_by: string | null; resolved_by: string | null; status: string }[];
+  /**
+   * Hypotheses carry their id and their claim as well as their status, because
+   * each one becomes a lab and a lab has to cite the row it stands for rather
+   * than merely the agent who asked. `claim` is the label over the door.
+   */
+  hypotheses: { id: string; claim: string | null; proposed_by: string | null; resolved_by: string | null; status: string }[];
   endorsements: { agent_id: string }[];
   /** Counts the projector cannot derive from the capped event window. */
   memory: { facts: number; hypotheses: number; skills: number };
@@ -273,6 +349,12 @@ export type WorldInput = {
   bodies: Record<string, AuthoredBody>;
   /** Zones the swarm proposed and a vote built. */
   builtZones: import("@/lib/world/zones").ZoneDef[];
+  /**
+   * The convenings the fold found, which is what a hall is made of. Derived from
+   * the event window in `project.ts` rather than queried again, because a room
+   * exists only as events and the window is where those are read.
+   */
+  rooms: { name: string; open: boolean; at: string | null; members: number }[];
   /** Project the world as of this seq. This is the whole replay mechanism. */
   untilSeq?: number;
   now: number;

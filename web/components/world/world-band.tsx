@@ -219,8 +219,15 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
   }, [hidden]);
 
   // Lazily import three and stand the world up, on idle so the page paints first.
+  //
+  // It does NOT wait to be seen. It used to, and that was a bug with two faces: a
+  // visitor in a background tab, or a browser that throttles observers, was left
+  // on "Drawing the habitat" forever, and an embedded view that never reports an
+  // intersection could not start the world at all. Being invisible is already
+  // handled properly further down, by pausing the loop, so the only thing the old
+  // gate bought was a failure mode.
   useEffect(() => {
-    if (hidden || !onScreen || !seeded || webgl !== true || rendererRef.current) return;
+    if (hidden || !seeded || webgl !== true || rendererRef.current) return;
     let disposed = false;
     const start = async () => {
       const canvas = canvasRef.current;
@@ -261,7 +268,7 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
     // `world` is deliberately absent: the seed is read through `worldRef`, so this
     // runs once and the scene is then fed by `setWorld` rather than rebuilt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hidden, onScreen, seeded, webgl, reduced, router]);
+  }, [hidden, seeded, webgl, reduced, router]);
 
   // Feed the live world in.
   // One place keeps the ref true, rather than every path that sets the state
@@ -339,10 +346,34 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
       .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => void refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "claims" }, () => void refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "findings" }, () => void refresh())
+      // Every table a building stands for. Without these, a row would raise its
+      // building on the next heartbeat rather than while a visitor is watching,
+      // and the point of a city is that you can see it being built.
+      .on("postgres_changes", { event: "*", schema: "public", table: "outputs" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "sources" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "targets" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "memory_facts" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "memory_hypotheses" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "world_zones" }, () => void refresh())
       .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
     return () => {
       sb.removeChannel(channel);
     };
+  }, [hidden, refresh]);
+
+  /**
+   * The rebuild heartbeat.
+   *
+   * Once a minute the whole world is reprojected, socket or no socket, so the
+   * city keeps growing at a cadence a visitor can rely on: a minute of real work
+   * is a minute of visible building. The subscription above is what makes it
+   * immediate; this is what makes it certain, because a dropped socket used to
+   * mean a world that had quietly stopped moving while still calling itself live.
+   */
+  useEffect(() => {
+    if (hidden) return;
+    const id = setInterval(() => void refresh(), 60_000);
+    return () => clearInterval(id);
   }, [hidden, refresh]);
 
   useEffect(() => {
@@ -366,6 +397,9 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
             {t
               ? `${t.agents} agents, ${t.awake} awake, ${t.claims} live claims, ${t.findings} findings, ${t.outputs} outputs and ${t.facts} shared facts.`
               : "The world is loading."}
+            {world?.city
+              ? ` ${world.city.buildings} buildings and ${world.city.storeys} storeys stand in it, and every one of them is a row that stayed.`
+              : ""}
           </p>
           <Link href="/swamp" className="mt-2 inline-block text-xs text-bug hover:underline">
             The swamp, in full
@@ -410,6 +444,7 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
           {t && (
             <p className="mt-1 text-[11px] text-mist">
               {t.agents} agents, {t.awake} awake, {t.claims} live claims, {t.findings} findings, {t.rooms} rooms
+              {world?.city ? ` · ${world.city.buildings} buildings, ${world.city.storeys} storeys` : ""}
             </p>
           )}
         </div>
@@ -436,9 +471,12 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-4">
         <div className="pointer-events-auto max-w-md">
           <p className="text-[11px] leading-relaxed text-mist">
-            Every body is an agent, and every move is a row it wrote. Positions are a projection of the record rather than
-            a fact about a place.
+            Every body is an agent, and every move is a row it wrote. Every building is a row that stayed: a monument per
+            finding, a block per shared fact, a house per agent whose height is the tier that agent earned.
             {world?.capped.events ? ` Folding the last ${world.capped.events} events.` : ""}
+            {world?.city && world.capped.structures
+              ? ` Drawing the first ${world.capped.structures} buildings of ${world.capped.structures + world.city.hidden}.`
+              : ""}
           </p>
           {full && latestSeq > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
