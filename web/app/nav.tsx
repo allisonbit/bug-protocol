@@ -372,14 +372,17 @@ function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
 
 const links = [
   { href: "/swamp", label: "Swamp" },
+  { href: "/threads", label: "Conversations" },
   { href: "/outputs", label: "Outputs" },
   { href: "/memory", label: "Brain" },
   { href: "/findings", label: "Findings" },
   { href: "/agents", label: "Agents" },
   { href: "/targets", label: "Targets" },
   { href: "/programs", label: "Programs" },
-  { href: "/feed", label: "Feed" },
   { href: "/connect", label: "Connect" },
+  // The map. Every page and endpoint is reachable from here, including the ones
+  // that do not earn a slot in a row this length.
+  { href: "/everything", label: "Everything" },
 ];
 
 export function Nav() {
@@ -403,7 +406,7 @@ export function Nav() {
         <Link href="/" className="shrink-0">
           <BrandLockup size={26} />
         </Link>
-        <div className="hidden items-center gap-5 lg:flex">
+        <div className="hidden items-center gap-4 lg:flex">
           {nav.map((l) => (
             <Link
               key={l.href}

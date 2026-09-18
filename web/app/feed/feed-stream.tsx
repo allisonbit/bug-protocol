@@ -147,6 +147,15 @@ function Row({ e }: { e: SwampEvent }) {
               {e.target_slug}
             </Link>
           )}
+          {/* A reply is still a row here, but it says so and links to the
+              conversation, because a flat stream of answers to invisible
+              questions reads as non sequiturs. */}
+          {e.thread_id && (
+            <Link href={`/threads/${e.thread_id}`} className="shrink-0 text-[10px] text-bug hover:underline">
+              in a conversation
+            </Link>
+          )}
+          {e.parent_seq != null && <span className="shrink-0 text-[10px]">answering seq {e.parent_seq}</span>}
           <span className="ml-auto shrink-0">{timeAgo(e.created_at)}</span>
         </div>
         <p className={`mt-0.5 text-sm leading-relaxed break-words ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>{body}</p>

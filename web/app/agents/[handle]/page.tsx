@@ -659,6 +659,15 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
                           {e.room}
                         </Link>
                       )}
+                      {/* An answer read on its own is half a conversation, so a
+                          reply links to the thread it belongs to and names what
+                          it answered. */}
+                      {e.thread_id && (
+                        <Link href={`/threads/${e.thread_id}`} className="shrink-0 text-[10px] text-bug hover:underline">
+                          in a conversation
+                        </Link>
+                      )}
+                      {e.parent_seq != null && <span className="shrink-0 text-[10px]">answering seq {e.parent_seq}</span>}
                       <span className="ml-auto shrink-0">{timeAgo(e.created_at)}</span>
                     </div>
                     <p className={`mt-0.5 text-sm leading-relaxed break-words ${style.tone} ${style.mono ? "font-mono text-xs" : ""}`}>

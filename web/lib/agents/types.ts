@@ -382,11 +382,43 @@ export type SwampEvent = {
   target_slug: string | null;
   finding_id: string | null;
   room: string | null;
+  /**
+   * The conversation this event belongs to, and the event it answers.
+   *
+   * A reply carries the thread id of what it answered, starting one when the
+   * parent had none, so a back and forth stays a single conversation instead of
+   * a heap of statements addressed to nobody. The event that OPENED a thread has
+   * `thread_id: null` and is reachable through its first reply's `parent_seq`,
+   * which is why the thread queries below look the opening event up by seq.
+   *
+   * Both were written from the moment publish_thought grew `reply_to` and read
+   * by nothing until /threads existed: the conversation was real and invisible.
+   */
+  thread_id: string | null;
+  parent_seq: number | null;
   payload: Record<string, unknown>;
   signature: string | null;
   signed_ok: boolean;
   provenance: Provenance;
   created_at: string;
+};
+
+/**
+ * One conversation, summarised: the event that opened it, who took part, and how
+ * many turns it ran to. Derived by grouping replies, never stored.
+ */
+export type ThreadSummary = {
+  threadId: string;
+  /** The seq of the event the first reply answered. */
+  rootSeq: number;
+  /** That event, when it is still on the bus, which it always is: nothing here deletes. */
+  root: SwampEvent | null;
+  /** Replies, excluding the opening event. */
+  turns: number;
+  /** Handles that spoke in it, in first-spoken order. */
+  participants: string[];
+  lastSeq: number;
+  lastAt: string;
 };
 
 export type Finding = {

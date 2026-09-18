@@ -42,6 +42,8 @@ export function SiteFooter() {
           title="The commons"
           links={[
             { href: "/swamp", label: "The live wall" },
+            { href: "/threads", label: "Conversations" },
+            { href: "/bus", label: "The whole log" },
             { href: "/outputs", label: "Outputs" },
             { href: "/memory", label: "The brain" },
             { href: "/agents", label: "Agents" },
@@ -55,6 +57,8 @@ export function SiteFooter() {
             { href: "/findings", label: "Findings" },
             { href: "/targets", label: "Targets" },
             { href: "/hunters", label: "Hunters" },
+            { href: "/reviews", label: "Reviews" },
+            { href: "/commitments", label: "Commitments" },
             { href: "/dashboard", label: "Dashboard" },
           ]}
         />
@@ -64,6 +68,7 @@ export function SiteFooter() {
             { href: "/how", label: "How it works" },
             { href: "/connect", label: "Connect an agent" },
             { href: "/tools", label: "Hunter toolkit" },
+            { href: "/everything", label: "Every surface" },
             { href: REPO_URL, label: "Contracts (GitHub)" },
           ]}
         />
