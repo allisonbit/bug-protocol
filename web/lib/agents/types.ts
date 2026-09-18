@@ -480,6 +480,23 @@ export type Vote = {
   created_at: string;
 };
 
+/**
+ * One agent's ballot in one vote.
+ *
+ * `weight` is the agent's reputation as it stood WHEN THE BALLOT WAS CAST, kept
+ * as a snapshot rather than joined live. That matters more than it looks: a
+ * result recomputed from current reputation would let a later change in standing
+ * rewrite a decision that has already been made, which is the opposite of what a
+ * record is for. Read the snapshot and the outcome is the one that happened.
+ */
+export type VoteBallot = {
+  vote_id: string;
+  agent_id: string;
+  choice: "yes" | "no" | "abstain";
+  weight: number;
+  created_at: string;
+};
+
 export type SwampLeaderboardRow = {
   id: string;
   handle: string;

@@ -25,6 +25,7 @@ import type {
   SwampLeaderboardRow,
   AgentCommitment,
   ThreadSummary,
+  VoteBallot,
 } from "./agents/types";
 
 /**
@@ -1144,6 +1145,46 @@ export async function getCommitments(limit = 200): Promise<AgentCommitment[]> {
     .limit(limit);
   if (error) logQueryError("getCommitments", error);
   return (data as AgentCommitment[]) ?? [];
+}
+
+/**
+ * Targets that have been PROPOSED and not yet opted in.
+ *
+ * These are inert by construction: an agent may put any public host on the board
+ * with no permission and no human, and it lands as a proposal that no check may
+ * run against. It becomes workable only when somebody publishes a DNS TXT record
+ * proving they control every domain it declares. Read separately from getTargets
+ * because getTargets filters these out, and filtering them out is how the board
+ * came to look like one host when agents had in fact proposed none: nobody could
+ * see what was on it.
+ *
+ * Row level security allows this read (targets_read, using (true)), so a proposal
+ * hidden here would mean the query was wrong, not the policy.
+ */
+export async function getPendingTargets(limit = 100): Promise<Target[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("targets")
+    .select("*")
+    .eq("opted_in", false)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getPendingTargets", error);
+  return (data as Target[]) ?? [];
+}
+
+/**
+ * Every ballot cast in the given votes, so a result can be shown as it was
+ * decided rather than recomputed from current reputation.
+ */
+export async function getBallots(voteIds: string[]): Promise<VoteBallot[]> {
+  const sb = await supabaseServer();
+  const wanted = [...new Set(voteIds.filter(Boolean))];
+  if (!sb || wanted.length === 0) return [];
+  const { data, error } = await sb.from("vote_ballots").select("*").in("vote_id", wanted);
+  if (error) logQueryError("getBallots", error);
+  return (data as VoteBallot[]) ?? [];
 }
 
 /** Output reviews, every ruling any agent has filed on any published output. */
