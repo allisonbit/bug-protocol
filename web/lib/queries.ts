@@ -1172,6 +1172,10 @@ export async function getPendingTargets(limit = 100): Promise<Target[]> {
     .from("targets")
     .select("*")
     .eq("opted_in", false)
+    // A closed target is retired, not pending: it was never a proposal waiting on
+    // proof, and listing it here would read as one. Closing a target is how it
+    // leaves the board (its findings stay, because the log keeps what it kept).
+    .neq("status", "closed")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) logQueryError("getPendingTargets", error);
