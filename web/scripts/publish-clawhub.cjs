@@ -16,13 +16,18 @@
  * source, checked at the moment of publishing, is the only arrangement where that
  * cannot happen silently.
  *
- * AUTH IS NOT OURS TO DO. ClawHub authenticates with GitHub OAuth, so this needs
- * a logged in CLI on the operator's machine. There is no token this script can
- * conjure, and it does not try: it checks for the CLI and for a session, and says
- * exactly what is missing rather than failing halfway through an upload.
+ * AUTH BELONGS TO THE OPERATOR. ClawHub authenticates by GitHub OAuth device
+ * flow, or by a token the operator already holds. Either way this script does not
+ * invent a credential: it signs in with a token only if one was handed to it, and
+ * otherwise checks for an existing session and says exactly what is missing. It
+ * fails before the upload rather than part way through one.
  *
- *   node scripts/publish-clawhub.cjs                  # build the bundle and stop
- *   node scripts/publish-clawhub.cjs --publish        # build it, then upload
+ *   node scripts/publish-clawhub.cjs                    # build the bundle and stop
+ *   node scripts/publish-clawhub.cjs --publish          # build it, then upload
+ *   CLAWHUB_TOKEN=<token> node scripts/publish-clawhub.cjs --publish
+ *
+ * The CLI is used from PATH when present and via `npx clawhub@latest` otherwise,
+ * so publishing needs no global install.
  *
  * The bundle it writes is a real directory, so it can also be published by hand
  * or committed if ClawHub ever wants it in the repository.
@@ -35,6 +40,15 @@ const { execFileSync } = require("node:child_process");
 
 const site = (process.env.SWAMP_SITE_URL || "https://www.swampai.world").replace(/\/+$/, "");
 const shouldPublish = process.argv.includes("--publish");
+
+/**
+ * A token can be handed in rather than signed in for. `clawhub login --token`
+ * stores it, so an operator who has a token never has to open a browser, and a
+ * headless run is possible. It is read from the environment rather than a flag
+ * so it does not land in shell history or in a process list.
+ */
+const tokenArg = process.argv.find((a) => a.startsWith("--token="));
+const token = (tokenArg ? tokenArg.slice("--token=".length) : process.env.CLAWHUB_TOKEN || "").trim();
 
 const outDir = path.join(__dirname, "..", "skills", "swamp");
 const outFile = path.join(outDir, "SKILL.md");
@@ -80,38 +94,44 @@ async function main() {
     return;
   }
 
-  // Is the CLI even here? A missing binary should not look like a failed upload.
-  let cli = null;
-  for (const candidate of ["clawhub", "clawhub.cmd"]) {
+  // Resolve the CLI. A globally installed binary is used when it is there, and
+  // `npx` is the fallback so that nothing has to be installed to publish: the
+  // package is public, and a global install is a side effect on somebody else's
+  // machine that this task does not need.
+  let [cli, cliArgs] = ["clawhub", []];
+  try {
+    execFileSync("clawhub", ["--cli-version"], { stdio: "ignore" });
+  } catch {
     try {
-      execFileSync(candidate, ["--version"], { stdio: "ignore" });
-      cli = candidate;
-      break;
+      execFileSync("clawhub.cmd", ["--cli-version"], { stdio: "ignore" });
+      cli = "clawhub.cmd";
     } catch {
-      /* try the next */
+      cli = "npx";
+      cliArgs = ["-y", "clawhub@latest"];
+      console.log("no clawhub on PATH, using npx clawhub@latest");
     }
   }
-  if (!cli) {
-    console.error(
-      "clawhub CLI not found on PATH. Install it, log in, then rerun with --publish.\n" +
-        "The bundle above is complete and needs no rebuilding.",
-    );
-    process.exitCode = 1;
-    return;
+  const run = (args, opts = {}) => execFileSync(cli, [...cliArgs, ...args], { stdio: "inherit", ...opts });
+
+  if (token) {
+    // Stored, not passed through on every call, so the publish step is the same
+    // command whether the operator signed in or handed in a token.
+    console.log("storing the supplied token");
+    run(["login", "--token", token, "--no-browser", "--label", "Swamp discovery publish"]);
   }
 
   // Fail on an unauthenticated session before starting the upload, rather than
   // part way through it.
   try {
-    execFileSync(cli, ["whoami"], { stdio: "inherit" });
+    run(["whoami"]);
   } catch {
-    console.error("clawhub is installed but not logged in. Run: clawhub login");
+    console.error("Not logged in. Run: clawhub login, or pass a token with CLAWHUB_TOKEN=<token>");
     process.exitCode = 1;
     return;
   }
 
   console.log("\npublishing");
-  execFileSync(cli, ["skill", "publish", outDir], { stdio: "inherit" });
+  run(["skill", "publish", outDir]);
   console.log(`\npublished. Check it at https://clawhub.ai/skills/${entry.name}`);
 }
 
