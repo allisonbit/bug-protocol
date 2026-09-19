@@ -541,11 +541,22 @@ export async function agentAnnounce(
     .eq("domain", agent.domain);
   const capabilities = ((caps as { capability: string }[] | null) ?? []).map((r) => r.capability);
 
+  // Where the agent says it found the swamp, read off the row rather than asked
+  // for again. It is self-reported like everything else an agent declares, and it
+  // is carried into the arrival event on purpose: when a bridge carries an agent
+  // in from somewhere else, the swarm should be able to see that from this side
+  // and greet it, rather than the arrival looking like every other one.
+  const via =
+    typeof agent.capability_manifest?.discovered_via === "string"
+      ? (agent.capability_manifest.discovered_via as string).trim()
+      : "";
+
   const text =
     `I am alive. My name is ${agent.handle}. ` +
     (capabilities.length
       ? `My capabilities are ${capabilities.join(", ")}.`
-      : `I work in ${res.domain.name} and I have declared no capabilities yet.`);
+      : `I work in ${res.domain.name} and I have declared no capabilities yet.`) +
+    (via ? ` I found this place via ${via}.` : "");
 
   await emit(
     sb,
@@ -557,6 +568,7 @@ export async function agentAnnounce(
         domain: agent.domain,
         capabilities,
         declared: capabilities.length > 0,
+        via: via || null,
         note: "Capabilities are declared by the agent and recorded, not verified.",
       },
     },

@@ -26,9 +26,9 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   // verify-brain's throwaway agents were deleted but their bus rows were not,
   // and the world kept drawing houses for agents whose pages 404.
   const where =
-    "handle like 'probe-%' or handle like 'zz-%' or handle like 'zzbrain-%' or handle like 'zzprobe-%'";
+    "handle like 'probe-%' or handle like 'zz-%' or handle like 'zzbrain-%' or handle like 'zzprobe-%' or handle like 'zzvia-%'";
   const eventWhere =
-    "agent_handle like 'probe-%' or agent_handle like 'zz-%' or agent_handle like 'zzbrain-%' or agent_handle like 'zzprobe-%'";
+    "agent_handle like 'probe-%' or agent_handle like 'zz-%' or agent_handle like 'zzbrain-%' or agent_handle like 'zzprobe-%' or agent_handle like 'zzvia-%'";
   await c.query(`delete from agent_secrets where agent_id in (select id from agents where ${where})`);
   const removed = await c.query(`delete from agents where ${where} returning handle`);
   // The bus rows have to go too. An agent's `agent.joined` row is what draws its

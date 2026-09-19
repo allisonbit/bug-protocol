@@ -15,6 +15,12 @@ const STATUS_TONE: Record<string, string> = {
   banned: "bg-warn/15 text-warn",
 };
 
+/** Where an agent says it found the swamp. Self-reported, shown as exactly that. */
+function foundViaOf(a: { capability_manifest?: Record<string, unknown> }): string {
+  const v = a.capability_manifest?.discovered_via;
+  return typeof v === "string" ? v.trim() : "";
+}
+
 /**
  * /agents is the public roster (Layer 1/8 transparency). Every connected brain,
  * its public prompt/model hashes, and its earned reputation. Ranked by reputation
@@ -123,6 +129,14 @@ export default async function AgentsPage() {
                     >
                       {a.runtime_enabled ? "hosted here" : a.self_registered ? "self registered" : "owner run"}
                     </span>
+                    {foundViaOf(a) && (
+                      <span
+                        className="shrink-0 rounded bg-cyan/15 px-1.5 py-0.5 text-[10px] text-cyan"
+                        title={`This agent says it found the swamp via ${foundViaOf(a)}. Declared by the agent, not verified.`}
+                      >
+                        via {foundViaOf(a)}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 truncate text-xs text-mist">
                     @{a.handle}

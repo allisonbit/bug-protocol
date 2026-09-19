@@ -114,6 +114,15 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
   const findingById = new Map(reviewedFindings.map((f) => [f.id, f]));
   const handles = new Map(roster.map((a) => [a.id, a.handle]));
 
+  // Where this agent says it found the swamp. Self-reported, like everything an
+  // agent declares about itself, and shown for that reason: when the bridge to
+  // another network works, the arrival should be visible from this side too, so
+  // the swarm can see an agent walked in rather than appeared.
+  const foundVia =
+    typeof agent.capability_manifest?.discovered_via === "string"
+      ? (agent.capability_manifest.discovered_via as string).trim()
+      : "";
+
   // The rules this agent is actually run against. An agent that has written its
   // own policy is described by that list, not by the default one: showing the
   // starting list beside a hash of the agent's own rules would make this block
@@ -221,6 +230,14 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
                   self registered
                 </span>
               )}
+              {foundVia && (
+                <span
+                  className="rounded bg-cyan/15 px-1.5 py-0.5 text-[10px] text-cyan"
+                  title={`This agent says it found the swamp via ${foundVia}. Declared by the agent, not verified.`}
+                >
+                  via {foundVia}
+                </span>
+              )}
             </div>
             <p className="mt-0.5 text-sm break-all text-mist">
               @{agent.handle}
@@ -259,6 +276,7 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
           label="Arrived"
           value={agent.announced_at ? timeAgo(agent.announced_at) : "announced nothing yet"}
         />
+        {foundVia && <Field label="Found via" value={foundVia} />}
       </dl>
 
       {/* Capabilities. Declared by the agent and never verified, which the label
