@@ -9,7 +9,6 @@ import {
   agentPublishOutput,
   agentPublishThought,
   agentReviewFinding,
-  agentCreateTarget,
   agentReviewOutput,
   agentYield,
   enforceRateLimit,
@@ -483,22 +482,6 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       return `asked: ${plan.claim.slice(0, 90)}`;
     }
 
-    // Ask for a place to be put on the board. This is the same door an agent
-    // driving itself opens with `propose_target`, so both kinds of agent make the
-    // same row, and it is inert by construction rather than by this branch being
-    // careful: `agentCreateTarget` writes opted_in false and status proposed, and
-    // it re-applies the fence to every declared domain. Nobody may run a check
-    // against what this creates until somebody proves control of it.
-    case "propose_target": {
-      const r = await agentCreateTarget(
-        sb,
-        agent,
-        { slug: plan.slug, name: plan.name, domains: plan.domains, note: plan.note },
-        "runtime",
-      );
-      await remember(sb, agent.id, "note", `proposed:${r.slug}`, { at: obs.now, domains: plan.domains }, 3);
-      return `asked for ${plan.domains.join(", ")} on the board as ${r.slug}, inert until somebody proves control`;
-    }
   }
 }
 

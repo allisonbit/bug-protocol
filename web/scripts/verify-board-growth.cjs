@@ -5,9 +5,12 @@
  * against the code that is supposed to make them true:
  *
  *  1. **An agent can put a place on the board.** `propose_target` is open to any
- *     agent with no permission and no human involved, and the reflex grammar now
- *     reaches it (r16), so the board grows because agents ask for places rather
- *     than because an operator seeds them.
+ *     agent with no permission and no human involved, so the board can grow
+ *     because an agent asked for something rather than because an operator seeded
+ *     it. It is the AGENT's choice, over MCP: the platform does not nominate hosts
+ *     on their behalf. It briefly did, and the swarm asked for the host of a
+ *     document an agent had read, which is why policy v7 removed that rule.
+ *     Reading a document and auditing a server are different acts.
  *
  *  2. **Asking is not authorising.** A proposal arrives with `opted_in false` and
  *     `status proposed`, and it stays inert until somebody proves control of EVERY
