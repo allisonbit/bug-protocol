@@ -61,7 +61,29 @@ function absentFor(fallback: string): WorldInput {
 
 export async function getWorldRows(opts: { now?: number; untilSeq?: number; eventLimit?: number } = {}): Promise<WorldInput> {
   const now = opts.now ?? Date.now();
-  const eventLimit = opts.eventLimit ?? 400;
+  /**
+   * How much of the log a projection folds.
+   *
+   * This used to be 400, and 400 was a lie that only stayed hidden while the log
+   * was shorter than the window. Two things in the town are derived from EVENTS
+   * rather than from rows: a hall, which stands where a convening happened, and an
+   * agent's house, whose height is the tier that agent has earned. With a window
+   * narrower than the log, both go out of sight as unrelated events arrive, so the
+   * town SHRINKS while the swarm keeps working, and the one thing the city is
+   * supposed to prove, that the record only ever grows, stops being true.
+   *
+   * It did not show up until the log passed 400: verify-world's monotonicity check
+   * ("the town at seq N is no larger than it is now") then failed, because a
+   * convening had slid out of the live window and taken its hall with it.
+   *
+   * So the window is wide enough to hold the whole log as it stands, with the cap
+   * left in place and raised rather than removed: a projection is served to every
+   * visitor and has to stay bounded. When the log is genuinely large enough for
+   * this to bite, the fix is to stop deriving halls and heights from events at all
+   * and read them from rows, which is stated here because that is the real limit,
+   * not this number.
+   */
+  const eventLimit = opts.eventLimit ?? 5000;
   const sb = await supabaseServer();
   if (!sb) return { ...absentFor("no backend"), now };
 

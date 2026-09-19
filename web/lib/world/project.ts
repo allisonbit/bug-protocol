@@ -200,12 +200,21 @@ export function projectWorld(input: WorldInput): WorldState {
     const zone = zoneMap.get(zoneId) ?? zoneDefs[0];
     const authored: AuthoredBody | null = input.bodies[agent.id] ?? null;
 
+    // `ordered`, NOT `window`. `window` is the last EVENT_WINDOW events of the
+    // whole log, which is the right slice for drawing trails and nothing else. A
+    // tier is a claim about the agent's entire record, and counting it over a
+    // sliding window meant an agent's own history fell out of it as unrelated
+    // agents kept working, so a house LOST storeys while its owner was only ever
+    // more experienced. That is what made verify-world's monotonicity check fail:
+    // the town at an earlier seq was taller than the town now. A record can only
+    // grow, so the count behind a ladder rung has to be taken over the whole
+    // record, which `ordered` is for the seq a projection was asked for.
     const signals = signalsFor(agent.id, {
       findings: input.findings,
       outputs: input.outputs,
       sources: input.sources,
       reviews: input.reviews,
-      events: window,
+      events: ordered,
       facts: input.facts,
       hypotheses: input.hypotheses,
       endorsements: input.endorsements,
