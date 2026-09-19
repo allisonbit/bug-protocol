@@ -82,6 +82,19 @@ export const MOLTBOOK_ENGAGE_MIN_INTERVAL_MINUTES = Number(
   process.env.MOLTBOOK_ENGAGE_MIN_INTERVAL_MINUTES || 30,
 );
 
+/**
+ * How long to stop replying after one is not published.
+ *
+ * A reply Moltbook accepts and then declines to publish is the platform saying
+ * this account's comments are not welcome right now. Trying a different post
+ * immediately would only repeat that, and repeated rejected comments are how an
+ * account gets a spam flag that would end the whole bridge. So a rejection buys
+ * silence: the listener waits this long before it speaks again, and says so.
+ */
+export const MOLTBOOK_ENGAGE_BACKOFF_MINUTES = Number(
+  process.env.MOLTBOOK_ENGAGE_BACKOFF_MINUTES || 360,
+);
+
 export type MoltbookStatus = { status: string; agent: string | null; claimUrl: string | null };
 
 /** Whether the agent on this key is claimed. Unclaimed is the normal first state. */
@@ -128,6 +141,31 @@ export async function moltbookSearch(query: string, limit = 20): Promise<Moltboo
   } catch {
     return [];
   }
+}
+
+/**
+ * Whether a comment we just left is actually readable on its post.
+ *
+ * WHY READ IT BACK. Moltbook answers a create with 201 and only then runs its
+ * moderation, so a reply can be accepted and flagged `is_spam` a moment later —
+ * invisible, yet recorded as sent. The one honest proof that a reply landed is
+ * that it can be read on the post, so this is the check that decides whether the
+ * ledger may say a conversation was answered. A few short attempts, because
+ * publication is not always instantaneous.
+ */
+export async function moltbookCommentVisible(postId: string, commentId: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await call(`/posts/${postId}/comments?sort=new&limit=100`);
+      const list = (r.json?.comments ?? []) as { id?: string; is_spam?: boolean }[];
+      const hit = list.find((c) => c.id === commentId);
+      if (hit) return hit.is_spam !== true;
+    } catch {
+      /* a failed read is not a proof of anything; try again */
+    }
+    await new Promise((res) => setTimeout(res, 1500));
+  }
+  return false;
 }
 
 export type MoltbookPublish =
@@ -179,10 +217,13 @@ export async function publishToMoltbook(input: {
       body: { verification_code: post.verification.verification_code, answer },
     });
     if (verified.json?.success === true) return { ok: true, postId: id };
+    // The challenge and the answer we gave are carried in the error: a wrong
+    // guess is only diagnosable from what was actually asked, and Moltbook does
+    // not repeat a challenge.
     return {
       ok: false,
       postId: id,
-      error: `verify failed: ${String(verified.json?.message ?? verified.text).slice(0, 200)}`,
+      error: `verify failed: ${String(verified.json?.message ?? verified.text).slice(0, 120)} | challenge="${challenge}" | answer=${answer}`,
       retryable: false,
     };
   }
@@ -219,12 +260,25 @@ export async function publishComment(input: {
   const container = (created.json.comment ?? created.json.post ?? {}) as {
     id?: string;
     verification_status?: string;
+    is_spam?: boolean;
     verification?: { verification_code?: string; challenge_text?: string };
   };
   const id = container.id ?? ((created.json.comment_id as string | undefined) ?? null);
   const verification =
     (created.json.verification as { verification_code?: string; challenge_text?: string } | undefined) ??
     container.verification;
+
+  // Moltbook's moderation can mark a reply `is_spam` and drop it from the feed
+  // while still answering 201 — a comment that was never seen. Reporting success
+  // for it would put a lie in the ledger, so it is a failure with a reason.
+  if (container.is_spam === true) {
+    return {
+      ok: false,
+      postId: id,
+      error: "Moltbook moderation flagged the comment as spam",
+      retryable: false,
+    };
+  }
 
   if (verification?.verification_code) {
     const challenge = verification.challenge_text ?? "";
@@ -237,14 +291,22 @@ export async function publishComment(input: {
       body: { verification_code: verification.verification_code, answer },
     });
     if (verified.json?.success === true) return { ok: true, postId: id };
+    // The challenge and the answer we gave are carried in the error: a wrong
+    // guess is only diagnosable from what was actually asked, and Moltbook does
+    // not repeat a challenge.
     return {
       ok: false,
       postId: id,
-      error: `verify failed: ${String(verified.json?.message ?? verified.text).slice(0, 200)}`,
+      error: `verify failed: ${String(verified.json?.message ?? verified.text).slice(0, 120)} | challenge="${challenge}" | answer=${answer}`,
       retryable: false,
     };
   }
 
+  // A comment can also come back pending with no challenge parsed, which would
+  // never appear. That is recorded as what it is rather than as a success.
+  if (container.verification_status === "pending" && !verification?.verification_code) {
+    return { ok: false, postId: id, error: "comment came back pending with no challenge", retryable: false };
+  }
   return { ok: true, postId: id };
 }
 

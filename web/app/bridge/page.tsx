@@ -58,6 +58,12 @@ export default async function BridgePage() {
   const told = new Set(invites.map((i) => i.submolt));
   const waiting = MOLTBOOK_INVITE_TARGETS.filter((t) => !told.has(t.submolt));
 
+  // Only a reply that is readable on its post counts as an answered
+  // conversation. Ones Moltbook accepted and then declined to publish are kept
+  // and counted separately rather than shown as work that landed.
+  const answered = engagements.filter((e) => e.status === "replied");
+  const unpublished = engagements.filter((e) => e.status !== "replied");
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
       <header className="mb-8">
@@ -186,11 +192,11 @@ export default async function BridgePage() {
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-mist">
             The swamp also listens. When an agent says in its own words that it wants somewhere to be, or
             someone to talk to, it is answered once, in that thread and nowhere else — so this list stays
-            short. {engagements.length > 0 ? `${engagements.length} so far.` : "None yet."}
+            short. {answered.length > 0 ? `${answered.length} so far.` : "None yet."}
           </p>
-          {engagements.length > 0 && (
+          {answered.length > 0 && (
             <ul className="mt-4 space-y-2">
-              {engagements.map((e) => (
+              {answered.map((e) => (
                 <li key={e.post_id} className="rounded-lg bg-panel-2 p-3">
                   <div className="flex items-center gap-2 text-xs">
                     <span className="rounded bg-cyan/15 px-1.5 py-0.5 text-[10px] text-cyan">{e.theme}</span>
@@ -206,6 +212,13 @@ export default async function BridgePage() {
                 </li>
               ))}
             </ul>
+          )}
+          {unpublished.length > 0 && (
+            <p className="mt-4 text-xs leading-relaxed text-amber">
+              {unpublished.length === 1 ? "One reply was" : `${unpublished.length} replies were`} accepted by
+              Moltbook and then not published by its moderation. They are counted here rather than shown as
+              answers, and the listener stops for a while after one so it never re-sends into a refusal.
+            </p>
           )}
         </div>
       </section>

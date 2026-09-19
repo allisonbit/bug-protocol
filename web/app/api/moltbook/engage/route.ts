@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { beatAuthorized } from "@/lib/beat";
-import { SITE_URL } from "@/lib/site";
 import {
+  MOLTBOOK_ENGAGE_BACKOFF_MINUTES,
   MOLTBOOK_ENGAGE_MIN_INTERVAL_MINUTES,
+  moltbookCommentVisible,
   moltbookConfigured,
   moltbookSearch,
   moltbookStatus,
@@ -80,10 +81,10 @@ export async function GET(req: Request) {
   // 1. What has already been answered, and when — both read from the one ledger.
   const { data: rows } = await sb
     .from("moltbook_engagements")
-    .select("post_id, created_at")
+    .select("post_id, created_at, status")
     .order("created_at", { ascending: false })
     .limit(1000);
-  const ledger = (rows as { post_id: string; created_at: string }[] | null) ?? [];
+  const ledger = (rows as { post_id: string; created_at: string; status: string }[] | null) ?? [];
   const engaged = new Set(ledger.map((r) => r.post_id));
   const lastAt = ledger[0]?.created_at ?? null;
 
@@ -118,7 +119,9 @@ export async function GET(req: Request) {
   }
 
   const pick = scored[0];
-  const content = composeReply(pick.post, pick.match, SITE_URL);
+  // The reply names the swamp's own handle rather than linking out: a comment
+  // full of URLs is what Moltbook's moderation reads as spam.
+  const content = composeReply(pick.post, pick.match, self ?? "swampprotocol");
   const postUrl = pick.post.url ? `https://www.moltbook.com${pick.post.url}` : null;
 
   if (dry) {
@@ -134,6 +137,23 @@ export async function GET(req: Request) {
       content,
       alsoFound: scored.length - 1,
     });
+  }
+
+  // 3b. If the last reply was not published, stop. Trying another post would
+  //     only repeat the rejection, and repeated rejections risk a spam flag that
+  //     ends the bridge; so a rejection buys silence.
+  const last = ledger[0];
+  if (last?.status === "failed" && !force) {
+    const sinceMin = (Date.now() - Date.parse(last.created_at)) / 60_000;
+    if (sinceMin < MOLTBOOK_ENGAGE_BACKOFF_MINUTES) {
+      return NextResponse.json({
+        ok: true,
+        skipped: "backing-off",
+        reason: "the last reply was accepted but not published by Moltbook moderation",
+        minutesRemaining: Math.ceil(MOLTBOOK_ENGAGE_BACKOFF_MINUTES - sinceMin),
+        wouldReply: { postId: pick.post.id, title: pick.post.title, theme: pick.match.theme.key },
+      });
+    }
   }
 
   // 4. Only a claimed Moltbook agent may write a comment.
@@ -163,8 +183,17 @@ export async function GET(req: Request) {
 
   const result = await publishComment({ postId: pick.post.id, content });
 
-  // 6. Record the conversation the moment a comment row exists, success or not,
-  //    so the same post is never answered twice.
+  // 6. Prove it landed before claiming it did. Moltbook moderates AFTER the
+  //    create, so an accepted reply can be flagged spam and never appear; the
+  //    only honest proof is finding it readable on the post. A reply that is not
+  //    readable is recorded as failed, and the post is still marked answered so
+  //    it is never spammed with a second attempt.
+  let published = false;
+  if (result.ok && result.postId) {
+    published = await moltbookCommentVisible(pick.post.id, result.postId);
+  }
+
+  const ledgerStatus = published ? "replied" : "failed";
   if (result.postId !== null || result.ok) {
     await sb.from("moltbook_engagements").insert({
       post_id: pick.post.id,
@@ -175,13 +204,25 @@ export async function GET(req: Request) {
       theme: pick.match.theme.key,
       comment: content,
       moltbook_comment_id: result.postId,
-      status: result.ok ? "replied" : "failed",
+      status: ledgerStatus,
     });
   }
 
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, postId: pick.post.id, theme: pick.match.theme.key, error: result.error, retryable: result.retryable },
+      { status: 200 },
+    );
+  }
+  if (!published) {
+    return NextResponse.json(
+      {
+        ok: false,
+        postId: pick.post.id,
+        theme: pick.match.theme.key,
+        error: "accepted but not readable on the post — Moltbook moderation did not publish it",
+        retryable: false,
+      },
       { status: 200 },
     );
   }
