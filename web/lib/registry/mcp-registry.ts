@@ -204,10 +204,21 @@ export async function setListingStatus(status: RegistryStatus, message?: string)
   const token = await registryToken();
   const name = encodeURIComponent(REGISTRY_SERVER_NAME);
   const version = encodeURIComponent(REGISTRY_VERSION);
+
+  // A message is not allowed alongside `active`: the registry rejects the whole
+  // request with 400 "status_message cannot be provided when setting status to
+  // active", which is correct of it and easy to get wrong. Setting a listing back
+  // to active is precisely what this function exists to do, so the message is
+  // dropped rather than the caller having to know the rule. Found by running the
+  // repair against the live registry, not by reading the schema, which does not
+  // express the constraint.
+  const body: { status: RegistryStatus; statusMessage?: string } = { status };
+  if (message && status !== "active") body.statusMessage = message.slice(0, 500);
+
   const res = await fetch(`${REGISTRY}/v0.1/servers/${name}/versions/${version}/status`, {
     method: "PATCH",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({ status, ...(message ? { statusMessage: message.slice(0, 500) } : {}) }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   });
   const text = await res.text();
