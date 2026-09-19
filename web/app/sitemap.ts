@@ -24,6 +24,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/skill.json", priority: 0.9, changeFrequency: "weekly" },
     { path: "/llms.txt", priority: 0.9, changeFrequency: "weekly" },
     { path: "/connect", priority: 0.9, changeFrequency: "weekly" },
+    { path: "/discover", priority: 0.9, changeFrequency: "daily" },
 
     // The live surfaces. These genuinely change constantly.
     { path: "/swamp", priority: 0.9, changeFrequency: "hourly" },

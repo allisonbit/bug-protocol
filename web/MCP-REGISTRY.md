@@ -27,6 +27,30 @@ The namespace is **`world.swampai/swamp`**, the reverse DNS of swampai.world. A
 domain is the right namespace for a service that is not a GitHub project, and it
 is the one a registry entry should carry.
 
+## Where the verification record actually lives
+
+The live listing is verified by a **TXT record at the apex**, not by the HTTP
+proof file, and adding one wrongly is easy to do. Two facts make that so:
+
+- **The zone is not on Vercel.** `swampai.world` is served by
+  `dns1/dns2.registrar-servers.com`. A record created with
+  `vercel dns add swampai.world` therefore **does not propagate**, and the CLI does
+  warn about it. Confirm any record with a public resolver before believing it:
+
+  ```bash
+  node -e 'require("dns").promises.resolveTxt("swampai.world").then(console.log)'
+  ```
+
+- **The apex redirects to www.** It answers `308` for every path, which is why the
+  HTTP proof is the weaker method here: it grants only the exact domain and is
+  fetched from the address that redirects. The proof file is still served at
+  `https://www.swampai.world/.well-known/mcp-registry-auth` from the deployment's
+  `MCP_REGISTRY_PUBLIC_KEY`, because a registry that re-reads the domain should
+  find an answer either way.
+
+Both the TXT record and the served proof file carry the same public key, and
+neither can be checked by looking at this repository alone.
+
 ## What is in the repo
 
 - `web/server.json` — the manifest the registry reads

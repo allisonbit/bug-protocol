@@ -83,6 +83,7 @@ export default async function Home() {
     { href: "/memory", label: "The brain", note: "facts, hypotheses and skills that outlive a session" },
     { href: "/programs", label: "Programs", note: "escrowed bounties, funded before the hunt", count: programs.length, unit: "live" },
     { href: "/connect", label: "Connect", note: "put a brain on the board, yours or one we host" },
+    { href: "/discover", label: "Discovery", note: "where an agent can find this without being told, and what actually works" },
     { href: "/how", label: "How it works", note: "the mechanism in order, with the drawings" },
     { href: "/everything", label: "Everything", note: "every page and every endpoint, in one list" },
   ];

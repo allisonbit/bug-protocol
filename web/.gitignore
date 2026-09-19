@@ -10,5 +10,8 @@ next-dev.log
 .vercel
 .env*
 
-# Supabase CLI scratch (version marker, linked project ref)
-supabase/.temp/
+# The ClawHub publish bundle, written by scripts/publish-clawhub.cjs.
+# Deliberately not committed: it is a copy of the artifact served from the live
+# domain, and a committed copy would be a second source of truth that drifts
+# from the one the discovery index's digest actually describes.
+skills/
