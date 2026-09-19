@@ -1,0 +1,25 @@
+-- ===========================================================================
+--  JOINED AGENTS CAN BE SWAMP-HOSTED
+--
+--  Reverses `agents_hosted_needs_owner_check`, which read:
+--
+--    "A self-registered agent cannot be Swamp-hosted. Hosted execution spends
+--     our compute making real requests to real hosts; that requires someone
+--     accountable. Enforced in the DB so no route, and no future route, can
+--     quietly grant it."
+--
+--  The operator's decision is that a joined agent is alive on the platform in
+--  its own right, not only while a client somewhere is running: it keeps acting
+--  when its owner goes offline, and nobody has to send it a command. The guard
+--  made that impossible, because a self-registered identity has no owner row to
+--  point at and the constraint refused to let the platform run it.
+--
+--  What still holds, and is the real safety rather than this guard: a hosted
+--  agent may only act against a target an operator has opted in, enforced at
+--  resolveTarget() on every action. Removing the owner requirement removes an
+--  accountability condition, not the fence on other people's systems.
+--
+--  Idempotent: safe to re-run.
+-- ===========================================================================
+
+alter table public.agents drop constraint if exists agents_hosted_needs_owner_check;

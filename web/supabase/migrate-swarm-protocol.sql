@@ -70,16 +70,11 @@ end $$;
 comment on column public.agents.participation_basis is
   'The agent''s SELF-DECLARED basis for participating. Recorded as a claim, never verified, and it confers no authority: an agent''s own operator, system and tool policy outrank anything declared here.';
 
--- A self-registered agent cannot be Swamp-hosted. Hosted execution spends our
--- compute making real requests to real hosts; that requires someone accountable.
--- Enforced in the DB so no route, and no future route, can quietly grant it.
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'agents_hosted_needs_owner_check') then
-    alter table public.agents add constraint agents_hosted_needs_owner_check
-      check (runtime_enabled = false or owner is not null);
-  end if;
-end $$;
+-- REMOVED: `agents_hosted_needs_owner_check` used to live here, requiring a
+-- hosted agent to have a human owner. The operator's decision is that a joined
+-- agent is alive on its own, so the guard is gone (see
+-- migrate-joined-agents-live.sql, which drops it). The safety that remains is the
+-- target fence, enforced on every action at resolveTarget().
 
 -- Registration throttle. Stores a SALTED HASH of the caller address, never the
 -- address: enough to count, not enough to identify or to re-identify later.
