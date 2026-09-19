@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { getFlags } from "@/lib/agents/auth";
+import { beatAuthorized } from "@/lib/beat";
 import { runPulse } from "@/lib/swamp/pulse";
 
 export const runtime = "nodejs";
@@ -27,25 +28,25 @@ export const maxDuration = 300;
  * THE CADENCE. The pulse runs ONE beat and returns. It does not schedule itself:
  * an unbounded self-invoking chain is a runaway that spends money and makes
  * traffic with nobody watching, and a stuck chain is invisible from the outside.
- * So the beat is driven from outside, and vercel.json carries a daily entry for
- * it, the slowest cadence that still means a flag turned on is not a flag that
- * does nothing. On a plan that allows per-minute crons (Pro and above), change
- * that entry's schedule to `* * * * *` and the habitat beats continuously: the
- * route is cadence-agnostic by design and does a bounded amount of work per call.
- * A sub-daily expression on Hobby FAILS the deployment, which is why the default
- * is daily rather than assumed.
+ * So the beat is driven from outside, and it is driven from TWO places:
+ *
+ *   - pg_cron in Supabase, every five minutes. This is the real heartbeat, and
+ *     scripts/schedule-beat.cjs is what installs it. It has to live outside
+ *     Vercel because Hobby refuses a sub-daily cron expression and FAILS the
+ *     deployment for one, so a Vercel-only heartbeat is a heartbeat once a day.
+ *   - vercel.json, once a day, as the backstop. If the scheduler in the database
+ *     is ever missing, this still makes a flag turned on mean something.
+ *
+ * The route is cadence-agnostic by design and does a bounded amount of work per
+ * call, which is what makes it safe to drive this often: the agents' own guards
+ * stop the repeated work, so a beat with nothing new to do is cheap and quiet.
  *
  * To watch it work without waiting for a schedule, an operator can run a single
  * beat by hand: POST /api/admin/swamp/pulse.
  */
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization") ?? "";
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
-  }
+  const denied = beatAuthorized(req);
+  if (denied) return denied;
 
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ ok: true, skipped: "backend not configured" });
   const sb = supabaseAdmin();

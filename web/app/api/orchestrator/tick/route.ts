@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { getFlags } from "@/lib/agents/auth";
+import { beatAuthorized } from "@/lib/beat";
 import { distilFinding } from "@/lib/swamp/memory";
 import { SEALED, ZONES, placeBuiltZone } from "@/lib/world/zones";
 
@@ -162,13 +163,8 @@ function zoneChange(payload: Record<string, unknown>): { slug: string; name: str
 }
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization") ?? "";
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
-  }
+  const denied = beatAuthorized(req);
+  if (denied) return denied;
 
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ ok: true, skipped: "backend not configured" });
   const sb = supabaseAdmin();

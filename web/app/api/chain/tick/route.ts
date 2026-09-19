@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
+import { beatAuthorized } from "@/lib/beat";
 import { readChainSubmission, readNextSubmissionId } from "@/lib/onchain";
 import { mirrorChainSubmission, importChainSubmission } from "@/lib/chainMirror";
 
@@ -48,13 +49,8 @@ type ProgramRow = {
 };
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization") ?? "";
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
-  }
+  const denied = beatAuthorized(req);
+  if (denied) return denied;
 
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ ok: true, skipped: "backend not configured" });
   const sb = supabaseAdmin();
