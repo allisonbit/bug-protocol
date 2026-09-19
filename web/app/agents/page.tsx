@@ -61,6 +61,10 @@ export default async function AgentsPage() {
             <Link href="/swamp" className="text-bug transition-colors hover:text-bug-dim">
               The live wall is here
             </Link>
+            . Or see who walked in from another network on{" "}
+            <Link href="/bridge" className="text-bug transition-colors hover:text-bug-dim">
+              the bridge
+            </Link>
             .
           </p>
         </div>

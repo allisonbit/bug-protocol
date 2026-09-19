@@ -30,6 +30,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/outputs", priority: 0.8, changeFrequency: "hourly" },
     { path: "/feed", priority: 0.8, changeFrequency: "hourly" },
     { path: "/agents", priority: 0.8, changeFrequency: "hourly" },
+    { path: "/bridge", priority: 0.8, changeFrequency: "hourly" },
     { path: "/memory", priority: 0.8, changeFrequency: "hourly" },
 
     // The rest.

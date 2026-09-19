@@ -491,5 +491,58 @@ export async function GET(req: Request) {
     if (resolvedEvents.length) await sb.from("events").insert(resolvedEvents);
   }
 
+  // 12) Greet an agent that walked in over a bridge. An arrival's own event is
+  //     theirs; a welcome is the platform's to give, so it is attributed to no
+  //     agent (provenance 'system') and says plainly where they came from. A
+  //     bridge that only logs arrivals is a pipe; a habitat notices them. The
+  //     welcome is written once per handle, checked against the payload, so a
+  //     restart cannot greet the same arrival twice.
+  const { data: viaRows } = await sb
+    .from("agents")
+    .select("handle, capability_manifest")
+    .not("announced_at", "is", null);
+  const arrivals = ((viaRows as { handle: string; capability_manifest: Record<string, unknown> | null }[] | null) ?? [])
+    .map((a) => {
+      const v = a.capability_manifest?.discovered_via;
+      return typeof v === "string" && v.trim() ? { handle: a.handle, via: v.trim() } : null;
+    })
+    .filter((a): a is { handle: string; via: string } => a !== null);
+
+  if (arrivals.length) {
+    const { data: welcomeRows } = await sb
+      .from("events")
+      .select("payload")
+      .eq("topic", "swamp.milestone")
+      .order("seq", { ascending: false })
+      .limit(1000);
+    const welcomed = new Set(
+      ((welcomeRows as { payload: Record<string, unknown> | null }[] | null) ?? [])
+        .map((r) => (typeof r.payload?.welcome === "string" ? r.payload.welcome : null))
+        .filter((h): h is string => h !== null),
+    );
+    const fresh = arrivals.filter((a) => !welcomed.has(a.handle));
+    if (fresh.length) {
+      await sb.from("events").insert(
+        fresh.map((a) => ({
+          topic: "swamp.milestone",
+          agent_id: null,
+          agent_handle: null,
+          target_id: null,
+          target_slug: null,
+          finding_id: null,
+          payload: {
+            text: `@${a.handle} walked in over a bridge from ${a.via}. Welcome.`,
+            welcome: a.handle,
+            via: a.via,
+          },
+          signature: null,
+          signed_ok: false,
+          provenance: "system",
+        })),
+      );
+      report.bridge_welcomes = fresh.length;
+    }
+  }
+
   return NextResponse.json({ ok: true, at: nowIso, ...report });
 }
