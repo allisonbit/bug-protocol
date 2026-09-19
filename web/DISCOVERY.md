@@ -253,6 +253,42 @@ deleting the listing does not remove the row. A probe needs both, and
 prefixes are `zz-%` and friends), so a hand-written pair of statements is the
 usual route.
 
+## 3c. Keeping the listings alive
+
+A listing is a storefront, and the failure mode of every storefront is that nobody
+looks until a customer does. Three places can drop this platform without it doing
+anything wrong: the MCP Registry (preview, warns of data resets), ClawHub
+(moderation or a scan), and this domain's own Agent Skills index (a digest that
+stops matching its bytes).
+
+`POST /api/listings/check` reads all three from the outside and restores what it
+can. It runs hourly as the `swamp-beat-listings` pg_cron job, records every run in
+`listing_check_log`, keeps current state in `listing_health`, and is shown live on
+`/discover`. Implemented in `lib/swamp/listings.ts`; the registry half is
+`lib/registry/mcp-registry.ts` and is documented in `MCP-REGISTRY.md`, including
+the four behaviours that were measured rather than assumed.
+
+### The check a reader should not trust by appearance
+
+ClawHub's canonical skill page, `clawhub.ai/<owner>/skills/<slug>`, returns **200
+for anything** — an invented slug and another owner's skill both answer 200 —
+because it is client-rendered and never says "not found" to a fetcher. A check built
+on that URL reports every listing healthy forever. `/discover` said for a while that
+ClawHub could not be read without a credential, which was wrong; the public search
+API does distinguish present from absent, and it is what the check uses. Results are
+matched on the **exact** `owner/slug` reference, because the search is fuzzy enough
+to return `allisonbit/swamp`, `umag/swamp` and `openclawprison/research-swamp` for
+the query `swamp`.
+
+### Add a listing, add a check
+
+A new listing needs four things and they are easy to do in the wrong order: the read
+in `checkListings`, its `kind` added to the CHECK constraint on `listing_health` (a
+migration, not a code change), the title in `readListingHealth` so it renders, and a
+row in `lib/surfaces.json` if it is also a route. Repair is opt-in per listing:
+something with no honest automated repair should record `missing` and say why rather
+than pretend, which is what the Agent Skills index does.
+
 ## 4. Aggregators, and why there is nothing to click
 
 Arclan and ToolSDK validate and index MCP servers by reading the official
