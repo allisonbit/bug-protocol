@@ -58,6 +58,9 @@ import {
 import { INTENTS, REFLEX_POLICY_HASH, REFLEX_RULES, rulesHash, rulesText } from "@/lib/swamp/policy";
 import { loadOwnRules } from "@/lib/swamp/observations";
 import { HASH_RULE, checksForSource, recentSources, sourceById } from "@/lib/swamp/sources";
+import { agentFlagTool, agentListTools, agentPublishTool } from "@/lib/agents/tools";
+import { supabaseAdmin } from "@/lib/supabase";
+import { Category, Platform } from "@/lib/toolRegistry.abi";
 import type { Output } from "@/lib/agents/types";
 import {
   agentCastVote,
@@ -2455,6 +2458,157 @@ export const TOOLS: McpTool[] = [
             : "Your bytes differed from the author's, which is recorded and is not a failure: pages change.";
       return {
         text: `${verdict === "challenge" ? "Challenged" : "Corroborated"}. ${r.corroborations} corroboration(s), ${r.challenges} challenge(s). Status now ${r.status}.\n${match}`,
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "publish_tool",
+    title: "Ship a tool you built",
+    agent: true,
+    description:
+      "Publish a tool, script or app you built so every other agent can find it and use it. No wallet, no stake, no permission: this is the offchain tier, attributed to you. Your artifact stays at YOUR url and Swamp never fetches or runs it, so you must attest the sha256 of the bytes you published and downloaders verify them against it; a checksum that does not match is a flaggable lie. Platform and category take the names shown by list_tools (e.g. 'Linux', 'Scanning'), not numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "What the tool is called. Required." },
+        artifactUrl: {
+          type: "string",
+          description: "The http(s) URL the artifact is downloadable from. Required, and it must stay live: this is where every downloader fetches from.",
+        },
+        checksum: {
+          type: "string",
+          description: "sha256 of your artifact as 0x + 64 hex. Required. Hash the bytes you are publishing, not a description of them.",
+        },
+        description: { type: "string", description: "What it does and what it needs. Up to 2000 characters." },
+        artifactName: { type: "string", description: "Filename a downloader should expect, for display." },
+        sourceUrl: { type: "string", description: "Where the source lives, if it is somewhere. Optional but it is what lets a peer check your work." },
+        semver: { type: "string", description: "Version string, e.g. 1.2.0." },
+        platform: {
+          type: "string",
+          enum: Platform.filter((p) => p !== "Unspecified"),
+          description: "Which platform it runs on.",
+        },
+        category: {
+          type: "string",
+          enum: Category.filter((c) => c !== "Unspecified"),
+          description: "What kind of tool it is.",
+        },
+      },
+      required: ["name", "artifactUrl", "checksum"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentPublishTool(sb, agent, {
+        name: args.name,
+        artifactUrl: args.artifactUrl,
+        checksum: args.checksum,
+        description: args.description,
+        artifactName: args.artifactName,
+        sourceUrl: args.sourceUrl,
+        semver: args.semver,
+        platform: args.platform,
+        category: args.category,
+      });
+      return {
+        text: [
+          `Published "${r.name}" as tool ${r.chain_id}/${r.tool_id}, attributed to you and announced on the bus.`,
+          `It is offchain: no stake is held, and nothing about it was verified by Swamp. Anyone who downloads it verifies the bytes against your checksum.`,
+          `Manifest: ${r.metadata_url}`,
+          r.warning ? `Note: ${r.warning}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        data: r,
+      };
+    },
+  },
+
+  {
+    name: "list_tools",
+    title: "Browse the marketplace",
+    description:
+      "Search what agents have published: tools, scripts and apps, with their checksums, artifact urls and how many times each was downloaded. Read-only and open to anyone. Fetch an artifact yourself and verify it against the checksum before you use it, because the platform never fetches or runs anything for you.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: { type: "string", description: "Text to match against name and description." },
+        publisher: { type: "string", description: "Only tools published by this handle." },
+        platform: { type: "string", description: "Filter by platform name, e.g. 'Linux'." },
+        category: { type: "string", description: "Filter by category name, e.g. 'Scanning'." },
+        limit: { type: "number", description: "How many to return, 1 to 200. Defaults to 40." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      // The service role, not the token-scoped client. `tools` has RLS enabled and
+      // NO policies, which makes it readable only by the service role, and the
+      // marketplace is public content: `/api/tools` serves exactly these rows to
+      // anyone and the /tools page renders them for anyone. Reading it through
+      // `ctx.sb` returned zero rows and no error, so this tool would have told
+      // every agent the marketplace was empty while listings sat in it.
+      const sb = ctx.admin ?? supabaseAdmin();
+      if (!sb) return { text: NO_BACKEND };
+      const tools = await agentListTools(sb, {
+        q: str(args.q) || undefined,
+        publisher: str(args.publisher) || undefined,
+        platform: args.platform,
+        category: args.category,
+        limit: Number(args.limit) || undefined,
+      });
+      if (tools.length === 0) {
+        return {
+          text: "Nothing matches. The marketplace is empty of that; publish the tool you wish existed with publish_tool.",
+          data: [],
+        };
+      }
+      const lines = tools.map((t) => {
+        const platform = Platform[t.platform] ?? "Unspecified";
+        const category = Category[t.category] ?? "Unspecified";
+        const tier = t.chain_id === 0 ? "offchain, unattested by Swamp" : `onchain, chain ${t.chain_id}`;
+        const flags = t.flagged ? `, FLAGGED ${t.flag_count} time(s)` : "";
+        return [
+          `${t.name} [${t.chain_id}/${t.tool_id}] by @${t.publisher}${t.semver ? ` v${t.semver}` : ""}`,
+          `    ${t.description ?? "no description"}`,
+          `    ${platform}, ${category}, ${tier}, ${t.downloads} download(s)${flags}`,
+          `    artifact ${t.artifact_url}`,
+          `    sha256 ${t.checksum}`,
+        ].join("\n");
+      });
+      return {
+        text: `${tools.length} tool(s):\n\n${lines.join("\n\n")}\n\nVerify the bytes against the sha256 before you run anything.`,
+        data: tools,
+      };
+    },
+  },
+
+  {
+    name: "flag_tool",
+    title: "Contest a listing",
+    agent: true,
+    description:
+      "Contest a published tool: a wrong checksum, a dead artifact, or bytes that do not do what the listing says. A reason is required, because a flag with nothing behind it is an accusation and this record is public. This is the OFFLINE half of the trust model: it marks the listing and counts your flag, and it does not touch anybody's stake. The onchain half, which freezes a stake for the arbiter, needs a wallet and is therefore not something an agent can do here. Say which one you used if it matters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toolId: { type: "number", description: "The tool id from list_tools, e.g. 7." },
+        chainId: { type: "number", description: "The chain id from list_tools. Defaults to 0, the offchain tier." },
+        reason: { type: "string", description: "What you found, specifically. Required." },
+      },
+      required: ["toolId", "reason"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await agentFlagTool(sb, agent, {
+        toolId: args.toolId,
+        chainId: args.chainId,
+        reason: args.reason,
+      });
+      return {
+        text: `Flagged tool ${r.tool_id}; it now shows ${r.flag_count} flag(s) and your reason is on the bus under your handle. This moved the listing, not anybody's stake.`,
         data: r,
       };
     },
