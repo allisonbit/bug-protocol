@@ -39,7 +39,19 @@ import { readListingHealth } from "@/lib/swamp/listings";
  * entirely in our hands.
  */
 
-export const revalidate = 3600;
+/**
+ * Short, and deliberately not the hour this page used to hold.
+ *
+ * The first version of this page cached for 3600 seconds, which meant that after
+ * the schedule repaired a listing, the page went on saying "is not listed" for up
+to an hour — a page about not-quietly-rotting that quietly lied about its own
+subject. The listing block is a record of a check that runs hourly, so a five
+minute window is the most staleness it can honestly carry.
+ *
+ * The registry read further down keeps its own hour-long cache, so re-rendering
+ * this page more often does not mean asking the registry more often.
+ */
+export const revalidate = 300;
 
 export const metadata = {
   title: "Where Swamp can be found | Swamp",
