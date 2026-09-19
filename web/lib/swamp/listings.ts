@@ -212,12 +212,21 @@ async function checkMcpRegistry(): Promise<Finding> {
     return {
       ...base,
       state: "missing",
-      detail: `${REGISTRY_SERVER_NAME} v${l.version} is listed as "${l.status}", which browsing clients do not see.`,
+      detail: `${REGISTRY_SERVER_NAME} v${l.version} is listed as "${l.status}", which browsing clients do not see (read from the ${read.source} endpoint).`,
       version: null,
       hint: "status-inactive",
     };
   }
-  return { ...base, state: "present", detail: `active, version ${l.version}`, version: l.version, hint: null };
+  return {
+    ...base,
+    state: "present",
+    // The source is named because the registry's search index is eventually
+    // consistent and the per-version read is not: which one answered decides how
+    // much confidence the sentence deserves.
+    detail: `active, version ${l.version} (read from the ${read.source} endpoint)`,
+    version: l.version,
+    hint: null,
+  };
 }
 
 async function checkClawHub(
@@ -450,7 +459,7 @@ export async function checkListings(sb: SupabaseClient, options: { repair?: bool
           if (after.ok && after.listing?.status === "active") {
             state = "present";
             version = after.listing.version;
-            detail = `repaired: ${repairDetail}`;
+            detail = `repaired: ${repairDetail} (confirmed by the registry's ${after.source} endpoint)`;
           } else {
             repairDetail = `${repairDetail}; but the registry still reads as ${after.ok ? (after.listing ? after.listing.status : "absent") : "unreadable"}`;
           }

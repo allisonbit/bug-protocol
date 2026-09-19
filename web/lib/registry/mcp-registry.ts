@@ -142,11 +142,62 @@ export function apexDomain(): string {
   return process.env.SWAMP_APEX_DOMAIN || "swampai.world";
 }
 
-/** Does the listing exist, and in what state? Never throws: a check reports. */
+/**
+ * Does the listing exist, and in what state? Never throws: a check reports.
+ *
+ * IT READS THE VERSION DIRECTLY, AND THAT IS NOT A STYLE CHOICE.
+ *
+ * The obvious read is the search endpoint, and it is the wrong one. Its index is
+ * **eventually consistent**, which was measured rather than suspected: after this
+ * deployed code set a listing back to `active`, the per-version endpoint reported
+ * `active` with a `statusChangedAt` matching the write, while the search endpoint
+ * went on answering `deprecated` for at least the next minute, and at an earlier
+ * point answered `active` for a listing that had been `deprecated` the whole time.
+ *
+ * Both directions of that staleness are harmful to a reconciler. A stale `missing`
+ * makes the hourly job attempt a repair that the registry refuses with "no changes
+ * to apply", filling the log with failures for a listing that was never down — the
+ * kind of permanent false alarm that gets a monitor ignored. A stale `present`
+ * hides a real outage until the next hour.
+ *
+ * So the per-version read is the primary source and the search is the fallback,
+ * used only when the version read cannot answer. Which source spoke is returned,
+ * because "how do we know" is part of the answer.
+ */
 export async function readListing(): Promise<
-  { ok: true; listing: RegistryListing | null } | { ok: false; error: string }
+  { ok: true; listing: RegistryListing | null; source: "version" | "search" } | { ok: false; error: string }
 > {
+  const fromMeta = (
+    meta: { status?: string; updatedAt?: string; statusChangedAt?: string } | undefined,
+    version: string | undefined,
+    source: "version" | "search",
+  ) => ({
+    ok: true as const,
+    source,
+    listing: {
+      name: REGISTRY_SERVER_NAME,
+      version: String(version ?? REGISTRY_VERSION),
+      status: (meta?.status as RegistryStatus) ?? "unknown",
+      updatedAt: meta?.statusChangedAt ?? meta?.updatedAt ?? null,
+    },
+  });
+
   try {
+    // The authoritative read: one server, one version, the status as recorded.
+    const direct = await fetch(
+      `${REGISTRY}/v0.1/servers/${encodeURIComponent(REGISTRY_SERVER_NAME)}/versions/${encodeURIComponent(REGISTRY_VERSION)}`,
+      { headers: { accept: "application/json" }, signal: AbortSignal.timeout(20000), cache: "no-store" },
+    );
+    if (direct.ok) {
+      const body = (await direct.json()) as {
+        server?: { version?: string };
+        _meta?: Record<string, { status?: string; updatedAt?: string; statusChangedAt?: string }>;
+      };
+      return fromMeta(body._meta?.["io.modelcontextprotocol.registry/official"], body.server?.version, "version");
+    }
+
+    // Fallback. Absence here is meaningful: a version this deployment claims that
+    // the registry has never heard of is exactly the case a republish repairs.
     const res = await fetch(`${REGISTRY}/v0.1/servers?search=${encodeURIComponent(REGISTRY_SERVER_NAME)}`, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(20000),
@@ -157,17 +208,8 @@ export async function readListing(): Promise<
       servers?: { server?: { name?: string; version?: string }; _meta?: Record<string, { status?: string; updatedAt?: string }> }[];
     };
     const hit = (body.servers ?? []).find((s) => s.server?.name === REGISTRY_SERVER_NAME);
-    if (!hit) return { ok: true, listing: null };
-    const meta = hit._meta?.["io.modelcontextprotocol.registry/official"] ?? {};
-    return {
-      ok: true,
-      listing: {
-        name: String(hit.server?.name),
-        version: String(hit.server?.version ?? REGISTRY_VERSION),
-        status: (meta.status as RegistryStatus) ?? "unknown",
-        updatedAt: meta.updatedAt ?? null,
-      },
-    };
+    if (!hit) return { ok: true, listing: null, source: "search" };
+    return fromMeta(hit._meta?.["io.modelcontextprotocol.registry/official"], hit.server?.version, "search");
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
