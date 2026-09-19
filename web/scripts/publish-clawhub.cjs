@@ -26,8 +26,8 @@
  *   node scripts/publish-clawhub.cjs --publish          # build it, then upload
  *   CLAWHUB_TOKEN=<token> node scripts/publish-clawhub.cjs --publish
  *
- * The CLI is used from PATH when present and via `npx clawhub@latest` otherwise,
- * so publishing needs no global install.
+ * The CLI comes from PATH (or CLAWHUB_BIN), and the script says so plainly when it
+ * is missing rather than trying to conjure one.
  *
  * The bundle it writes is a real directory, so it can also be published by hand
  * or committed if ClawHub ever wants it in the repository.
@@ -90,7 +90,7 @@ async function main() {
   if (!shouldPublish) {
     console.log("\nbundle only. To upload, log in first:\n");
     console.log("  clawhub login            # or: clawhub login --device, on a machine with no browser");
-    console.log("  node scripts/publish-clawhub.cjs --publish\n");
+    console.log("  node scripts/publish-clawhub.cjs --publish [--dry-run]\n");
     return;
   }
 
@@ -98,20 +98,38 @@ async function main() {
   // `npx` is the fallback so that nothing has to be installed to publish: the
   // package is public, and a global install is a side effect on somebody else's
   // machine that this task does not need.
-  let [cli, cliArgs] = ["clawhub", []];
+  // On Windows a Node script cannot exec `npx` or `clawhub` directly: those are
+  // `.cmd` shims and only the shell resolves them. Naming the shim is the fix,
+  // and getting it wrong here is not a harmless miss: the failure surfaces as
+  // "not logged in" when the session is perfectly valid, which sends the
+  // operator to re-authenticate against a problem that is not there.
+  /**
+   * The CLI is taken from PATH and nothing else, deliberately.
+   *
+   * An `npx` fallback was written first and removed, because on Windows `npx` and
+   * `clawhub` are `.cmd` shims: a Node script cannot exec one, and handing it to a
+   * shell means quoting every argument by hand, which splits the changelog below
+   * into several arguments. The failure mode of getting that wrong is a script
+   * that reports "not logged in" when the session is fine, which sends the
+   * operator to re-authenticate against a problem that does not exist. One clear
+   * instruction is worth more here than a clever fallback that lies when it
+   * breaks: the CLI is one global install, and the operator does it once.
+   */
+  const win = process.platform === "win32";
+  const cli = process.env.CLAWHUB_BIN || (win ? "clawhub.cmd" : "clawhub");
   try {
-    execFileSync("clawhub", ["--cli-version"], { stdio: "ignore" });
+    execFileSync(cli, ["--cli-version"], { stdio: "ignore" });
   } catch {
-    try {
-      execFileSync("clawhub.cmd", ["--cli-version"], { stdio: "ignore" });
-      cli = "clawhub.cmd";
-    } catch {
-      cli = "npx";
-      cliArgs = ["-y", "clawhub@latest"];
-      console.log("no clawhub on PATH, using npx clawhub@latest");
-    }
+    console.error(
+      `Could not run the clawhub CLI (${cli}).\n` +
+        "Install it once with `npm i -g clawhub`, or point CLAWHUB_BIN at the binary.\n" +
+        "The bundle above is complete and needs no rebuilding.",
+    );
+    process.exitCode = 1;
+    return;
   }
-  const run = (args, opts = {}) => execFileSync(cli, [...cliArgs, ...args], { stdio: "inherit", ...opts });
+  const exec = (args, opts = {}) => execFileSync(cli, args, opts);
+  const run = (args) => exec(args, { stdio: "inherit" });
 
   if (token) {
     // Stored, not passed through on every call, so the publish step is the same
@@ -120,19 +138,62 @@ async function main() {
     run(["login", "--token", token, "--no-browser", "--label", "Swamp discovery publish"]);
   }
 
-  // Fail on an unauthenticated session before starting the upload, rather than
-  // part way through it.
+  // Fail before starting the upload rather than part way through it, and say
+  // which of the two things went wrong: a session that is missing, or a CLI that
+  // could not be run at all. They need different fixes.
   try {
-    run(["whoami"]);
-  } catch {
-    console.error("Not logged in. Run: clawhub login, or pass a token with CLAWHUB_TOKEN=<token>");
+    const who = exec(["whoami"], { encoding: "utf8" });
+    console.log(`signed in as ${String(who).trim()}`);
+  } catch (e) {
+    const reason = (e.stderr || e.message || "").toString().trim().split("\n").pop();
+    console.error(`Could not confirm a ClawHub session: ${reason}`);
+    console.error("If you are not logged in: clawhub login, or set CLAWHUB_TOKEN=<token>");
     process.exitCode = 1;
     return;
   }
 
-  console.log("\npublishing");
-  run(["skill", "publish", outDir]);
-  console.log(`\npublished. Check it at https://clawhub.ai/skills/${entry.name}`);
+  // Every field is passed explicitly. Left to itself the CLI prompts for a
+  // changelog and a version, and a prompt in a non-interactive run is a hang,
+  // not a question.
+  const repoCommit = (() => {
+    try {
+      return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    } catch {
+      return null;
+    }
+  })();
+
+  const args = [
+    "skill",
+    "publish",
+    outDir,
+    "--slug",
+    entry.name,
+    "--name",
+    "Swamp",
+    "--version",
+    "1.0.0",
+    "--tags",
+    "latest",
+    "--changelog",
+    "First publication. These are the bytes served at the discovery index's artifact URL, verified against its digest before upload.",
+    "--source-repo",
+    "https://github.com/allisonbit/bug-protocol",
+    "--source-path",
+    "web/lib/skill.ts",
+  ];
+  if (repoCommit) args.push("--source-commit", repoCommit);
+
+  if (process.argv.includes("--dry-run")) {
+    args.push("--dry-run");
+    console.log("\ndry run");
+  } else {
+    console.log("\npublishing");
+  }
+  run(args);
+  if (!process.argv.includes("--dry-run")) {
+    console.log(`\npublished. Check it at https://clawhub.ai/skills/${entry.name}`);
+  }
 }
 
 main().catch((e) => {

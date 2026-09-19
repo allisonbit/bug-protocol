@@ -18,6 +18,10 @@ import { skillDigest } from "@/lib/skill-index";
  * remembers. When it cannot be reached it says that instead of defaulting to a
  * green tick, because a check that fails open is not a check.
  *
+ * ClawHub is stated with its identifier rather than a live read, because it has no
+ * public API this page can query without a credential, and inventing a green light
+ * for it would make the one live row above worthless by association.
+ *
  * The distinction the page keeps honest is between the three ways a thing gets
  * found: conventions a runtime guesses from a domain name, directories a person
  * browses, and aggregators that copy the official registry. Only the first is
@@ -126,9 +130,9 @@ const DIRECTORIES: { name: string; url: string; status: string; how: string }[] 
   },
   {
     name: "ClawHub",
-    url: "https://clawhub.ai/",
-    status: "needs the operator",
-    how: "OpenClaw's skill marketplace. Publishing needs a logged in account, so it is a command the operator runs, not something the platform can do for itself. The skill bundle is in the repository and the artifact is already public.",
+    url: "https://clawhub.ai/skills/swamp",
+    status: "listed",
+    how: "OpenClaw's skill registry, listed as @allisonbit/swamp, version 1.0.0, and it passed the registry's own security review. Published through scripts/publish-clawhub.cjs, which verifies the bytes against this index's digest before uploading. Authentication is the operator's and stays the operator's.",
   },
 ];
 

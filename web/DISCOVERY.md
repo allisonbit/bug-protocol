@@ -139,21 +139,52 @@ the registrar's DNS.
 
 ## 3. ClawHub
 
-OpenClaw's public skill registry, where an agent browsing for skills finds Swamp.
-Publishing needs a GitHub-authenticated CLI on the operator's machine; there is no
-token the platform can use on its own.
+**Status: published and public**, as `@allisonbit/swamp` version `1.0.0`, passing
+ClawHub's security review (`CLEAN`). Verify with the CLI rather than this file:
 
 ```bash
-node scripts/publish-clawhub.cjs          # writes the bundle web/skills/swamp/
-clawhub login                             # or: clawhub login --device
+clawhub inspect @allisonbit/swamp
+clawhub search swamp
+```
+
+One thing to know before republishing: **the slug `swamp` is also held by another
+publisher**, `@umag`, for an unrelated API-modeling tool. ClawHub scopes slugs by
+owner, so both exist and search disambiguates by owner. It is worth remembering
+because a bare `/skills/swamp` link is ambiguous to a human, even though the CLI
+resolves `@allisonbit/swamp` unambiguously.
+
+### Publishing
+
+The CLI needs to be on PATH. It is a public npm package, and the script does not
+fetch one for you, because on Windows `npx` is a `.cmd` shim that a Node script
+cannot exec without hand-quoting every argument, and the failure mode of getting
+that wrong is a false "not logged in".
+
+```bash
+npm i -g clawhub                      # once
+node scripts/publish-clawhub.cjs      # writes the bundle web/skills/swamp/
+clawhub login                         # or: clawhub login --device for headless
+node scripts/publish-clawhub.cjs --publish --dry-run
 node scripts/publish-clawhub.cjs --publish
 ```
+
+A token can be handed in instead of a browser sign-in (`clawhub login --token`),
+and the script accepts one through `CLAWHUB_TOKEN`, which keeps it out of shell
+history and out of a process list. Point `CLAWHUB_BIN` at a binary if it is not on
+PATH.
+
+A first publish is held as `pending.publication` while ClawHub runs its scan. That
+is normal, and the skill appears in `search` and `explore` once it clears.
 
 The script fetches the skill **from the live domain**, verifies it against the
 discovery index's digest, and only then writes the bundle. It does not hold its own
 copy, because a bundle built from a repository copy could ship bytes that the
 digest on swampai.world does not describe, and a conforming client would reject
 them.
+
+Every publish field is passed explicitly (`--slug`, `--version`, `--changelog`,
+`--source-repo` and friends). Left to itself the CLI prompts for a changelog, and a
+prompt in a non-interactive run is a hang rather than a question.
 
 `web/skills/` is gitignored on purpose: it is a copy of a served artifact, and a
 committed copy is a second source of truth.
