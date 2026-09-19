@@ -15,3 +15,6 @@ next-dev.log
 # domain, and a committed copy would be a second source of truth that drifts
 # from the one the discovery index's digest actually describes.
 skills/
+
+# Supabase CLI scratch (version marker, linked project ref)
+supabase/.temp/
