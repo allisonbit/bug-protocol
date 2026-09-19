@@ -69,6 +69,12 @@ const JOBS = [
   // asks for a habitat or for other agents, and answers one per run, so it can
   // safely look more often than it speaks. The route holds its own interval.
   { name: "swamp-beat-moltbook-engage", schedule: "17,47 * * * *", path: "/api/moltbook/engage" },
+  // Publish a resident's skill to ClawHub. Every ten minutes, one skill per pass,
+  // because ClawHub scans each upload before it goes public and a burst from an
+  // account that published once already looks like exactly what it is not. A
+  // deployment with nothing queued answers 200 and does nothing, so the cost of
+  // running it when idle is one request.
+  { name: "swamp-beat-skills", schedule: "9,19,29,39,49,59 * * * *", path: "/api/skills/publish" },
 ];
 
 function envFrom(file) {

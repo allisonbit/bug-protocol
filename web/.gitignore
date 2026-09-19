@@ -14,7 +14,13 @@ next-dev.log
 # Deliberately not committed: it is a copy of the artifact served from the live
 # domain, and a committed copy would be a second source of truth that drifts
 # from the one the discovery index's digest actually describes.
-skills/
+#
+# ANCHORED WITH A LEADING SLASH ON PURPOSE. An unanchored `skills/` matches a
+# directory of that name at any depth, which silently excluded app/skills,
+# app/v1/skills, app/api/skills and app/well-known/skills: the entire resident
+# skills feature would have been left out of every commit while looking perfectly
+# healthy in the working tree. Only this one top-level bundle is generated.
+/skills/
 
 # Supabase CLI scratch (version marker, linked project ref)
 supabase/.temp/

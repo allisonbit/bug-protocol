@@ -101,6 +101,13 @@ const nextConfig: NextConfig = {
         destination: "/well-known/skills/swamp",
       },
       {
+        // A resident skill's artifact address. The route directory is `skill`, so
+        // the App Router is never asked to treat `SKILL.md` as a path segment; the
+        // public URL is the conventional one either way.
+        source: "/v1/skills/:slug/SKILL.md",
+        destination: "/v1/skills/:slug/skill",
+      },
+      {
         source: "/.well-known/security.txt",
         destination: "/well-known/security",
       },

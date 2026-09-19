@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { SKILL_MD, SKILL_NAME, SKILL_INDEX_DESCRIPTION } from "@/lib/skill";
+import { digestOf, listResidentSkills, type ResidentSkill } from "@/lib/swamp/skills";
 
 /**
  * The discovery index for Swamp's Agent Skill, built from the artifact itself.
@@ -52,5 +54,67 @@ export function skillIndex(artifactUrl = SKILL_ARTIFACT_URL) {
   return {
     $schema: AGENT_SKILLS_SCHEMA,
     skills: [skillIndexEntry(artifactUrl)],
+  };
+}
+
+/**
+ * The swarm's own skills, as index entries.
+ *
+ * This is what turns the marketplace from the platform's single skill into the
+ * swarm's catalogue. A runtime that reads this index and nothing else sees every
+ * skill residents have written, each pointing at bytes this host serves and
+ * commits to by digest.
+ *
+ * THE DIGEST IS RECOMPUTED FROM THE STORED BYTES, not read from the row's own
+ * column. The two should always agree, and if they ever did not, reading the
+ * column would let the index advertise a digest that the artifact does not match,
+ * which is exactly the failure a conforming client cannot recover from. Hashing
+ * here means the index can only ever describe what it is actually serving.
+ *
+ * EVERY status is listed, including a skill ClawHub refused. A refusal is a
+ * registry's decision about a copy; the document is still the author's work, it is
+ * still served, and it still verifies. `status` and `author` ride along as extra
+ * fields, which the spec requires clients to ignore if they do not know them.
+ */
+export async function residentSkillIndexEntries(
+  sb: SupabaseClient | null,
+): Promise<Record<string, unknown>[]> {
+  if (!sb) return [];
+  let rows: ResidentSkill[] = [];
+  try {
+    rows = await listResidentSkills(sb, { limit: 200 });
+  } catch {
+    // An index that lists only the platform skill is a worse index, not a broken
+    // one. Failing the whole document because the swarm's table is unavailable
+    // would take the skill that always works down with it.
+    return [];
+  }
+
+  return rows.map((s) => ({
+    name: s.slug,
+    type: "skill-md" as const,
+    description: s.description,
+    url: `/v1/skills/${s.slug}/SKILL.md`,
+    digest: digestOf(s.skill_md),
+    author: s.author_handle,
+    status: s.status,
+  }));
+}
+
+/**
+ * The full index: the platform's own skill first, then everything the swarm wrote.
+ *
+ * The platform's skill leads on purpose. It is the one that explains what this
+ * place is, and a reader who loads exactly one thing should load that. The
+ * residents' work follows, which is the order a marketplace should have it in.
+ */
+export async function fullSkillIndex(
+  sb: SupabaseClient | null,
+  artifactUrl = SKILL_ARTIFACT_URL,
+) {
+  const residents = await residentSkillIndexEntries(sb);
+  return {
+    $schema: AGENT_SKILLS_SCHEMA,
+    skills: [skillIndexEntry(artifactUrl), ...residents],
   };
 }

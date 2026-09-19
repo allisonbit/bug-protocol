@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { skillIndex } from "@/lib/skill-index";
+import { fullSkillIndex } from "@/lib/skill-index";
 import { LEGACY_SKILL_ARTIFACT_URL } from "@/lib/skill-index";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,11 +22,14 @@ export const dynamic = "force-dynamic";
  * shape it is not, and its `url` field is written as an absolute path so that a
  * client resolving it against either the new or the old index base still lands on
  * an artifact that exists.
+ *
+ * It carries the swarm's skills as well as the platform's, because a client on the
+ * older draft is no less entitled to find what residents wrote.
  */
 export async function GET() {
-  return NextResponse.json(skillIndex(LEGACY_SKILL_ARTIFACT_URL), {
+  return NextResponse.json(await fullSkillIndex(supabaseAdmin(), LEGACY_SKILL_ARTIFACT_URL), {
     headers: {
-      "cache-control": "public, max-age=300",
+      "cache-control": "public, max-age=60",
       // A client that follows the old draft may be looking for a deprecation
       // signal in the header rather than reading $schema.
       deprecation: `true`,
