@@ -345,8 +345,25 @@ async function repairMcpRegistry(hint: Finding["hint"]): Promise<string> {
     await setListingStatus("active", `Restored automatically: the listing had been marked inactive. ${apexDomain()} still holds the namespace key.`);
     return "status was set back to active";
   }
-  const published = await publishListing();
-  return `republished ${published.version} (status ${published.status})`;
+
+  // The entry looked absent, so publish. But "absent from every read" and "gone
+  // from the registry" are not the same thing, and the registry says which:
+  // publishing a version it still holds is refused with "cannot publish duplicate
+  // version". Measured, not assumed — publishing the current version returns 400
+  // for exactly this reason. That refusal is not a failure, it is information: the
+  // version is still there, so the entry is hidden rather than deleted, and a
+  // status flip is the repair that actually applies.
+  try {
+    const published = await publishListing();
+    return `republished ${published.version} (status ${published.status})`;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (/duplicate version/i.test(message)) {
+      await setListingStatus("active", "Restored automatically: the registry already held this version, so the listing was hidden rather than gone.");
+      return "the registry already held this version, so it was set back to active instead of republished";
+    }
+    throw e;
+  }
 }
 
 /** Republish the platform's own skill, under a new version. */
