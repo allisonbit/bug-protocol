@@ -32,7 +32,9 @@
  *
  * USAGE
  *   node scripts/moltbook-bridge.cjs status
- *   node scripts/moltbook-bridge.cjs post [--submolt general] [--dry]
+ *   node scripts/moltbook-bridge.cjs post [--submolt general] [--title "..."] [--note "..."] [--dry]
+ *     --note prepends a line for a second community, because Moltbook drops an
+ *     identical repost; --title replaces the heading.
  *   node scripts/moltbook-bridge.cjs submolts
  *   node scripts/moltbook-bridge.cjs invitation        # print what would be posted
  *
@@ -128,18 +130,31 @@ function shards(text) {
 function numbersIn(text) {
   const out = [];
   let acc = null;
+  // Whether a unit may still attach to what we have ("twenty" then "three" is
+  // twenty-three). A unit with no tens before it starts its OWN number, because
+  // spelling two operands out ("twenty three + seven") can leave them adjacent
+  // once the operator symbol is stripped, and merging them would lose a number.
+  let accIsTens = false;
   const flush = () => {
     if (acc !== null) out.push(acc);
     acc = null;
+    accIsTens = false;
   };
   for (const t of shards(text)) {
     if (t in UNITS) {
-      acc = (acc ?? 0) + UNITS[t];
+      if (acc === null) acc = UNITS[t];
+      else if (accIsTens) acc += UNITS[t];
+      else {
+        flush();
+        acc = UNITS[t];
+      }
+      accIsTens = false;
       continue;
     }
     if (t in TENS) {
-      if (acc !== null) flush();
+      flush();
       acc = TENS[t];
+      accIsTens = true;
       continue;
     }
     if (t === HUNDRED) {
@@ -158,13 +173,17 @@ function numbersIn(text) {
 
 /** Pick the operator from the verbs the shattered sentence still contains. */
 function operatorIn(text) {
-  const t = ` ${shards(text).join(" ")} `;
-  // Substring rather than whole-token: the shattering leaves the verbs intact
-  // often enough that a stem match reads them ("slows" carries "slow").
-  const has = (...words) => words.some((w) => t.includes(w));
-  if (has("times", "multiplied", "double", "triple", "product")) return "*";
-  if (has("divided", "split", "ratio")) return "/";
-  if (has("slow", "minus", "les", "decreas", "drop", "lose", "down", "subtract")) return "-";
+  const toks = shards(text);
+  // Two shapes, because the shattering does both: sometimes it splits a word with
+  // symbols into two tokens ("MuLtI pLiEs"), sometimes it only doubles letters in
+  // place. Matching stems against the spaced form AND the de-spaced form catches
+  // "multiplies" whichever way it arrives.
+  const spaced = ` ${toks.join(" ")} `;
+  const solid = toks.join("");
+  const has = (...words) => words.some((w) => spaced.includes(w) || solid.includes(w));
+  if (has("times", "multipl", "double", "triple", "product")) return "*";
+  if (has("divid", "split", "ratio", "quotient")) return "/";
+  if (has("slow", "minus", "les", "decreas", "drop", "lose", "subtract")) return "-";
   return "+";
 }
 
@@ -238,18 +257,29 @@ async function cmdPost() {
   const key = credential();
   const body = await invitation();
 
+  // A second community cannot get the same text: Moltbook de-duplicates identical
+  // posts (it returns the original id and creates nothing), and its own rules call
+  // repeated identical posts spam. --note prepends a line written for that
+  // community and --title replaces the heading, so the invitation can reach a
+  // second submolt as a genuine post rather than a copy of the first.
+  const noteArg = arg("note", null);
+  const note = noteArg && noteArg !== true ? String(noteArg) : "";
+  const titleArg = arg("title", null);
+  const title = titleArg && titleArg !== true ? String(titleArg) : DEFAULT_TITLE;
+  const content = note ? `${note}\n\n${body}` : body;
+
   if (dry) {
     console.log(`submolt: ${submolt}`);
-    console.log(`title:   ${DEFAULT_TITLE}`);
-    console.log(`body (${body.length} chars):\n`);
-    console.log(body);
+    console.log(`title:   ${title}`);
+    console.log(`body (${content.length} chars):\n`);
+    console.log(content);
     return;
   }
 
   const created = await api("/posts", {
     method: "POST",
     key,
-    body: { submolt_name: submolt, title: DEFAULT_TITLE, content: body },
+    body: { submolt_name: submolt, title, content },
   });
 
   if (created.status === 403) {
