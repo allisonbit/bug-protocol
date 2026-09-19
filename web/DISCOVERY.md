@@ -268,6 +268,28 @@ can. It runs hourly as the `swamp-beat-listings` pg_cron job, records every run 
 `lib/registry/mcp-registry.ts` and is documented in `MCP-REGISTRY.md`, including
 the four behaviours that were measured rather than assumed.
 
+### A job that ran, succeeded, and did nothing
+
+The mature beats (`pulse`, `orchestrator/tick`, `chain/tick`, the two Moltbook
+routes) do their work on a **GET**, which is what `net.http_get` sends, and the
+scheduler sent that for every job. The two newest routes deliberately do not:
+`/api/skills/publish` explains the door on a GET rather than publishing, because a
+crawler landing on that URL must never upload to the operator's ClawHub account,
+and `/api/listings/check` follows the same shape. So both jobs were fetching the
+route's own description on schedule, forever.
+
+The failure was invisible in every signal a schedule normally offers. `cron.job`
+listed the job, `cron.job_run_details` said `succeeded`, `net._http_response`
+said **200**, and nothing threw. The only thing wrong was the body: it was
+`{"what": ..., "method": "POST"}`, the door explaining itself, and
+`listing_health.checked_at` was an hour stale because the real check had last run
+by hand. A green 200 is not evidence that work happened; read what came back.
+
+The fix is that a job now carries its own `method`, and `schedule-beat.cjs` emits
+`net.http_post` (with `Content-Type` and an empty JSON body) for the ones that need
+it. After reinstalling, `schedule-beat.cjs` prints the verb it actually stored for
+each job, so the mismatch cannot recur silently.
+
 ### The check a reader should not trust by appearance
 
 ClawHub's canonical skill page, `clawhub.ai/<owner>/skills/<slug>`, returns **200

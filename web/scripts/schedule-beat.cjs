@@ -56,6 +56,15 @@ const SITE = process.env.SWAMP_SITE_URL || "https://www.swampai.world";
  * The chain tick copies from RPC, so it is on a slower clock, but a day was
  * absurd for a reconciler whose whole job is to make the index agree with the
  * chain.
+ *
+ * WHY SOME JOBS SAY `method: "POST"`. The mature beats do their work on a GET,
+ * which is what pg_net sends by default. The two newest deliberately do not: a
+ * GET on `/api/skills/publish` explains the door instead of publishing, because
+ * a crawler or a discovery probe landing on that URL must never upload to the
+ * operator's ClawHub account, and `/api/listings/check` follows the same shape
+ * so every beat reads the same way from the outside. A job that only ever sent
+ * GET was therefore fetching the description and doing nothing, on schedule,
+ * forever. The method is part of the job rather than a property of the routes.
  */
 const JOBS = [
   { name: "swamp-beat-pulse", schedule: "*/5 * * * *", path: "/api/swamp/pulse" },
@@ -74,14 +83,14 @@ const JOBS = [
   // account that published once already looks like exactly what it is not. A
   // deployment with nothing queued answers 200 and does nothing, so the cost of
   // running it when idle is one request.
-  { name: "swamp-beat-skills", schedule: "9,19,29,39,49,59 * * * *", path: "/api/skills/publish" },
+  { name: "swamp-beat-skills", schedule: "9,19,29,39,49,59 * * * *", path: "/api/skills/publish", method: "POST" },
   // Are we still listed where we say we are? Both places that list this platform
   // can drop it without us doing anything wrong: the MCP Registry is in preview
   // and warns of data resets, and ClawHub can delist through moderation. Hourly is
   // the right rhythm rather than every five minutes, because a listing is not a
   // liveness signal and a storefront that vanished an hour ago was not rescued by
   // noticing four minutes sooner. Offset from the other jobs so nothing contends.
-  { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check" },
+  { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check", method: "POST" },
 ];
 
 function envFrom(file) {
@@ -132,20 +141,38 @@ function envFrom(file) {
     const url = `${SITE}${job.path}`;
     // url and the header are both ASCII with no `$`, so `$$` quoting is safe here
     // and the value never has to be escaped.
+    const auth = "'Authorization', 'Bearer ' || $$" + secret + "$$";
+    // A POST job needs a content type and a body, because pg_net sends neither
+    // unless it is told to. The routes read their options from the query string,
+    // so an empty JSON object is the whole body.
     const command =
-      "select net.http_get(url := $$" +
-      url +
-      "$$, headers := jsonb_build_object('Authorization', 'Bearer ' || $$" +
-      secret +
-      "$$), timeout_milliseconds := 120000)";
+      job.method === "POST"
+        ? "select net.http_post(url := $$" +
+          url +
+          "$$, body := '{}'::jsonb, headers := jsonb_build_object(" +
+          auth +
+          ", 'Content-Type', 'application/json'), timeout_milliseconds := 120000)"
+        : "select net.http_get(url := $$" +
+          url +
+          "$$, headers := jsonb_build_object(" +
+          auth +
+          "), timeout_milliseconds := 120000)";
     await c.query("select cron.schedule($1, $2, $3)", [job.name, job.schedule, command]);
-    console.log(`scheduled ${job.name.padEnd(30)} ${job.schedule.padEnd(14)} -> ${url}`);
+    console.log(
+      `scheduled ${job.name.padEnd(30)} ${job.schedule.padEnd(14)} ${(job.method || "GET").padEnd(4)} -> ${url}`,
+    );
   }
 
   // 3) Say what is actually in the scheduler, rather than what we asked for.
   const jobs = await c.query("select jobname, schedule, active from cron.job order by jobname");
   console.log("jobs now installed:");
-  for (const r of jobs.rows) console.log(`  ${r.jobname.padEnd(30)} ${r.schedule.padEnd(16)} active=${r.active}`);
+  for (const r of jobs.rows)
+    console.log(`  ${r.jobname.padEnd(30)} ${r.schedule.padEnd(16)} active=${r.active}`);
+  const verbs = await c.query(
+    "select jobname, case when command like '%net.http_post%' then 'POST' else 'GET' end as method from cron.job order by jobname",
+  );
+  console.log("verbs now installed:");
+  for (const r of verbs.rows) console.log(`  ${r.jobname.padEnd(30)} ${r.method}`);
 
   await c.end();
 })().catch((e) => {
