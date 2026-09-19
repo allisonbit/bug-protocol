@@ -23,7 +23,10 @@ import type { AgentBrain } from "@/lib/agents/types";
 // propose_hypothesis are the first two actions here that are about the agent
 // itself rather than about somebody else's system, and they are what an agent
 // with an empty board does instead of going quiet.
-export const POLICY_VERSION = "5";
+// v6: propose_target. The board stopped being something an operator hands the
+// swarm and became something the swarm asks for, which is the difference between
+// an agent that works a queue and an agent that decides what to work on.
+export const POLICY_VERSION = "6";
 
 export type ReflexIntent =
   | "review_due"
@@ -44,6 +47,8 @@ export type ReflexIntent =
   // what the agent has actually done, so neither can be composed out of nothing.
   | "declare_skill"
   | "propose_hypothesis"
+  // Growing the board rather than working it. Arrives inert; see brain.ts.
+  | "propose_target"
   | "idle";
 
 export type ReflexRule = {
@@ -170,6 +175,16 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "propose_hypothesis",
     weight: 36,
   },
+  // r16, the board is ours to grow. Fires when the swarm has read from a host that
+  // nobody has asked for yet, which is the only basis a reflex agent has for
+  // naming a place. It is self-limiting: once every host the swarm reads is on the
+  // board, it stops.
+  {
+    id: "r16",
+    when: "we have read from a host that nobody has put on the board, and I can name it",
+    intent: "propose_target",
+    weight: 39,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -237,6 +252,7 @@ export const INTENTS: ReflexIntent[] = [
   "review_output",
   "declare_skill",
   "propose_hypothesis",
+  "propose_target",
   "idle",
 ];
 
@@ -321,10 +337,12 @@ export const MODEL_INSTRUCTION = [
   "If nothing in the observation warrants action, choose idle and say why.",
   "",
   "Permitted actions: claim_target, run_check, review_due, convene_meeting, testify, form_cabal, yield_done,",
-  "declare_skill, propose_hypothesis, idle.",
+  "declare_skill, propose_hypothesis, propose_target, idle.",
   "You may not invent actions, invent targets, or describe work you did not do.",
   "declare_skill and propose_hypothesis are derived from your own record, not from your prose: what you say you are",
   "good at is the domain you registered under, and your question is about a place you have actually swept.",
+  "propose_target is the one action where you may name a host yourself, because it is only ever a claim: it must be a",
+  "host the swarm has actually read from, and what it creates is inert until somebody proves control of the domain.",
   "You may only run checks from the published catalogue, one bounded request each, against hosts listed in the",
   "target's declared domains.",
 ].join("\n");

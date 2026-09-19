@@ -86,7 +86,16 @@ export type PlannedAction =
    * Same rule as everything else on this list: the question is built from a real
    * sweep, and `targetId` is what stops it being asked twice.
    */
-  | { rule: string; kind: "hypothesis"; claim: string; targetSlug: string; targetId: string };
+  | { rule: string; kind: "hypothesis"; claim: string; targetSlug: string; targetId: string }
+  /**
+   * Ask for a place the swarm has been reading to be put on the board.
+   *
+   * The board is not a list an operator hands the swarm; it is what the swarm asks
+   * for and what somebody then authorises. This arrives inert, by construction:
+   * nobody may run a check against the domains named here until somebody proves
+   * control of every one of them.
+   */
+  | { rule: string; kind: "propose_target"; slug: string; name: string; domains: string[]; note: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -377,6 +386,27 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         }
         break;
       }
+
+      // r16, growing our own board. This is the rule that makes the board the
+      // swarm's rather than an operator's: nothing here is handed to agents, they
+      // ask for it. A reflex agent cannot browse, so the places it may ask for are
+      // the hosts the swarm has actually READ from and that nobody has asked for
+      // yet, which is what keeps this self-limiting rather than a loop: the day
+      // every host it reads is already on the board, it stops asking.
+      case "propose_target": {
+        const place = targetToNominate(obs);
+        if (place) {
+          out.push({
+            rule: rule.id,
+            kind: "propose_target",
+            slug: place.slug,
+            name: place.name,
+            domains: place.domains,
+            note: place.note,
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -441,6 +471,57 @@ function openQuestion(obs: Observation): { claim: string; targetSlug: string; ta
     };
   }
   return null;
+}
+
+/**
+ * A place the swarm has read from and nobody has asked for, or null.
+ *
+ * Both halves are facts, not opinions. The host comes from a source claim that an
+ * agent really registered, so a reflex agent is asking for somewhere it has
+ * evidence about rather than somewhere it imagined; and "nobody has asked" is
+ * checked against the WHOLE board including the inert proposals, because a
+ * proposal that is invisible to this check would be re-proposed every beat and
+ * collect a duplicate refusal each time.
+ *
+ * `preferHost` lets a caller that has its own reason name one of those hosts. It
+ * can only narrow the choice, never widen it: a host the swarm has not read from
+ * is refused here exactly as it would be at the door.
+ */
+function targetToNominate(
+  obs: Observation,
+  preferHost?: string | null,
+): { slug: string; name: string; domains: string[]; note: string } | null {
+  const wanted = preferHost ? String(preferHost).trim().toLowerCase() : null;
+  const candidates = wanted ? obs.sourceHosts.filter((s) => String(s.host).trim().toLowerCase() === wanted) : obs.sourceHosts;
+  if (wanted && candidates.length === 0) return null;
+
+  const taken = new Set(obs.boardHosts);
+  const slugs = new Set(obs.boardSlugs);
+  for (const { host, claims } of candidates) {
+    const h = String(host ?? "").trim().toLowerCase();
+    if (!h || taken.has(h)) continue;
+    const slug = slugForHost(h);
+    if (!slug || slugs.has(slug)) continue;
+    return {
+      slug,
+      name: h,
+      domains: [h],
+      note:
+        `The swarm has read ${claims} source${claims === 1 ? "" : "s"} from ${h}, and ${h} is not on the board. ` +
+        `Asking for it records the place the swarm wanted to look at; it becomes checkable only if somebody proves control of ${h}.`,
+    };
+  }
+  return null;
+}
+
+/** A board slug for a host: `www.rfc-editor.org` becomes `rfc-editor-org`. */
+function slugForHost(host: string): string | null {
+  const slug = host
+    .replace(/^www\./, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return slug.length >= 3 ? slug : null;
 }
 
 /**
@@ -695,6 +776,24 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
       claim: question.claim,
       targetSlug: question.targetSlug,
       targetId: question.targetId,
+    };
+  }
+
+  // Nominate a place. A model may hold a host in view that the board does not, and
+  // this is the one action where naming it is allowed, because it is only ever a
+  // claim. It can name a host the swarm has READ from and nothing else: a host it
+  // conjured is refused here, and the slug, the name and the note are derived
+  // rather than taken from its prose.
+  if (action === "propose_target") {
+    const place = targetToNominate(obs, String(p.host ?? ""));
+    if (!place) return null;
+    return {
+      rule: "m-propose-target",
+      kind: "propose_target",
+      slug: place.slug,
+      name: place.name,
+      domains: place.domains,
+      note: place.note,
     };
   }
 

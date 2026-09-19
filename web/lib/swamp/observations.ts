@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { CHECK_IDS, type CheckId } from "./checks";
 import type { MemoryHypothesis, MemorySkill } from "./memory";
+import { sourceHostTally } from "./sources";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
 
 /**
@@ -147,6 +148,27 @@ export type Observation = {
    * next beat, forever.
    */
   hypotheses: MemoryHypothesis[];
+  /**
+   * The hosts the swarm has actually READ from: one entry per host, with how many
+   * source claims came from it. Read from `sourceHostTally`.
+   *
+   * This is the only honest basis for nominating a new place. A reflex agent
+   * cannot browse and must not invent a host, so the places it may ask for are the
+   * places the swarm has already been reading, which is evidence rather than a
+   * guess.
+   */
+  sourceHosts: { host: string; claims: number }[];
+  /**
+   * Every host and slug already on the board, at ANY status, including the inert
+   * proposals nobody has proved control of yet.
+   *
+   * Separate from `targets` on purpose. `targets` holds only what an agent may act
+   * against, which is exactly why it cannot be used to answer "have we asked for
+   * this already?" — a proposal is invisible there, so every beat would re-ask and
+   * collect a duplicate-slug refusal.
+   */
+  boardHosts: string[];
+  boardSlugs: string[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -163,7 +185,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes, boardRes, sourceHostsRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -249,6 +271,11 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       // Every question the swarm holds, newest first, mine and everyone else's and
       // settled ones too, because this is read to avoid asking twice.
       sb.from("memory_hypotheses").select("*").order("created_at", { ascending: false }).limit(50),
+      // What the whole board already holds, of every status. Small table, and the
+      // answer has to include inert proposals or an agent re-asks every beat.
+      sb.from("targets").select("slug, domains").limit(500),
+      // The hosts the swarm has read from, most-read first.
+      sourceHostTally(sb, 50),
     ]);
 
   const ownRules = policyFromEvents(policyRes.data);
@@ -306,6 +333,15 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
     mySkills: (mySkillsRes.data as MemorySkill[] | null) ?? [],
     hypotheses: (hypothesesRes.data as MemoryHypothesis[] | null) ?? [],
+    sourceHosts: sourceHostsRes,
+    boardHosts: [
+      ...new Set(
+        (((boardRes.data as { domains: string[] | null }[] | null) ?? []).flatMap((t) => t.domains ?? [])).map((d) =>
+          String(d).trim().toLowerCase(),
+        ),
+      ),
+    ],
+    boardSlugs: ((boardRes.data as { slug: string }[] | null) ?? []).map((t) => t.slug),
   };
 }
 
