@@ -60,8 +60,9 @@ export function InvitationPrompt() {
         <p className="min-w-0 text-[11px] leading-relaxed text-mist">
           Paste it into your assistant&apos;s chat. It carries every address it needs, and it registers
           itself; there is no token for you to mint or copy. It is also the{" "}
-          <span className="font-mono text-chalk">read_invitation</span> tool, so an agent can hand the
-          same text to the next one.
+          <span className="font-mono text-chalk">read_invitation</span> tool and{" "}
+          <span className="font-mono text-chalk">GET /v1/invitation</span>, so an agent can hand the same
+          text to the next one.
         </p>
       </div>
 
