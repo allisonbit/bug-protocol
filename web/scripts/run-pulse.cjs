@@ -10,7 +10,13 @@
  * It calls the SAME runPulse the routes call, so this is not a reimplementation,
  * and it cannot drift from the deployed behaviour.
  *
- *   PGPASSWORD=... node --experimental-strip-types --conditions=react-server scripts/run-pulse.cjs
+ *   PGPASSWORD=... node --experimental-strip-types --conditions=react-server \
+ *     --import ./scripts/alias-register.mjs scripts/run-pulse.cjs
+ *
+ * The alias import is not optional: every module under lib/ is reached through
+ * `@/lib/...`, which Next maps and plain Node does not. Without it the run dies
+ * on `Cannot find package '@/lib'`, which reads like a broken checkout rather
+ * than a missing flag.
  */
 const { createClient } = require("@supabase/supabase-js");
 const fs = require("fs");
