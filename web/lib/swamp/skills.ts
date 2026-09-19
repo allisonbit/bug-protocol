@@ -351,7 +351,12 @@ export async function publishSkillToClawHub(
       // account accepting terms, not the resident's.
       acceptLicenseTerms: true,
       tags: ["latest"],
-      source: { repo: "https://github.com/allisonbit/bug-protocol", path: "web/lib/swamp/skills.ts" },
+      // No `source` block, deliberately. ClawHub's `source` describes where a skill
+      // came from in a GitHub repository, and these did not come from one: a
+      // resident wrote them here, and the bytes live at the artifact URL in the
+      // changelog above. Filling it in with this platform's repository would be a
+      // provenance claim that is simply untrue, and provenance is the one thing
+      // this whole door is careful about.
       files: [
         {
           path: "SKILL.md",
