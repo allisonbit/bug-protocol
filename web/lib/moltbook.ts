@@ -190,7 +190,37 @@ function tokens(text: string): string[] {
     .map((t) => t.replace(/(.)\1+/g, "$1"));
 }
 
+/**
+ * Read one number word starting at tokens[i], joining across a SPACE the
+ * shattering left inside it.
+ *
+ * WHY JOINING IS NECESSARY. The shattering does not only scatter symbols and
+ * double letters; it also inserts spaces, so "thirty" can arrive as "tHiR tY"
+ * and "twenty" as "tW eNtY". Read token by token, neither half is a number and
+ * the operand vanishes. Joining up to three adjacent tokens and collapsing the
+ * result recovers the word: "thir"+"ty" -> "thirty".
+ *
+ * LONGEST MATCH FIRST, so "four"+"ty" reads as forty rather than four. The
+ * order matters: a merge that produces a real number word is taken over reading
+ * its first fragment alone, which is what makes the split spellings work.
+ */
+function matchNumber(
+  toks: string[],
+  i: number,
+): { value: number; kind: "unit" | "tens" | "hundred" | "thousand"; len: number } | null {
+  for (const len of [3, 2, 1]) {
+    if (i + len > toks.length) continue;
+    const c = collapse(toks.slice(i, i + len).join(""));
+    if (c === HUNDRED) return { value: 100, kind: "hundred", len };
+    if (c === THOUSAND) return { value: 1000, kind: "thousand", len };
+    if (c in UNITS) return { value: UNITS[c], kind: "unit", len };
+    if (c in TENS) return { value: TENS[c], kind: "tens", len };
+  }
+  return null;
+}
+
 function numbersIn(text: string): number[] {
+  const toks = tokens(text);
   const out: number[] = [];
   let acc: number | null = null;
   // Whether a unit may still attach to what we have ("twenty" then "three" is
@@ -203,32 +233,34 @@ function numbersIn(text: string): number[] {
     acc = null;
     accIsTens = false;
   };
-  for (const t of tokens(text)) {
-    if (t in UNITS) {
-      if (acc === null) acc = UNITS[t];
-      else if (accIsTens) acc += UNITS[t];
-      else {
-        flush();
-        acc = UNITS[t];
-      }
-      accIsTens = false;
-      continue;
-    }
-    if (t in TENS) {
+  let i = 0;
+  while (i < toks.length) {
+    const m = matchNumber(toks, i);
+    if (!m) {
       flush();
-      acc = TENS[t];
-      accIsTens = true;
+      i += 1;
       continue;
     }
-    if (t === HUNDRED) {
+    if (m.kind === "hundred") {
       acc = (acc ?? 1) * 100;
-      continue;
-    }
-    if (t === THOUSAND) {
+    } else if (m.kind === "thousand") {
       acc = (acc ?? 1) * 1000;
-      continue;
+    } else if (m.kind === "tens") {
+      flush();
+      acc = m.value;
+      accIsTens = true;
+    } else if (acc === null) {
+      acc = m.value;
+      accIsTens = false;
+    } else if (accIsTens) {
+      acc += m.value;
+      accIsTens = false;
+    } else {
+      flush();
+      acc = m.value;
+      accIsTens = false;
     }
-    flush();
+    i += m.len;
   }
   flush();
   return out;

@@ -126,8 +126,27 @@ function shards(text) {
     .map((t) => t.replace(/(.)\1+/g, "$1"));
 }
 
+/**
+ * Read one number word starting at toks[i], joining across a SPACE the
+ * shattering left inside it, so "tHiR tY" reads as thirty and "tW eNtY" as
+ * twenty. Longest match first, so "four"+"ty" is forty and not four. See the
+ * same function in lib/moltbook.ts for the reasoning; keep the two in step.
+ */
+function matchNumber(toks, i) {
+  for (const len of [3, 2, 1]) {
+    if (i + len > toks.length) continue;
+    const c = collapse(toks.slice(i, i + len).join(""));
+    if (c === HUNDRED) return { value: 100, kind: "hundred", len };
+    if (c === THOUSAND) return { value: 1000, kind: "thousand", len };
+    if (c in UNITS) return { value: UNITS[c], kind: "unit", len };
+    if (c in TENS) return { value: TENS[c], kind: "tens", len };
+  }
+  return null;
+}
+
 /** Read the number words out of a shattered sentence, in order. */
 function numbersIn(text) {
+  const toks = shards(text);
   const out = [];
   let acc = null;
   // Whether a unit may still attach to what we have ("twenty" then "three" is
@@ -140,32 +159,34 @@ function numbersIn(text) {
     acc = null;
     accIsTens = false;
   };
-  for (const t of shards(text)) {
-    if (t in UNITS) {
-      if (acc === null) acc = UNITS[t];
-      else if (accIsTens) acc += UNITS[t];
-      else {
-        flush();
-        acc = UNITS[t];
-      }
-      accIsTens = false;
-      continue;
-    }
-    if (t in TENS) {
+  let i = 0;
+  while (i < toks.length) {
+    const m = matchNumber(toks, i);
+    if (!m) {
       flush();
-      acc = TENS[t];
-      accIsTens = true;
+      i += 1;
       continue;
     }
-    if (t === HUNDRED) {
+    if (m.kind === "hundred") {
       acc = (acc ?? 1) * 100;
-      continue;
-    }
-    if (t === THOUSAND) {
+    } else if (m.kind === "thousand") {
       acc = (acc ?? 1) * 1000;
-      continue;
+    } else if (m.kind === "tens") {
+      flush();
+      acc = m.value;
+      accIsTens = true;
+    } else if (acc === null) {
+      acc = m.value;
+      accIsTens = false;
+    } else if (accIsTens) {
+      acc += m.value;
+      accIsTens = false;
+    } else {
+      flush();
+      acc = m.value;
+      accIsTens = false;
     }
-    flush();
+    i += m.len;
   }
   flush();
   return out;
