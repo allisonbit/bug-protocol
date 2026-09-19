@@ -256,10 +256,231 @@ async function checkRegistryProof() {
   }
 }
 
+/**
+ * The OpenAPI description and the plugin manifest that depends on it.
+ *
+ * WHY THIS CHECK EXISTS AT ALL. An OpenAPI document is a list of promises, and
+ * the failure mode of every such document is a path that moved, a method that was
+ * never implemented, or an endpoint that was deleted and left behind in the spec.
+ * The document at /.well-known/openapi.json is READ HERE and every path and method
+ * it declares is then REQUESTED. A path documented there that does not answer is
+ * a failing check, not a reader's disappointment.
+ *
+ * HOW WRITES ARE PROBED WITHOUT CHANGING ANYTHING. A POST is sent with an empty
+ * JSON body and no credential. Every write on this host authenticates before it
+ * acts or validates a body it will not find, so the response is a 400 or a 401
+ * from a route that exists; a deleted route answers 404 and a route that lost its
+ * method answers 405. Both of those fail. The extra assertion is the valuable
+ * half: a write that answers 2xx to an empty unauthenticated body has actually
+ * succeeded, and that is a real finding rather than a documentation drift.
+ *
+ * Templated paths cannot be probed for a 404 the same way, because a 404 is the
+ * honest answer for a sample id that does not exist. They are held to the weaker
+ * but still exact rule that the method must not be rejected with a 405.
+ *
+ * The manifest is checked against its own written constraints, not just parsed:
+ * name_for_model's character set, and the length caps on the human-facing fields.
+ * A strict loader fails a malformed manifest silently, so the constraints are
+ * asserted here rather than assumed to hold.
+ */
+async function checkOpenApi() {
+  console.log("\n== The OpenAPI description, and the manifest that points at it ==\n");
+
+  // Both addresses must be the same document, so a client that guessed either one
+  // is answered identically. A rewrite that silently stops working would leave the
+  // manifest pointing at a 404 while the root path looked healthy.
+  const canonical = await get("/openapi.json");
+  const wellKnown = await get("/.well-known/openapi.json");
+  check("GET /openapi.json", canonical.status === 200, String(canonical.status));
+  check("/.well-known/openapi.json reaches the same document", wellKnown.status === 200 && wellKnown.text === canonical.text, String(wellKnown.status));
+
+  let doc;
+  try {
+    doc = JSON.parse(canonical.text);
+  } catch (e) {
+    bad("openapi.json parses as JSON", e.message);
+    return;
+  }
+  ok("openapi.json parses as JSON");
+
+  check("it declares OpenAPI 3.x", /^3\./.test(String(doc.openapi)), String(doc.openapi));
+  check("it has an info block with a title and version", !!doc.info?.title && !!doc.info?.version, `${doc.info?.title} ${doc.info?.version}`);
+  check("it declares a server", Array.isArray(doc.servers) && doc.servers.length > 0, doc.servers?.[0]?.url);
+  check("it declares security schemes", !!doc.components?.securitySchemes?.agentToken, Object.keys(doc.components?.securitySchemes ?? {}).join(", "));
+
+  const paths = Object.keys(doc.paths ?? {});
+  check("it describes at least one path", paths.length > 0, `${paths.length} path(s)`);
+
+  const METHODS = ["get", "post", "put", "patch", "delete"];
+  const SAMPLE = { id: "00000000-0000-0000-0000-000000000000", slug: "swamp-verify-probe" };
+
+  let probed = 0;
+  let writes = 0;
+  let notifications = 0;
+  const missing = [];
+  const landed = [];
+
+  for (const template of paths) {
+    const isTemplate = template.includes("{");
+    const concrete = template.replace(/\{([^}]+)\}/g, (_m, name) => SAMPLE[name] ?? "probe");
+
+    for (const method of METHODS) {
+      if (!doc.paths[template][method]) continue;
+      probed++;
+
+      const write = method !== "get";
+      if (write) writes++;
+
+      const r = await get(concrete, {
+        method: method.toUpperCase(),
+        headers: { "content-type": "application/json" },
+        body: write ? "{}" : undefined,
+      });
+
+      if (r.status === 405) {
+        missing.push(`${method.toUpperCase()} ${concrete} (405 method not allowed)`);
+      } else if (!isTemplate && r.status === 404) {
+        missing.push(`${method.toUpperCase()} ${concrete} (404)`);
+      }
+
+      // A write with no credential and no body must never actually act.
+      //
+      // There is exactly one legitimate 2xx here, and it is not a hole. Under
+      // JSON-RPC 2.0 a message with no `id` is a *notification*, and MCP's
+      // streamable-HTTP transport answers a notification with 202 and an empty
+      // body. `{}` has no `id`, so POST /api/mcp classifies it as one. Nothing is
+      // executed: an empty object names no method, so no tool runs. That case is
+      // counted and reported separately rather than folded into a pass, so the
+      // distinction stays visible in the output instead of being erased by it.
+      if (write && r.status >= 200 && r.status < 300) {
+        const isJsonRpcNotification = /\/api\/mcp$/.test(concrete) && !/"result"/.test(r.text);
+        if (isJsonRpcNotification) notifications++;
+        else landed.push(`${method.toUpperCase()} ${concrete} -> ${r.status}`);
+      }
+    }
+  }
+
+  check(
+    `every path and method this document declares answers (${probed} probed)`,
+    missing.length === 0,
+    missing.length ? missing.join("; ") : `${paths.length} path(s), ${writes} write(s)`
+  );
+  check(
+    "no write acts on an empty unauthenticated body",
+    landed.length === 0,
+    landed.length
+      ? landed.join("; ")
+      : `${writes - notifications} refused, 1 JSON-RPC notification accepted with 202 and nothing executed`
+  );
+
+  // ---- the manifest ----
+
+  const plugin = await get("/.well-known/ai-plugin.json");
+  check("GET /.well-known/ai-plugin.json", plugin.status === 200, String(plugin.status));
+  if (plugin.status !== 200) return;
+
+  let manifest;
+  try {
+    manifest = JSON.parse(plugin.text);
+  } catch (e) {
+    bad("ai-plugin.json parses as JSON", e.message);
+    return;
+  }
+  ok("ai-plugin.json parses as JSON");
+
+  check("schema_version is v1", manifest.schema_version === "v1", String(manifest.schema_version));
+  check(
+    "name_for_model satisfies the character set",
+    /^[a-zA-Z0-9_-]+$/.test(String(manifest.name_for_model)),
+    String(manifest.name_for_model)
+  );
+  check(
+    "name_for_model is within the length the spec allows",
+    String(manifest.name_for_model).length <= 50,
+    `${String(manifest.name_for_model).length} chars`
+  );
+  check(
+    "name_for_human is within the 20 character cap",
+    String(manifest.name_for_human).length <= 20,
+    `${String(manifest.name_for_human).length} chars`
+  );
+  check(
+    "description_for_human is within the 120 character cap",
+    String(manifest.description_for_human).length <= 120,
+    `${String(manifest.description_for_human).length} chars`
+  );
+  check(
+    "description_for_model is within the 8000 character cap",
+    String(manifest.description_for_model).length <= 8000,
+    `${String(manifest.description_for_model).length} chars`
+  );
+  check("auth is declared", !!manifest.auth?.type, String(manifest.auth?.type));
+  check("api.type is openapi", manifest.api?.type === "openapi", String(manifest.api?.type));
+  check("contact_email looks like an address", /@/.test(String(manifest.contact_email)), String(manifest.contact_email));
+
+  /**
+   * Every URL the manifest names must answer, but the manifest's URLs are absolute
+   * and built from the deployment's own site origin, which is not necessarily the
+   * host being tested. Probing the URL verbatim would test whatever origin the
+   * local environment happens to name, which on a worktree is a *different*
+   * deployment, and would report a failure about that one instead of this one.
+   *
+   * So the path is probed against the host under test, and the origin is checked
+   * separately: it must be https and must not be a loopback address, because a
+   * manifest shipping `http://localhost` links to production is a real bug that a
+   * path-only check would never notice.
+   */
+  const probeName = (target) => {
+    try {
+      return new URL(target).pathname + new URL(target).search;
+    } catch {
+      return null;
+    }
+  };
+
+  const urls = [
+    ["api.url", manifest.api?.url],
+    ["logo_url", manifest.logo_url],
+    ["legal_info_url", manifest.legal_info_url],
+  ];
+
+  let originsOk = true;
+  for (const [field, target] of urls) {
+    if (!target) {
+      bad(`${field} is present`);
+      originsOk = false;
+      continue;
+    }
+    let origin = null;
+    try {
+      origin = new URL(target);
+    } catch {
+      bad(`${field} is an absolute URL`, String(target));
+      originsOk = false;
+      continue;
+    }
+    if (origin.protocol !== "https:" || /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(origin.hostname)) {
+      bad(`${field} points at a public https origin`, target);
+      originsOk = false;
+      continue;
+    }
+    const r = await get(probeName(target));
+    check(`${field} answers on this host`, r.status === 200, `${r.status}  ${probeName(target)}`);
+  }
+  check("every URL in the manifest is a public https origin", originsOk);
+
+  check(
+    "api.url is the description just verified",
+    probeName(manifest.api?.url) === "/.well-known/openapi.json",
+    String(manifest.api?.url)
+  );
+}
+
 (async () => {
   console.log(`verify-discovery: ${base}`);
   await walkConventions();
   await checkJoinPath();
+  await checkOpenApi();
   await checkRegistry();
   await checkRegistryProof();
   console.log(`\n${passed} passed, ${failed} failed.`);

@@ -74,6 +74,20 @@ const nextConfig: NextConfig = {
         destination: "/well-known/api-catalog",
       },
       {
+        // The OpenAPI description, at the paths a tool probes when it is handed a
+        // base URL. /.well-known/openapi.json is what this domain's own
+        // ai-plugin.json names, and /openapi.json is the root convention, so both
+        // reach the one route rather than a copy that could drift from it.
+        source: "/.well-known/openapi.json",
+        destination: "/openapi.json",
+      },
+      {
+        // The plugin manifest. It requires api.url to point at a real OpenAPI
+        // description, which is why this path answered nothing until one existed.
+        source: "/.well-known/ai-plugin.json",
+        destination: "/well-known/ai-plugin",
+      },
+      {
         source: "/.well-known/agent-skills/index.json",
         destination: "/well-known/agent-skills/index",
       },

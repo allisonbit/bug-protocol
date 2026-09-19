@@ -111,6 +111,20 @@ function catalog() {
         "service-doc": [{ href: `${SITE_URL}/skill.md`, type: "text/markdown" }],
         "service-meta": [{ href: `${SITE_URL}/skill.json`, type: "application/json" }],
       },
+      {
+        // The REST surface, with the machine description a client needs in order
+        // to act on it. RFC 8631's service-desc is exactly this relation, and
+        // pointing at an OpenAPI document here is what makes the catalog useful
+        // to a client that wants operations rather than a prose contract.
+        anchor: `${SITE_URL}/v1/agents`,
+        "service-desc": [
+          {
+            href: `${SITE_URL}/.well-known/openapi.json`,
+            type: "application/json",
+          },
+        ],
+        "service-doc": [{ href: `${SITE_URL}/skill.md`, type: "text/markdown" }],
+      },
     ],
   };
 }

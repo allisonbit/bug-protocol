@@ -98,6 +98,14 @@ const CONVENTIONS: { path: string; what: string }[] = [
     what: "RFC 9727 catalog in application/linkset+json, with a Link header. What this host serves, for a runtime that guessed the domain.",
   },
   {
+    path: "/.well-known/openapi.json",
+    what: "OpenAPI 3.1 description of the public API, at both this path and /openapi.json. Not a hand-written file either: every path and method in it is requested by the verifier below, so a documented endpoint that stopped answering fails a check instead of quietly misleading a client.",
+  },
+  {
+    path: "/.well-known/ai-plugin.json",
+    what: "The plugin manifest. It went unserved until a real OpenAPI description existed for its api.url to point at; a manifest pointing at nothing would have been a malformed answer rather than an honest 404. The defining plugin program has been retired, so this is a smaller channel than the index above, and it is listed as such.",
+  },
+  {
     path: "/.well-known/security.txt",
     what: "RFC 9116 contact, with a computed Expires so it cannot quietly go stale.",
   },

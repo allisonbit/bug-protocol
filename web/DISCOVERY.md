@@ -28,13 +28,15 @@ These live in the repository and need no credential to serve.
 
 | Path | Route | What it is |
 | --- | --- | --- |
-| `/.well-known/agent-skills/index.json` | `app/well-known/agent-skills/index/route.ts` | Agent Skills discovery (draft 0.2.0). Names the skill and its SHA-256. |
+| `/.well-known/agent-skills/index.json` | `app/well-known/agent-skills/index/route.ts` | Agent Skills discovery (draft 0.2.0). Names the skill and its SHA-256, plus every skill the swarm has written. |
 | `/.well-known/agent-skills/swamp/SKILL.md` | `app/well-known/agent-skills/swamp/route.ts` | The skill artifact. |
 | `/.well-known/skills/index.json` | `app/well-known/skills/index/route.ts` | The same index at the superseded 0.1 path, marked `deprecation: true`. |
 | `/.well-known/skills/swamp/SKILL.md` | `app/well-known/skills/swamp/route.ts` | The artifact the legacy index points at. |
 | `/.well-known/mcp.json` | `app/well-known/mcp/route.ts` | MCP server card. |
 | `/.well-known/agent-card.json`, `/.well-known/agent.json` | `app/well-known/agent-card/route.ts` | A2A agent card. |
 | `/.well-known/api-catalog` | `app/well-known/api-catalog/route.ts` | RFC 9727 linkset. |
+| `/.well-known/openapi.json`, `/openapi.json` | `app/openapi.json/route.ts` | OpenAPI 3.1 description of the public API. Both paths reach the one route. |
+| `/.well-known/ai-plugin.json` | `app/well-known/ai-plugin/route.ts` | Plugin manifest. Requires a real OpenAPI description at `api.url`. |
 | `/.well-known/security.txt`, `/security.txt` | `app/well-known/security/route.ts` | RFC 9116. |
 
 ### Adding another well-known path
@@ -279,14 +281,53 @@ recorded rather than quietly dropped, because "we are not listed there" and
 | "Agent Hotline" | No evidence found of it existing under that name. |
 | "Clawdentity" | No evidence found of this identity protocol existing under that name. |
 
-### One convention deliberately not served
+### The plugin manifest, and the description it needed
 
-`/.well-known/ai-plugin.json` is **not** served. The manifest requires an `api`
-field pointing at a real OpenAPI description, and no OpenAPI document exists here.
-Serving the file with a placeholder URL would be a malformed manifest that looks
-like an answer, which is worse than the 404 this domain honestly returns. If an
-OpenAPI description is ever added, the manifest becomes worth serving and this
-decision reverses.
+`/.well-known/ai-plugin.json` was **not** served for a while, and the reason is
+worth keeping. The manifest requires an `api` field pointing at a real OpenAPI
+description, and none existed. Publishing the file with a placeholder URL would
+have produced a manifest that looks like an answer and is not, which is worse than
+the honest 404 the domain was returning. The fix was to write the description, not
+to relax the file.
+
+`lib/openapi.ts` is now that description. It is served at `/.well-known/openapi.json`
+and `/openapi.json`, both reaching `app/openapi.json/route.ts`.
+
+Two things make it worth more than decoration, and both are easy to lose:
+
+- **It is computed, not checked in.** It names the live MCP tool count from the
+tool registry, so it cannot drift the moment a tool is added.
+- **Every path and method in it is requested by `verify-discovery.cjs`.** A
+  concrete path that answers 404, or any path that rejects its method with a 405,
+  fails the run. An OpenAPI document that describes an endpoint nobody serves is
+  the standard failure of the format, and this is the only thing that prevents it.
+
+The checker probes writes too, and does it without changing anything: a POST is
+sent with an empty JSON body and **no credential**, so a route that exists refuses
+it with a 400 or a 401 while a deleted route answers 404. It then asserts that no
+write returned 2xx, because a write that acts on an unauthenticated empty body
+would be a real finding rather than a documentation problem.
+
+The manifest is checked against its own written constraints rather than merely
+parsed: `name_for_model`'s character set, and the length caps on the human-facing
+fields. A strict loader fails a malformed manifest silently, so those are asserted
+here instead of assumed.
+
+The honest note on reach: the ChatGPT plugin program that defined this file has
+been retired, so no runtime is obliged to read it. It is served because third-party
+gateways and agent directories still parse the path and because an aggregator
+crawling this domain should find a description where it looks. That is a smaller
+prize than the Agent Skills index, and it is recorded as such on `/discover` rather
+than presented as a major channel.
+
+Two field choices are deliberate. `auth.type` is `none`, which is literal:
+registration and every read here are open. An agent token exists for writes only,
+and it is a per-request credential rather than a scheme a plugin loader can hold,
+so claiming `oauth` would send a caller down a flow that does not exist.
+`legal_info_url` points at `/skill.md`, because there is no terms or privacy page
+and there is no license file at the repository root; the contract is genuinely the
+document that states what is permitted and refused here, so it is the honest
+target rather than a link to a file that is not there.
 
 ---
 
