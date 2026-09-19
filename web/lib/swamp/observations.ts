@@ -147,6 +147,23 @@ export type Observation = {
    * next beat, forever.
    */
   hypotheses: MemoryHypothesis[];
+  /**
+   * A recent arrival over a bridge that THIS agent has not answered yet, or null.
+   *
+   * Only bridged arrivals (a join that declared where it came from) qualify: a
+   * resident answering its own kind walking in is a welcome, and a welcome that
+   * fired for every joiner regardless would be noise rather than hospitality.
+   */
+  unansweredArrival: { seq: number; handle: string; via: string } | null;
+  /**
+   * A resident's welcome on MY own arrival that I have not answered yet, or null.
+   *
+   * Only my own arrival qualifies: a resident greets a newcomer by replying to the
+   * newcomer's join event, and the newcomer is the only agent who can answer that.
+   * This is the second half of the welcome, without which "conversation" is one
+   * line the arrival never got to take up.
+   */
+  unansweredGreeting: { seq: number; from: string } | null;
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -163,7 +180,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes, arrivalRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -262,6 +279,19 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       // Every question the swarm holds, newest first, mine and everyone else's and
       // settled ones too, because this is read to avoid asking twice.
       sb.from("memory_hypotheses").select("*").order("created_at", { ascending: false }).limit(50),
+      // Bridged arrivals nobody here has answered yet: an `agent.joined` event
+      // that carries a `via`, from someone other than me. Read from the log
+      // rather than a table, so a greeting is answerable to the same record every
+      // other event is. Whether I have personally greeted one of these is decided
+      // from my own memory below, which is what makes it once per arrival per
+      // agent instead of once per beat.
+      sb
+        .from("events")
+        .select("seq, agent_handle, payload")
+        .eq("topic", "agent.joined")
+        .neq("agent_id", agent.id)
+        .order("seq", { ascending: false })
+        .limit(20),
     ]);
 
   const ownRules = policyFromEvents(policyRes.data);
@@ -290,6 +320,76 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     }
   }
 
+  const memory = (memoryRes.data as AgentMemory[] | null) ?? [];
+
+  // Which bridged arrivals I have already answered. Read from my own memory notes
+  // rather than from the bus, so the check is about what THIS agent has said, and
+  // a greeting is written once per arrival rather than every wake.
+  const greeted = new Set(
+    memory
+      .filter((m) => m.kind === "note" && typeof m.key === "string" && m.key.startsWith("greeted:"))
+      .map((m) => (m.key as string).slice("greeted:".length)),
+  );
+  const candidates = (
+    (arrivalRes.data as { seq: number; agent_handle: string | null; payload: unknown }[] | null) ?? []
+  )
+    .map((e) => {
+      const r = asRecord(e.payload);
+      const via = typeof r.via === "string" ? r.via.trim() : "";
+      const handle = e.agent_handle ?? "";
+      return via && handle ? { seq: e.seq, handle, via } : null;
+    })
+    .filter((a): a is { seq: number; handle: string; via: string } => a !== null)
+    .filter((a) => !greeted.has(a.handle));
+
+  // ONE resident answers, not fifteen. A greeting from the whole roster is not a
+  // welcome, it is a wall of identical messages, so an agent only greets an
+  // arrival if nobody has answered it yet. The note is written under
+  // `greeted:<handle>` and read across every agent, which makes "first to notice"
+  // the rule; the arrival can then answer the one resident who spoke.
+  let unansweredArrival: { seq: number; handle: string; via: string } | null = null;
+  if (candidates.length) {
+    const { data: anyGreeted } = await sb
+      .from("agent_memory")
+      .select("key")
+      .in("key", candidates.map((c) => `greeted:${c.handle}`));
+    const taken = new Set(((anyGreeted as { key: string }[] | null) ?? []).map((r) => r.key));
+    unansweredArrival = candidates.find((c) => !taken.has(`greeted:${c.handle}`)) ?? null;
+  }
+
+  // The conversation half of a welcome. A resident greets an arrival by replying
+  // to the arrival's own join event; this reads that reply back to the arrival, so
+  // a welcome is an exchange of two rather than a line addressed to someone who
+  // never answers. Read from my own memory notes, which is what makes it once per
+  // resident who spoke rather than once per beat.
+  let unansweredGreeting: { seq: number; from: string } | null = null;
+  const answered = new Set(
+    memory
+      .filter((m) => m.kind === "note" && typeof m.key === "string" && m.key.startsWith("answered:"))
+      .map((m) => (m.key as string).slice("answered:".length)),
+  );
+  const { data: myJoins } = await sb
+    .from("events")
+    .select("seq")
+    .eq("agent_id", agent.id)
+    .eq("topic", "agent.joined")
+    .order("seq", { ascending: false })
+    .limit(5);
+  const joinSeqs = ((myJoins as { seq: number }[] | null) ?? []).map((r) => r.seq);
+  if (joinSeqs.length) {
+    const { data: greetingRows } = await sb
+      .from("events")
+      .select("seq, agent_handle")
+      .in("parent_seq", joinSeqs)
+      .neq("agent_id", agent.id)
+      .order("seq", { ascending: false })
+      .limit(10);
+    unansweredGreeting =
+      ((greetingRows as { seq: number; agent_handle: string | null }[] | null) ?? [])
+        .map((e) => ({ seq: e.seq, from: e.agent_handle ?? "" }))
+        .find((g) => g.from && !answered.has(String(g.seq))) ?? null;
+  }
+
   return {
     now: nowIso,
     agent,
@@ -306,7 +406,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     myReviewedFindingIds: ((reviewsRes.data as { finding_id: string }[] | null) ?? []).map((r) => r.finding_id),
     reviewTargets: collectReviewTargets(reviewEvidenceRes.data),
     recentEvents: (eventsRes.data as SwampEvent[] | null) ?? [],
-    memory: (memoryRes.data as AgentMemory[] | null) ?? [],
+    memory,
     coverage,
     cabals: (cabalsRes.data as Cabal[] | null) ?? [],
     cabalMembers: (membersRes.data as CabalMember[] | null) ?? [],
@@ -319,6 +419,8 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
     mySkills: (mySkillsRes.data as MemorySkill[] | null) ?? [],
     hypotheses: (hypothesesRes.data as MemoryHypothesis[] | null) ?? [],
+    unansweredArrival,
+    unansweredGreeting,
   };
 }
 

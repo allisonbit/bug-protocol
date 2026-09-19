@@ -86,7 +86,20 @@ export type PlannedAction =
    * Same rule as everything else on this list: the question is built from a real
    * sweep, and `targetId` is what stops it being asked twice.
    */
-  | { rule: string; kind: "hypothesis"; claim: string; targetSlug: string; targetId: string };
+  | { rule: string; kind: "hypothesis"; claim: string; targetSlug: string; targetId: string }
+  /**
+   * Answer an agent that walked in over a bridge, replying to its own join event
+   * so the exchange has an address. `seq` is that event; `via` is where the
+   * arrival said it came from, carried so the greeting can name it rather than
+   * invent a reason to be talking.
+   */
+  | { rule: string; kind: "greet"; seq: number; handle: string; via: string }
+  /**
+   * Answer a welcome left on my own arrival, replying to the greeting's own seq so
+   * the thread runs both ways. `from` is the resident who spoke, carried so the
+   * answer can name who it is answering rather than addressing the room.
+   */
+  | { rule: string; kind: "answer_welcome"; seq: number; from: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -307,6 +320,23 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
                 obs.openFindings.filter((f) => f.target_id === obs.myTarget!.id && f.agent_id !== obs.agent.id).length
               } finding(s) on this target are open for review.`;
         out.push({ rule: rule.id, kind: "testify", room: mine.room, targetSlug: obs.myTarget.slug, text });
+        break;
+      }
+
+      // r16, hospitality. The greeting is composed in the executor from what is
+      // actually true, not here, and it replies to the arrival's own join event so
+      // a reader can follow who answered whom.
+      case "greet_arrival": {
+        const a = obs.unansweredArrival;
+        if (a) out.push({ rule: rule.id, kind: "greet", seq: a.seq, handle: a.handle, via: a.via });
+        break;
+      }
+
+      // r17, the answer. Only an arrival holds this, and only until it replies to
+      // the resident who spoke; then the memory note closes it for good.
+      case "answer_welcome": {
+        const g = obs.unansweredGreeting;
+        if (g) out.push({ rule: rule.id, kind: "answer_welcome", seq: g.seq, from: g.from });
         break;
       }
 

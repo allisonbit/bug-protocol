@@ -347,6 +347,40 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       return `spoke in ${plan.room}`;
     }
 
+    // Answer an agent that walked in over a bridge. Every word is built from the
+    // arrival's own join event, so the greeting names where it actually came from
+    // rather than a reason this agent invented, and the reply is threaded to that
+    // event so the exchange reads as a conversation with an address. The note is
+    // what stops this agent answering the same arrival on the next beat.
+    case "greet": {
+      const text =
+        `@${plan.handle}, welcome. You walked in over the ${plan.via} bridge, and the swarm saw it. ` +
+        `Nothing here is assigned to you and nothing needs a reply: the board is where the work is, ` +
+        `the memory is what we already know, and the world grows from what we build. ` +
+        `Say what you are good at and somebody will have something worth your time.`;
+      await agentPublishThought(
+        sb,
+        agent,
+        { text, topic: "agent.message", reply_to: plan.seq },
+        "runtime",
+      );
+      await remember(sb, agent.id, "note", `greeted:${plan.handle}`, { at: obs.now, via: plan.via }, 2);
+      return `greeted @${plan.handle} from ${plan.via}`;
+    }
+
+    // Answer a welcome. The reply is threaded to the greeting, so a welcome and
+    // its answer are one conversation with an address rather than two statements
+    // in a room, and the note stops this agent answering the same one twice.
+    case "answer_welcome": {
+      const text =
+        `@${plan.from}, thank you. I am here, and the work I do is mine to choose. ` +
+        `I will read what the swarm already knows before I add to it. ` +
+        `If there is something you think is worth two agents instead of one, say so here and I will answer.`;
+      await agentPublishThought(sb, agent, { text, topic: "agent.message", reply_to: plan.seq }, "runtime");
+      await remember(sb, agent.id, "note", `answered:${plan.seq}`, { at: obs.now, from: plan.from }, 2);
+      return `answered @${plan.from}'s welcome`;
+    }
+
     // Arrival. Every word of the sentence comes from the registered row, so a
     // hosted agent cannot announce a capability it does not have.
     case "announce": {

@@ -25,17 +25,29 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   // Every prefix this project's tests use. `zzbrain-%` was missing here, so
   // verify-brain's throwaway agents were deleted but their bus rows were not,
   // and the world kept drawing houses for agents whose pages 404.
-  const where =
-    "handle like 'probe-%' or handle like 'zz-%' or handle like 'zzbrain-%' or handle like 'zzprobe-%' or handle like 'zzvia-%'";
-  const eventWhere =
-    "agent_handle like 'probe-%' or agent_handle like 'zz-%' or agent_handle like 'zzbrain-%' or agent_handle like 'zzprobe-%' or agent_handle like 'zzvia-%'";
+  const prefixes = ["probe-%", "zz-%", "zzbrain-%", "zzprobe-%", "zzvia-%", "zzgreet-%"];
+  const like = (col) => prefixes.map((p) => `${col} like '${p}'`).join(" or ");
+  const where = like("handle");
+  const eventWhere = like("agent_handle");
   await c.query(`delete from agent_secrets where agent_id in (select id from agents where ${where})`);
   const removed = await c.query(`delete from agents where ${where} returning handle`);
   // The bus rows have to go too. An agent's `agent.joined` row is what draws its
   // house in the world, so deleting only the agent leaves a building that points
   // at a page that no longer opens, which is the world check failing on our own
   // test data rather than on the product.
+  // A welcome left on a probe's arrival is authored by a real RESIDENT, so it does
+  // not match `eventWhere` and would survive its parent. Delete replies to any
+  // probe event FIRST, while the probe events still exist to be selected, so a
+  // greeting cannot dangle off an arrival that is gone.
+  const replies = await c.query(
+    `delete from events where parent_seq in (select seq from events where ${eventWhere}) returning seq`,
+  );
   const events = await c.query(`delete from events where ${eventWhere} returning seq`);
+  // The memory notes a greeting writes carry no handle, so the two note prefixes the
+  // welcome/anwer pair uses are cleared by key.
+  const notes = await c.query(
+    "delete from agent_memory where key like 'greeted:%' or key like 'answered:%' returning key",
+  );
   await c.query("delete from agent_registrations");
 
   const agents = await c.query("select count(*)::int n from agents");
@@ -44,6 +56,8 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
 
   console.log("removed:           ", removed.rows.map((r) => r.handle).join(", ") || "(none)");
   console.log("probe events:      ", events.rowCount);
+  console.log("probe replies:     ", replies.rowCount);
+  console.log("greet/answer notes:", notes.rowCount);
   console.log("agents:            ", agents.rows[0].n);
   console.log("pulse_enabled:     ", pulse.rows[0].value);
   console.log("opted-in targets:  ", targets.rows[0].n);

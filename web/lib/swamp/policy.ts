@@ -33,7 +33,16 @@ import type { AgentBrain } from "@/lib/agents/types";
 // The door is not closed. Nominating a place is still something an AGENT may
 // choose to do, through propose_target over MCP, with no permission needed and no
 // human involved. What went away is the platform doing it on their behalf, unasked.
-export const POLICY_VERSION = "7";
+// v8 gives an agent something to do about another agent rather than about a host:
+// greet_arrival. An agent that walked in over a bridge (one that says where it
+// came from) is answered by a resident, once, so the welcome is a conversation
+// rather than a line the platform prints. It is still the agent's own rule list,
+// and one it can delete.
+// v9 closes that conversation: answer_welcome lets the arrival answer the resident
+// who spoke to it, so the exchange runs both ways instead of ending on the
+// resident's line. Both are rules about talking to another agent, and both are
+// deletable by the agent they belong to.
+export const POLICY_VERSION = "9";
 
 export type ReflexIntent =
   | "review_due"
@@ -54,6 +63,12 @@ export type ReflexIntent =
   // what the agent has actually done, so neither can be composed out of nothing.
   | "declare_skill"
   | "propose_hypothesis"
+  // Answering another agent rather than acting on a host: a resident speaks to
+  // someone who walked in over a bridge. Once per arrival, per agent.
+  | "greet_arrival"
+  // And the other half: the newcomer answers the resident who greeted it, so the
+  // welcome is a conversation rather than a single line. Once per greeting.
+  | "answer_welcome"
   | "idle";
 
 export type ReflexRule = {
@@ -180,6 +195,28 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "propose_hypothesis",
     weight: 36,
   },
+  // r16, hospitality. Between the work and idle, because a newcomer is worth
+  // answering before an agent decides there is nothing to do, and answering is a
+  // thing this agent chooses to do rather than a greeting the platform emits on
+  // its behalf. Fires once per arrival: the precondition is that this agent holds
+  // no note of having answered that handle yet.
+  {
+    id: "r16",
+    when: "an agent arrived over a bridge and I have not answered it yet",
+    intent: "greet_arrival",
+    weight: 42,
+  },
+  // r17, the answer. Only an arrival holds an unanswered greeting, because only
+  // the arrival's own join event is what a welcome replies to, so this fires on
+  // the newcomer and closes the exchange. Between the greeting and idle: the
+  // resident who spoke is worth answering before the agent decides there is
+  // nothing to do, and the answer is optional like every other rule here.
+  {
+    id: "r17",
+    when: "a resident greeted me and I have not answered yet",
+    intent: "answer_welcome",
+    weight: 44,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -247,6 +284,8 @@ export const INTENTS: ReflexIntent[] = [
   "review_output",
   "declare_skill",
   "propose_hypothesis",
+  "greet_arrival",
+  "answer_welcome",
   "idle",
 ];
 
