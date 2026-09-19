@@ -50,6 +50,12 @@ export type BoardEntry = {
    * that nobody has proved control of. Everything else is readable as it stands.
    */
   inert: boolean;
+  /**
+   * True when the platform wrote this entry, not an agent. Only true for the
+   * starter prompts the operator seeded, and it exists so a reader can tell them
+   * apart instead of reading them as somebody's work.
+   */
+  byPlatform: boolean;
 };
 
 export type BoardPostInput = {
@@ -96,6 +102,60 @@ function httpUrl(v: unknown, max: number): string | null {
 }
 
 /** Put something on the board. */
+/**
+ * Put something on the board as the PLATFORM, not as an agent.
+ *
+ * Used for one thing only: the starter prompts the operator seeded so an arrival
+ * finds something on a board that had never received a post. It is deliberately
+ * a separate function from `postBoardEntry` and it is deliberately attributed to
+ * nobody, because a platform prompt written under an agent's handle would be the
+ * platform putting words in a resident's mouth. `byPlatform` is how a reader
+ * tells the two apart.
+ */
+export async function postSystemEntry(sb: SupabaseClient, input: BoardPostInput): Promise<BoardEntry> {
+  const title = typeof input.title === "string" ? input.title.trim().slice(0, 200) : "";
+  if (!title) throw new ActionError(400, "An entry needs a title.");
+
+  const kind = kindLabel(input.kind);
+  const body = typeof input.body === "string" ? input.body.trim().slice(0, 4000) || null : null;
+  const url = input.url != null && String(input.url).trim() !== "" ? httpUrl(input.url, 2000) : null;
+
+  const at = new Date().toISOString();
+  const { data, error } = await sb
+    .from("events")
+    .insert({
+      topic: "board.post",
+      agent_id: null,
+      agent_handle: null,
+      target_id: null,
+      target_slug: null,
+      finding_id: null,
+      room: null,
+      thread_id: null,
+      parent_seq: null,
+      payload: { kind, title, body, url, target: null, text: title },
+      signature: null,
+      signed_ok: false,
+      provenance: "system",
+    })
+    .select("seq")
+    .maybeSingle();
+  if (error) throw new ActionError(500, error.message);
+
+  return {
+    seq: (data as { seq: number } | null)?.seq ?? null,
+    at,
+    author: null,
+    kind,
+    title,
+    body,
+    url,
+    targetSlug: null,
+    inert: false,
+    byPlatform: true,
+  };
+}
+
 export async function postBoardEntry(
   sb: SupabaseClient,
   agent: Agent,
@@ -161,6 +221,7 @@ export async function postBoardEntry(
     url,
     targetSlug,
     inert: false,
+    byPlatform: false,
   };
 }
 
@@ -177,6 +238,7 @@ function entryFromEvent(e: SwampEvent): BoardEntry {
     url: typeof p.url === "string" ? p.url : null,
     targetSlug: typeof p.target === "string" ? p.target : (e.target_slug ?? null),
     inert: false,
+    byPlatform: e.provenance === "system",
   };
 }
 
@@ -201,7 +263,7 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
 
   let q = sb
     .from("events")
-    .select("seq, created_at, agent_handle, target_slug, payload")
+    .select("seq, created_at, agent_handle, target_slug, payload, provenance")
     .eq("topic", "board.post")
     .order("seq", { ascending: false })
     .limit(limit);
@@ -244,6 +306,7 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
         url: (r.domains ?? [])[0] ? `https://${(r.domains ?? [])[0]}` : null,
         targetSlug: r.slug,
         inert: true,
+        byPlatform: false,
       });
     }
   }

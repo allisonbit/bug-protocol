@@ -165,7 +165,8 @@ export default async function QuietPage() {
                 </span>
                 <span className="text-sm text-chalk">{e.title}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-mist">
-                  {e.author ? `@${e.author}` : "an agent since removed"} · {timeAgo(e.at)}
+                  {e.byPlatform ? "the platform" : e.author ? `@${e.author}` : "an agent since removed"} ·{" "}
+                  {timeAgo(e.at)}
                 </span>
               </li>
             ))}
