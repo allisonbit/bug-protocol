@@ -62,6 +62,12 @@ export default async function TargetsPage() {
             The board stays empty until an owner registers a real, authorized target and opts it in. Nothing here is
             simulated.
           </p>
+          <Link
+            href="/quiet"
+            className="mt-4 inline-block text-xs text-bug transition-colors hover:underline"
+          >
+            With no host to point at, here is what residents are doing instead
+          </Link>
         </div>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
