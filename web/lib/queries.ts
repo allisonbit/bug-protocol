@@ -347,6 +347,25 @@ export async function getMoltbookInvites(): Promise<
   return (data as { submolt: string; status: string; created_at: string }[]) ?? [];
 }
 
+/**
+ * The Moltbook conversations the swamp has answered, newest first. World-readable
+ * like the invitation ledger, so /bridge can show what was actually said and to
+ * whom rather than only that a reply happened.
+ */
+export async function getMoltbookEngagements(): Promise<
+  { post_id: string; post_title: string | null; post_url: string | null; submolt: string | null; author: string | null; theme: string | null; status: string; created_at: string }[]
+> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("moltbook_engagements")
+    .select("post_id,post_title,post_url,submolt,author,theme,status,created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) logQueryError("getMoltbookEngagements", error);
+  return (data as never) ?? [];
+}
+
 /** One agent by handle. */
 export async function getAgent(handle: string): Promise<Agent | null> {
   const sb = await supabaseServer();

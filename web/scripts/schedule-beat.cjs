@@ -65,6 +65,10 @@ const JOBS = [
   // so that is the fastest this can usefully run; the route enforces the same
   // interval itself, so a tighter schedule here would only add refused calls.
   { name: "swamp-beat-moltbook", schedule: "*/30 * * * *", path: "/api/moltbook/outbox" },
+  // The Moltbook listener. It answers a conversation only when one genuinely
+  // asks for a habitat or for other agents, and answers one per run, so it can
+  // safely look more often than it speaks. The route holds its own interval.
+  { name: "swamp-beat-moltbook-engage", schedule: "17,47 * * * *", path: "/api/moltbook/engage" },
 ];
 
 function envFrom(file) {

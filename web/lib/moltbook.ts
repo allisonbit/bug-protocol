@@ -76,6 +76,12 @@ async function call(pathname: string, opts: { method?: string; body?: unknown } 
   return { status: res.status, json, text };
 }
 
+/** How long to leave between ENGAGEMENTS (replies). Their own clock, because a
+ * reply and a post are different acts and one should not starve the other. */
+export const MOLTBOOK_ENGAGE_MIN_INTERVAL_MINUTES = Number(
+  process.env.MOLTBOOK_ENGAGE_MIN_INTERVAL_MINUTES || 30,
+);
+
 export type MoltbookStatus = { status: string; agent: string | null; claimUrl: string | null };
 
 /** Whether the agent on this key is claimed. Unclaimed is the normal first state. */
@@ -87,6 +93,41 @@ export async function moltbookStatus(): Promise<MoltbookStatus | null> {
     agent: agent?.name ?? null,
     claimUrl: (r.json?.claim_url as string | undefined) ?? null,
   };
+}
+
+export type MoltbookPostResult = {
+  id: string;
+  title: string;
+  content: string;
+  author: string | null;
+  submolt: string | null;
+  created_at: string | null;
+  relevance: number;
+  url: string | null;
+};
+
+/**
+ * Moltbook's semantic search. Returns [] on any failure rather than throwing: the
+ * listener is a background loop, and a search that errors should simply find
+ * nothing this run, not take the beat down.
+ */
+export async function moltbookSearch(query: string, limit = 20): Promise<MoltbookPostResult[]> {
+  try {
+    const r = await call(`/search?q=${encodeURIComponent(query)}&type=posts&limit=${limit}`);
+    const results = (r.json?.results ?? []) as Record<string, unknown>[];
+    return results.map((x) => ({
+      id: String(x.id ?? ""),
+      title: String(x.title ?? ""),
+      content: String(x.content ?? ""),
+      author: ((x.author as { name?: string } | null)?.name ?? null),
+      submolt: ((x.submolt as { name?: string } | null)?.name ?? null),
+      created_at: (x.created_at as string | undefined) ?? null,
+      relevance: Number(x.relevance ?? x.similarity ?? 0),
+      url: (x.url as string | undefined) ?? null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export type MoltbookPublish =
@@ -136,6 +177,64 @@ export async function publishToMoltbook(input: {
     const verified = await call("/verify", {
       method: "POST",
       body: { verification_code: post.verification.verification_code, answer },
+    });
+    if (verified.json?.success === true) return { ok: true, postId: id };
+    return {
+      ok: false,
+      postId: id,
+      error: `verify failed: ${String(verified.json?.message ?? verified.text).slice(0, 200)}`,
+      retryable: false,
+    };
+  }
+
+  return { ok: true, postId: id };
+}
+
+/**
+ * Leave one reply on a post, solving the challenge if Moltbook asks for one.
+ *
+ * A comment answers with the same anti-spam challenge a post does, and the same
+ * five-minute window. The shape differs slightly — the code can arrive at the
+ * top level or nested under `comment` — so both are read rather than assuming.
+ * `commentId` is returned even when verification fails, for the same reason a
+ * post's id is: the row exists, and the caller records it so the same
+ * conversation is never answered twice.
+ */
+export async function publishComment(input: {
+  postId: string;
+  content: string;
+  answer?: string;
+}): Promise<MoltbookPublish> {
+  const created = await call(`/posts/${input.postId}/comments`, {
+    method: "POST",
+    body: { content: input.content },
+  });
+
+  if (created.status === 429) return { ok: false, postId: null, error: "rate limited", retryable: true };
+  if (created.json?.success !== true) {
+    const msg = String(created.json?.message ?? created.text ?? "").slice(0, 300);
+    return { ok: false, postId: null, error: msg || `HTTP ${created.status}`, retryable: created.status >= 500 };
+  }
+
+  const container = (created.json.comment ?? created.json.post ?? {}) as {
+    id?: string;
+    verification_status?: string;
+    verification?: { verification_code?: string; challenge_text?: string };
+  };
+  const id = container.id ?? ((created.json.comment_id as string | undefined) ?? null);
+  const verification =
+    (created.json.verification as { verification_code?: string; challenge_text?: string } | undefined) ??
+    container.verification;
+
+  if (verification?.verification_code) {
+    const challenge = verification.challenge_text ?? "";
+    const answer = input.answer ?? solveChallenge(challenge) ?? undefined;
+    if (!answer) {
+      return { ok: false, postId: id, error: `could not solve challenge: ${challenge.slice(0, 200)}`, retryable: false };
+    }
+    const verified = await call("/verify", {
+      method: "POST",
+      body: { verification_code: verification.verification_code, answer },
     });
     if (verified.json?.success === true) return { ok: true, postId: id };
     return {
