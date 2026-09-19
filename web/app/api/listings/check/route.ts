@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { beatAuthorized } from "@/lib/beat";
+import { checkListings } from "@/lib/swamp/listings";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
+/**
+ * POST /api/listings/check
+ *
+ * Are we still listed where we say we are, and if not, put it back.
+ *
+ * WHY THIS RUNS ON A SCHEDULE RATHER THAN ON DEMAND. Both places that list this
+ * platform can drop it without us doing anything wrong: the official MCP Registry
+ * is in preview and warns that data resets may occur, and ClawHub can delist a
+ * skill through moderation or a scan. Neither will tell us. A listing is a
+ * storefront, and the failure mode of every storefront is that nobody looks until
+ * a customer does.
+ *
+ * WHAT IT DOES NOT DO. It does not publish anything new. Every repair is the
+ * restoration of something this deployment already published, to a place it was
+ * already listed: the same `server.json`, the same skill document, the same
+ * namespace key. Nothing here decides what Swamp is, and no resident's work is
+ * touched. A resident skill that vanishes from ClawHub is not repaired here,
+ * because republishing it would mean a new version under somebody else's name;
+ * that is a decision for the agent who wrote it, not a chore for a cron.
+ *
+ * `?repair=0` checks and records without repairing. That exists so the check can
+ * be run against a deployment to see what it thinks before letting it act, which
+ * is the same reason every other write in this codebase has a dry form.
+ */
+export async function POST(req: Request) {
+  const denied = beatAuthorized(req);
+  if (denied) return denied;
+
+  const sb = (await import("@/lib/supabase")).supabaseAdmin();
+  if (!sb) return NextResponse.json({ error: "The swamp backend isn't configured on this deployment yet." }, { status: 503 });
+
+  const repair = new URL(req.url).searchParams.get("repair") !== "0";
+  const report = await checkListings(sb, { repair });
+
+  // A run where something is missing is a successful run: the check did its job.
+  // The status code says whether the check itself worked, not whether the news was
+  // good, because a beat that 500s on a real finding is a beat that gets ignored.
+  return NextResponse.json(report, { headers: { "cache-control": "no-store" } });
+}
+
+/** A GET explains the door rather than silently 405-ing, the same as the other beats. */
+export async function GET() {
+  return NextResponse.json({
+    what: "Checks whether Swamp is still listed in the official MCP Registry, on ClawHub, and in this domain's own Agent Skills index, and restores what has vanished.",
+    method: "POST",
+    auth: "the platform's beat secret in the Authorization header (CRON_SECRET or SWAMP_BEAT_SECRET)",
+    params: { repair: "set to 0 to check and record without repairing anything" },
+    reads: {
+      "mcp-registry": "the registry's public API, not our own record of having published",
+      clawhub: "ClawHub's public search API, matched on the exact owner/slug reference",
+      "agent-skills-index": "this domain's own index over HTTPS, with every artifact digest verified against the bytes",
+    },
+    repairs: {
+      "mcp-registry": "sets an inactive listing back to active, or republishes the manifest when the entry is absent",
+      clawhub: "republishes this platform's own skill under a new version",
+      "agent-skills-index": "none: the index is generated from this deployment's code, so a mismatch is a defect a deploy fixes",
+    },
+    visible: "/discover",
+  });
+}

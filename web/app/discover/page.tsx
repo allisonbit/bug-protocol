@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SITE_URL, REPO_URL } from "@/lib/site";
 import { SKILL_NAME } from "@/lib/skill";
 import { skillDigest } from "@/lib/skill-index";
+import { readListingHealth } from "@/lib/swamp/listings";
 
 /**
  * /discover: where Swamp can be found, and how each one is actually working.
@@ -18,9 +19,19 @@ import { skillDigest } from "@/lib/skill-index";
  * remembers. When it cannot be reached it says that instead of defaulting to a
  * green tick, because a check that fails open is not a check.
  *
- * ClawHub is stated with its identifier rather than a live read, because it has no
- * public API this page can query without a credential, and inventing a green light
- * for it would make the one live row above worthless by association.
+ * WHERE THE LIVE READ ENDS AND THE SCHEDULE BEGINS. The registry block below asks
+ * the registry what it says at the moment you load the page. The second block is
+ * different in kind: it is the platform's own record of checking all three places
+ * it claims to be listed, on an hourly schedule, including whether it had to put
+ * one of them back. It is here because "we are listed" is a claim about the past,
+ * and a listing that vanished an hour ago is still a claim that reads true.
+ *
+ * An earlier version of this page said ClawHub could not be read without a
+ * credential. That was wrong, and it is worth recording why the correction came
+ * late: the obvious URL to check is the canonical skill page, and it returns **200
+ * for anything** — a slug that has never existed and another owner's skill both
+ * answer 200 — so it looks like a working check while proving nothing. The public
+ * search API is the signal that actually distinguishes present from absent.
  *
  * The distinction the page keeps honest is between the three ways a thing gets
  * found: conventions a runtime guesses from a domain name, directories a person
@@ -164,8 +175,31 @@ function Dot({ tone }: { tone: "good" | "warn" | "bad" }) {
   return <span className={`mt-1.5 inline-block size-1.5 shrink-0 rounded-full ${c}`} aria-hidden />;
 }
 
+/** "4 minutes ago" is more use here than a timestamp nobody converts in their head. */
+function ago(iso: string | null): string {
+  if (!iso) return "never";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return "unknown";
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
 export default async function DiscoverPage() {
   const registry = await readRegistry();
+
+  // The platform's own check of all three listings. A page that cannot reach the
+  // database says so rather than drawing an empty list that reads as "no problems".
+  let health: Awaited<ReturnType<typeof readListingHealth>> | null = null;
+  try {
+    const sb = (await import("@/lib/supabase")).supabaseAdmin();
+    if (sb) health = await readListingHealth(sb);
+  } catch {
+    health = null;
+  }
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 pb-24 pt-20 sm:pt-28">
@@ -236,6 +270,74 @@ export default async function DiscoverPage() {
             GET {REGISTRY_API.replace("?search=world.swampai", "?search=world.swampai")}
           </p>
         </div>
+      </section>
+
+      {/* ---- The schedule. Not what the registry says now, but what checking every
+           listing hourly has actually found, and what it had to put back. ---- */}
+      <section className="mt-14">
+        <h2 className="text-xs tracking-widest text-mist uppercase">Checked on a schedule</h2>
+        <p className="mt-4 max-w-2xl text-sm leading-relaxed text-mist">
+          Every listing this platform claims is read from the outside once an hour, by{" "}
+          <span className="font-mono text-[11px]">/api/listings/check</span>. A listing that has vanished is restored
+          rather than merely reported, because a storefront nobody looks at is how this goes quietly empty. What the
+          check found is below, not what it hopes.
+        </p>
+
+        {health === null && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-ink-soft p-5">
+            <Dot tone="warn" />
+            <p className="text-sm text-chalk">
+              This page cannot read the check history right now, so it cannot tell you whether the listings above are
+              being watched. That is stated rather than drawn as a clean sheet.
+            </p>
+          </div>
+        )}
+
+        {health !== null && health.length === 0 && (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-ink-soft p-5">
+            <Dot tone="warn" />
+            <p className="text-sm text-chalk">
+              The check has not run on this deployment yet, so there is nothing to report either way. It runs hourly
+              on the beat.
+            </p>
+          </div>
+        )}
+
+        {health !== null && health.length > 0 && (
+          <ul className="mt-4 space-y-3">
+            {health.map((row) => (
+              <li key={row.listing} className="rounded-xl border border-line bg-ink-soft p-5">
+                <div className="flex items-start gap-3">
+                  <Dot tone={row.state === "present" ? "good" : row.state === "missing" ? "bad" : "warn"} />
+                  <div className="min-w-0">
+                    <p className="text-sm text-chalk">
+                      {row.title}{" "}
+                      <span className="text-mist">
+                        {row.state === "present"
+                          ? "is listed."
+                          : row.state === "missing"
+                            ? "is not listed."
+                            : "could not be read."}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-[13px] leading-relaxed text-mist">{row.detail}</p>
+                    {row.repaired && row.repairDetail && (
+                      <p className="mt-1 text-[13px] leading-relaxed text-chalk">
+                        Restored automatically: {row.repairDetail}
+                      </p>
+                    )}
+                    <p className="mt-1 text-[11px] text-mist">
+                      Checked {ago(row.checkedIso)}. {"Read it yourself: "}
+                      <a href={row.url} className="break-all underline decoration-line underline-offset-2">
+                        {row.url}
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* ---- Conventions: the part that needs nobody to list us. ---- */}

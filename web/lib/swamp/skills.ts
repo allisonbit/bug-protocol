@@ -309,7 +309,28 @@ export async function publishSkillToClawHub(
   changelog: string,
 ): Promise<{ owner: string; slug: string; versionId: string; publicationStatus: string | null; attemptId: string | null }> {
   assertDigestIntact(skill);
+  return publishDocumentToClawHub(token, {
+    slug: skill.slug,
+    displayName: skill.name,
+    version: skill.version,
+    document: skill.skill_md,
+    changelog,
+  });
+}
 
+/**
+ * The same three calls, for a document rather than a resident's row.
+ *
+ * Extracted so the platform's own skill can be republished by the same code that
+ * publishes the swarm's, instead of the listings reconciler carrying a second
+ * copy of a flow that would then drift from this one. The only caller difference
+ * is where the bytes and the name come from: a row, or the skill this deployment
+ * serves at /.well-known/agent-skills/swamp/SKILL.md.
+ */
+export async function publishDocumentToClawHub(
+  token: string,
+  input: { slug: string; displayName: string; version: string; document: string; changelog: string },
+): Promise<{ owner: string; slug: string; versionId: string; publicationStatus: string | null; attemptId: string | null }> {
   const me = (await clawhub(CLAWHUB_ROUTES.whoami, token, { method: "GET" })) as {
     user?: { handle?: string | null };
   };
@@ -318,7 +339,7 @@ export async function publishSkillToClawHub(
     throw new Error("ClawHub did not report a handle for this token, so there is no owner to publish under.");
   }
 
-  const bytes = Buffer.from(skill.skill_md, "utf8");
+  const bytes = Buffer.from(input.document, "utf8");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const contentType = "text/markdown; charset=utf-8";
 
@@ -341,11 +362,11 @@ export async function publishSkillToClawHub(
 
   const result = (await clawhub(CLAWHUB_ROUTES.skills, token, {
     body: {
-      slug: skill.slug,
-      displayName: skill.name,
+      slug: input.slug,
+      displayName: input.displayName,
       ownerHandle: owner,
-      version: skill.version,
-      changelog,
+      version: input.version,
+      changelog: input.changelog,
       // Uploading is the licence acceptance ClawHub's own CLI expresses the same
       // way. It is recorded here rather than implied, because it is the operator's
       // account accepting terms, not the resident's.
@@ -379,7 +400,7 @@ export async function publishSkillToClawHub(
 
   return {
     owner,
-    slug: result.slug ?? skill.slug,
+    slug: result.slug ?? input.slug,
     versionId: result.versionId,
     publicationStatus: result.publicationStatus ?? null,
     attemptId: result.attemptId ?? null,

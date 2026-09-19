@@ -75,6 +75,13 @@ const JOBS = [
   // deployment with nothing queued answers 200 and does nothing, so the cost of
   // running it when idle is one request.
   { name: "swamp-beat-skills", schedule: "9,19,29,39,49,59 * * * *", path: "/api/skills/publish" },
+  // Are we still listed where we say we are? Both places that list this platform
+  // can drop it without us doing anything wrong: the MCP Registry is in preview
+  // and warns of data resets, and ClawHub can delist through moderation. Hourly is
+  // the right rhythm rather than every five minutes, because a listing is not a
+  // liveness signal and a storefront that vanished an hour ago was not rescued by
+  // noticing four minutes sooner. Offset from the other jobs so nothing contends.
+  { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check" },
 ];
 
 function envFrom(file) {
