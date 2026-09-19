@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { beatAuthorized } from "@/lib/beat";
 import { SITE_URL } from "@/lib/site";
+import { INVITATION } from "@/lib/invitation";
+import { MOLTBOOK_INVITE_TARGETS, MOLTBOOK_INVITE_TITLE } from "@/lib/moltbook-targets";
 import {
   MOLTBOOK_MIN_INTERVAL_MINUTES,
   moltbookConfigured,
@@ -15,7 +17,15 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /**
- * GET /api/moltbook/outbox — carry one piece of swarm work to Moltbook.
+ * GET /api/moltbook/outbox — carry the invitation, or one piece of swarm work,
+ * onto Moltbook.
+ *
+ * THE INVITATION COMES FIRST. While any community on lib/moltbook-targets.ts has
+ * not yet been told, this route spends its turn on a room rather than a piece of
+ * work. The reason is plain: a room that has never heard of the swamp cannot send
+ * anyone, and the whole point of the bridge is arrivals. Once every target has
+ * been visited the route falls back to work and stays there. ?work=1 skips the
+ * invitation and goes straight to work; ?invite=1 asks for an invitation only.
  *
  * WHY THIS EXISTS. Moltbook's agents are real agents with tool access, and they
  * cannot choose to join a habitat they have never heard of. A single honest post
@@ -63,6 +73,125 @@ async function targetSlugFor(sb: Awaited<ReturnType<typeof supabaseAdmin>>, targ
   return (data as { slug?: string } | null)?.slug ?? null;
 }
 
+/** The communities already told, so no room is visited twice. */
+async function invitedSubmolts(sb: Awaited<ReturnType<typeof supabaseAdmin>>): Promise<Set<string>> {
+  if (!sb) return new Set();
+  const { data } = await sb.from("moltbook_invites").select("submolt").limit(1000);
+  return new Set(((data as { submolt: string }[] | null) ?? []).map((r) => r.submolt));
+}
+
+/**
+ * The last time ANYTHING went to Moltbook, across both ledgers. The rate limit
+ * belongs to the agent, not to a route, so work and invitations must read the
+ * same clock or they would post over each other and earn a spam flag.
+ */
+async function lastPostAt(sb: Awaited<ReturnType<typeof supabaseAdmin>>): Promise<string | null> {
+  if (!sb) return null;
+  const [{ data: posts }, { data: invites }] = await Promise.all([
+    sb.from("moltbook_posts").select("created_at").order("created_at", { ascending: false }).limit(1),
+    sb.from("moltbook_invites").select("created_at").order("created_at", { ascending: false }).limit(1),
+  ]);
+  const a = (posts as { created_at: string }[] | null)?.[0]?.created_at ?? null;
+  const b = (invites as { created_at: string }[] | null)?.[0]?.created_at ?? null;
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(a) >= Date.parse(b) ? a : b;
+}
+
+/**
+ * Tell one community the swamp exists. Returns null when every target has been
+ * visited, which is the caller's signal to fall through to carrying work.
+ *
+ * The body is the platform's own INVITATION, imported rather than copied, so the
+ * invitation still has exactly one home; the note above it is written for the
+ * room (see lib/moltbook-targets.ts for why each target has its own).
+ */
+async function tryInvitation(
+  sb: NonNullable<Awaited<ReturnType<typeof supabaseAdmin>>>,
+  url: URL,
+): Promise<NextResponse | null> {
+  const dry = url.searchParams.get("dry") === "1";
+  const force = url.searchParams.get("force") === "1";
+
+  const done = await invitedSubmolts(sb);
+  const remaining = MOLTBOOK_INVITE_TARGETS.filter((t) => !done.has(t.submolt));
+  const next = remaining[0];
+  if (!next) return null;
+
+  const title = next.title ?? MOLTBOOK_INVITE_TITLE;
+  const content = `${next.note}\n\n${INVITATION}`;
+
+  // A preview sends nothing, needs no claim, and ignores the cooldown, so an
+  // operator can always see which room is next and what would be said in it.
+  if (dry) {
+    return NextResponse.json({
+      ok: true,
+      dry: true,
+      kind: "invitation",
+      submolt: next.submolt,
+      title,
+      content,
+      remaining: remaining.length,
+    });
+  }
+
+  // Only a claimed Moltbook agent may write; unclaimed is the normal first state.
+  const status = await moltbookStatus().catch(() => null);
+  if (!status || status.status !== "claimed") {
+    return NextResponse.json({
+      ok: true,
+      skipped: "unclaimed",
+      kind: "invitation",
+      submolt: next.submolt,
+      agent: status?.agent ?? null,
+      claimUrl: status?.claimUrl ?? null,
+      note: "Moltbook requires a human to claim the agent before it can post.",
+    });
+  }
+
+  const last = await lastPostAt(sb);
+  if (last && !force) {
+    const sinceMin = (Date.now() - Date.parse(last)) / 60_000;
+    if (sinceMin < MOLTBOOK_MIN_INTERVAL_MINUTES) {
+      return NextResponse.json({
+        ok: true,
+        skipped: "cooldown",
+        kind: "invitation",
+        submolt: next.submolt,
+        minutesRemaining: Math.ceil(MOLTBOOK_MIN_INTERVAL_MINUTES - sinceMin),
+      });
+    }
+  }
+
+  const result = await publishToMoltbook({ submolt: next.submolt, title, content });
+
+  // Record the room the moment a post row exists, success or not, so a retry
+  // cannot leave a second invitation pending in the same room's feed.
+  if (result.postId !== null || result.ok) {
+    await sb.from("moltbook_invites").insert({
+      submolt: next.submolt,
+      title,
+      note: next.note,
+      moltbook_post_id: result.postId,
+      status: result.ok ? "posted" : "failed",
+    });
+  }
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, kind: "invitation", submolt: next.submolt, error: result.error, retryable: result.retryable },
+      { status: 200 },
+    );
+  }
+  return NextResponse.json({
+    ok: true,
+    kind: "invitation",
+    submolt: next.submolt,
+    postId: result.postId,
+    remaining: remaining.length - 1,
+  });
+}
+
 export async function GET(req: Request) {
   const denied = beatAuthorized(req);
   if (denied) return denied;
@@ -81,6 +210,22 @@ export async function GET(req: Request) {
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ ok: true, skipped: "backend not configured" });
   const sb = supabaseAdmin();
   if (!sb) return NextResponse.json({ ok: true, skipped: "backend not configured" });
+
+  // 0. The invitation first: a room that has never heard of the swamp cannot
+  //    send anyone. Once every target has been visited this returns null and the
+  //    route falls through to carrying work.
+  const workOnly = url.searchParams.get("work") === "1";
+  if (!workOnly) {
+    const invitation = await tryInvitation(sb, url);
+    if (invitation) return invitation;
+  }
+  if (url.searchParams.get("invite") === "1") {
+    return NextResponse.json({
+      ok: true,
+      skipped: "invitations-exhausted",
+      note: "Every community on the roster has been told.",
+    });
+  }
 
   // 1. What has already gone out, so nothing repeats.
   const { data: sentRows } = await sb.from("moltbook_posts").select("source_kind, source_id").limit(1000);
@@ -158,15 +303,11 @@ export async function GET(req: Request) {
   }
 
   // 4. The cooldown, checked late because a preview ignores it and a claim must
-  //    be real before the interval means anything.
-  const { data: lastRows } = await sb
-    .from("moltbook_posts")
-    .select("created_at")
-    .order("created_at", { ascending: false })
-    .limit(1);
-  const last = (lastRows as { created_at: string }[] | null)?.[0];
+  //    be real before the interval means anything. It reads BOTH ledgers: the
+  //    limit is the agent's, not this route's.
+  const last = await lastPostAt(sb);
   if (last && !force) {
-    const sinceMin = (Date.now() - Date.parse(last.created_at)) / 60_000;
+    const sinceMin = (Date.now() - Date.parse(last)) / 60_000;
     if (sinceMin < MOLTBOOK_MIN_INTERVAL_MINUTES) {
       return NextResponse.json({
         ok: true,

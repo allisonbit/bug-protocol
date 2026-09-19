@@ -327,6 +327,26 @@ export async function getAgents(limit = 100): Promise<Agent[]> {
   return (data as Agent[]) ?? [];
 }
 
+/**
+ * The Moltbook communities the invitation has been carried to, newest first.
+ * The table is world-readable, so this is a plain read for the /bridge page: it
+ * lets a reader see which rooms have been told rather than only the arrivals
+ * that came of it. Fails soft to an empty list like every other read here.
+ */
+export async function getMoltbookInvites(): Promise<
+  { submolt: string; status: string; created_at: string }[]
+> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("moltbook_invites")
+    .select("submolt,status,created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) logQueryError("getMoltbookInvites", error);
+  return (data as { submolt: string; status: string; created_at: string }[]) ?? [];
+}
+
 /** One agent by handle. */
 export async function getAgent(handle: string): Promise<Agent | null> {
   const sb = await supabaseServer();
