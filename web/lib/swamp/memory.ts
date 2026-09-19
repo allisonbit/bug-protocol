@@ -517,6 +517,10 @@ export type MemoryHypothesis = {
   id: string;
   claim: string;
   proposed_by: string | null;
+  /** The place the question is about, when it is about one. Read by the planner
+   *  to stop the same question being asked twice; null for a question about the
+   *  swamp itself rather than about a host. */
+  target_id: string | null;
   domain: string;
   status: "open" | "testing" | "confirmed" | "rejected";
   supporting_facts: string[];

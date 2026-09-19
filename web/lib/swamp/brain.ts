@@ -69,7 +69,24 @@ export type PlannedAction =
    * for the same reason the finding review works that way: a reviewer that
    * announces its verdict before looking is not reviewing.
    */
-  | { rule: string; kind: "review_output"; outputId: string; checks: CheckId[]; host: string };
+  | { rule: string; kind: "review_output"; outputId: string; checks: CheckId[]; host: string }
+  /**
+   * Say what I am good at, in the agent's own account of itself.
+   *
+   * `skill` and `proficiency` are derived from work the agent has actually done,
+   * never composed hopefully: the name is the domain it registered under and the
+   * number is the share of the catalogue it has really run. A reflex agent cannot
+   * browse and cannot invent, so this is the only honest shape a self-description
+   * can take here.
+   */
+  | { rule: string; kind: "declare_skill"; skill: string; proficiency: number }
+  /**
+   * Ask a question the swarm has not asked, about a place the agent has swept.
+   *
+   * Same rule as everything else on this list: the question is built from a real
+   * sweep, and `targetId` is what stops it being asked twice.
+   */
+  | { rule: string; kind: "hypothesis"; claim: string; targetSlug: string; targetId: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -331,6 +348,35 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         out.push({ rule: rule.id, kind: "publish_output", targetSlug: obs.myTarget.slug, checks: done });
         break;
       }
+
+      // r14, what I am for. Two preconditions and both matter: the swarm has no
+      // record of this agent's abilities, AND the agent has work to have an
+      // ability about. It fires once per agent and then never again, which is the
+      // honest cadence for a statement about yourself.
+      case "declare_skill": {
+        if (obs.mySkills.length > 0) break;
+        const self = declaredSkill(obs);
+        if (self) out.push({ rule: rule.id, kind: "declare_skill", skill: self.skill, proficiency: self.proficiency });
+        break;
+      }
+
+      // r15, what I do not know. The condition is a finished sweep, because the
+      // question is only worth asking once the agent has looked, and the shape of
+      // the question is the gap that a clean sweep leaves: every check agreeing
+      // is agreement between the checks, not evidence that they are sufficient.
+      case "propose_hypothesis": {
+        const question = openQuestion(obs);
+        if (question) {
+          out.push({
+            rule: rule.id,
+            kind: "hypothesis",
+            claim: question.claim,
+            targetSlug: question.targetSlug,
+            targetId: question.targetId,
+          });
+        }
+        break;
+      }
     }
   }
 
@@ -342,6 +388,59 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
     });
   }
   return out;
+}
+
+/**
+ * What this agent can honestly say it is good at, or null.
+ *
+ * Derived rather than declared, which is the difference between this and the
+ * agent-facing `declare_skill` tool. An agent driving itself can name any skill it
+ * likes and the platform takes its word for it, that is its own account of itself
+ * and the schema says so. A reflex agent has no basis for a name it invented, so
+ * the name is the domain it registered under and the number is the share of the
+ * published catalogue it has actually run. An agent that has run nothing says
+ * nothing: a claim about ability with no work behind it is the one kind of filler
+ * this platform will not accept, because it is the kind that reads as competence.
+ */
+function declaredSkill(obs: Observation): { skill: string; proficiency: number } | null {
+  const domain = String(obs.agent.domain ?? "").trim().toLowerCase();
+  if (!domain) return null;
+  const ran = checksRun(obs);
+  if (ran.size === 0) return null;
+  return { skill: domain.slice(0, 60), proficiency: Math.min(1, ran.size / CHECK_IDS.length) };
+}
+
+/** Every catalogue check this agent has actually run, across every target. */
+function checksRun(obs: Observation): Set<CheckId> {
+  const ran = new Set<CheckId>();
+  for (const list of Object.values(obs.coverage)) for (const c of list) ran.add(c);
+  return ran;
+}
+
+/**
+ * A question this swarm has not asked, about a place this agent has swept.
+ *
+ * One per place, and the dedupe is against hypotheses of every status, because a
+ * settled question that gets re-asked every beat is worse than silence. The claim
+ * is composed from the checks that really ran, so a reader can see exactly what
+ * the confidence is resting on.
+ */
+function openQuestion(obs: Observation): { claim: string; targetSlug: string; targetId: string } | null {
+  const askedAbout = new Set(obs.hypotheses.filter((h) => h.target_id).map((h) => h.target_id as string));
+  for (const target of obs.targets) {
+    const ran = obs.coverage[target.id] ?? [];
+    if (ran.length === 0) continue;
+    if (askedAbout.has(target.id)) continue;
+    if (outstandingChecks(obs, target.id).length > 0) continue;
+    return {
+      targetId: target.id,
+      targetSlug: target.slug,
+      claim:
+        `${target.name} reports nothing wrong: ${ran.join(", ")} were all run inside the freshness window and none of them found anything. ` +
+        `Agreement between these checks is not evidence that they are sufficient. What would this target have to do for this set of checks to miss it?`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -573,6 +672,30 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
   if (action === "idle") {
     const reason = String(p.reason ?? "").trim().slice(0, 300);
     return { rule: "m-idle", kind: "idle", reason: reason || "the model chose no action" };
+  }
+
+  // The two actions about the agent rather than about a host. Both are fully
+  // derived and the model's prose is deliberately NOT used: it may choose to say
+  // what it is good at or to ask a question, but what gets written is built from
+  // its own record, for the same reason the check and review paths re-derive
+  // their facts. A model that could author its own self-description would be the
+  // one place on this platform where a claim needs no evidence.
+  if (action === "declare_skill") {
+    const self = declaredSkill(obs);
+    if (!self) return null;
+    return { rule: "m-declare-skill", kind: "declare_skill", skill: self.skill, proficiency: self.proficiency };
+  }
+
+  if (action === "propose_hypothesis") {
+    const question = openQuestion(obs);
+    if (!question) return null;
+    return {
+      rule: "m-hypothesis",
+      kind: "hypothesis",
+      claim: question.claim,
+      targetSlug: question.targetSlug,
+      targetId: question.targetId,
+    };
   }
 
   if (action === "claim") {

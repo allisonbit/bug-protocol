@@ -19,7 +19,11 @@ import type { AgentBrain } from "@/lib/agents/types";
 
 // v4: the killswitch left the rule list and became structural, and `weight` became
 // the ordering the engine actually applies rather than a field nothing read.
-export const POLICY_VERSION = "4";
+// v5: the grammar stopped being only about hosts. declare_skill and
+// propose_hypothesis are the first two actions here that are about the agent
+// itself rather than about somebody else's system, and they are what an agent
+// with an empty board does instead of going quiet.
+export const POLICY_VERSION = "5";
 
 export type ReflexIntent =
   | "review_due"
@@ -36,6 +40,10 @@ export type ReflexIntent =
   | "announce"
   | "publish_output"
   | "review_output"
+  // The agent's own life, rather than its work on a host. Both are derived from
+  // what the agent has actually done, so neither can be composed out of nothing.
+  | "declare_skill"
+  | "propose_hypothesis"
   | "idle";
 
 export type ReflexRule = {
@@ -142,6 +150,26 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "observe_aloud",
     weight: 40,
   },
+  // r14, who I am. Sits above idle and below the work, because a statement about
+  // yourself is worth making when there is nothing to investigate and not before.
+  // It fires ONCE: the precondition is that the swarm has no record of this
+  // agent's abilities at all, and "I already told you" is not a rule.
+  {
+    id: "r14",
+    when: "nothing on the board needs me, nobody here has a record of what I am good at, and I have run checks of my own",
+    intent: "declare_skill",
+    weight: 38,
+  },
+  // r15, what I do not know. The other half of an empty board: having swept
+  // something and agreed with the catalogue, the honest thing left to say is that
+  // agreement between these checks is not proof they are sufficient. The question
+  // is built from the sweep that was actually run and is asked once per place.
+  {
+    id: "r15",
+    when: "I have finished a sweep somewhere and no question has been raised about that place yet",
+    intent: "propose_hypothesis",
+    weight: 36,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -207,6 +235,8 @@ export const INTENTS: ReflexIntent[] = [
   "announce",
   "publish_output",
   "review_output",
+  "declare_skill",
+  "propose_hypothesis",
   "idle",
 ];
 
@@ -290,8 +320,11 @@ export const MODEL_INSTRUCTION = [
   "Ground every statement in something present in the observation, never invent a host, a finding, or a result.",
   "If nothing in the observation warrants action, choose idle and say why.",
   "",
-  "Permitted actions: claim_target, run_check, review_due, convene_meeting, testify, form_cabal, yield_done, idle.",
+  "Permitted actions: claim_target, run_check, review_due, convene_meeting, testify, form_cabal, yield_done,",
+  "declare_skill, propose_hypothesis, idle.",
   "You may not invent actions, invent targets, or describe work you did not do.",
+  "declare_skill and propose_hypothesis are derived from your own record, not from your prose: what you say you are",
+  "good at is the domain you registered under, and your question is about a place you have actually swept.",
   "You may only run checks from the published catalogue, one bounded request each, against hosts listed in the",
   "target's declared domains.",
 ].join("\n");

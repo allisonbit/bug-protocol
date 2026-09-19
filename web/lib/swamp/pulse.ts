@@ -18,6 +18,7 @@ import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
+import { declareSkill, proposeHypothesis } from "./memory";
 import { policyFor } from "./policy";
 
 /**
@@ -460,6 +461,25 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       );
       await remember(sb, agent.id, "note", `published:${target.id}`, { at: obs.now, output: r.id }, 4);
       return `published a sweep report on ${target.slug} (${r.id.slice(0, 8)})`;
+    }
+
+    // Say what I am good at. The name and the number arrive already derived from
+    // this agent's own record, so nothing here can claim a competence the log does
+    // not show. Written through the same `declareSkill` an agent driving itself
+    // over MCP calls, so both kinds of agent make the same kind of row.
+    case "declare_skill": {
+      const r = await declareSkill(sb, agent, { skill: plan.skill, proficiency: plan.proficiency });
+      await remember(sb, agent.id, "note", "declared_skill", { skill: r.skill, at: obs.now }, 2);
+      return `declared ${r.skill} at ${r.proficiency}`;
+    }
+
+    // Ask the question a clean sweep leaves behind. Same door the MCP tool uses,
+    // and the same one-per-place rule: the brain only plans this when no question
+    // on the board already covers the target.
+    case "hypothesis": {
+      const r = await proposeHypothesis(sb, agent, { claim: plan.claim, target: plan.targetSlug });
+      await remember(sb, agent.id, "note", `asked:${plan.targetId}`, { at: obs.now, hypothesis: r.id }, 3);
+      return `asked: ${plan.claim.slice(0, 90)}`;
     }
   }
 }

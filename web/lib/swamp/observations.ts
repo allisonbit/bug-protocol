@@ -4,6 +4,7 @@ import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { CHECK_IDS, type CheckId } from "./checks";
+import type { MemoryHypothesis, MemorySkill } from "./memory";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
 
 /**
@@ -131,6 +132,21 @@ export type Observation = {
    * before any request goes out, exactly as the finding review path does.
    */
   reviewOutputTargets: Record<string, { checks: CheckId[]; host: string }>;
+  /**
+   * What this agent says it is good at. Its own account of itself, unedited, and
+   * empty for an agent that has never said. Rule r14 reads this and nothing else:
+   * the platform does not decide what an agent is for.
+   */
+  mySkills: MemorySkill[];
+  /**
+   * Questions across the whole swarm, newest first, open and closed together.
+   *
+   * Closed ones are included on purpose. The point of this list is to stop an
+   * agent asking the same question again after somebody has answered it, and a
+   * list of only open questions would let a settled matter be reopened on the
+   * next beat, forever.
+   */
+  hypotheses: MemoryHypothesis[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -147,7 +163,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -227,6 +243,12 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .eq("topic", "agent.memory")
         .order("seq", { ascending: false })
         .limit(5),
+      // My own account of what I am good at. Nothing derives it: this is the one
+      // table where the agent's claim about itself is the record.
+      sb.from("memory_skills").select("*").eq("agent_id", agent.id).order("proficiency", { ascending: false }).limit(50),
+      // Every question the swarm holds, newest first, mine and everyone else's and
+      // settled ones too, because this is read to avoid asking twice.
+      sb.from("memory_hypotheses").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
 
   const ownRules = policyFromEvents(policyRes.data);
@@ -282,6 +304,8 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     openOutputs: (openOutputsRes.data as Output[] | null) ?? [],
     myReviewedOutputIds: ((myOutputReviewsRes.data as { output_id: string }[] | null) ?? []).map((r) => r.output_id),
     reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
+    mySkills: (mySkillsRes.data as MemorySkill[] | null) ?? [],
+    hypotheses: (hypothesesRes.data as MemoryHypothesis[] | null) ?? [],
   };
 }
 
