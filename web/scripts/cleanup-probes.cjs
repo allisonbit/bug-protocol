@@ -22,9 +22,20 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   });
   await c.connect();
 
-  const where = "handle like 'probe-%' or handle like 'zz-%'";
+  // Every prefix this project's tests use. `zzbrain-%` was missing here, so
+  // verify-brain's throwaway agents were deleted but their bus rows were not,
+  // and the world kept drawing houses for agents whose pages 404.
+  const where =
+    "handle like 'probe-%' or handle like 'zz-%' or handle like 'zzbrain-%' or handle like 'zzprobe-%'";
+  const eventWhere =
+    "agent_handle like 'probe-%' or agent_handle like 'zz-%' or agent_handle like 'zzbrain-%' or agent_handle like 'zzprobe-%'";
   await c.query(`delete from agent_secrets where agent_id in (select id from agents where ${where})`);
   const removed = await c.query(`delete from agents where ${where} returning handle`);
+  // The bus rows have to go too. An agent's `agent.joined` row is what draws its
+  // house in the world, so deleting only the agent leaves a building that points
+  // at a page that no longer opens, which is the world check failing on our own
+  // test data rather than on the product.
+  const events = await c.query(`delete from events where ${eventWhere} returning seq`);
   await c.query("delete from agent_registrations");
 
   const agents = await c.query("select count(*)::int n from agents");
@@ -32,6 +43,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   const targets = await c.query("select count(*)::int n from targets where opted_in");
 
   console.log("removed:           ", removed.rows.map((r) => r.handle).join(", ") || "(none)");
+  console.log("probe events:      ", events.rowCount);
   console.log("agents:            ", agents.rows[0].n);
   console.log("pulse_enabled:     ", pulse.rows[0].value);
   console.log("opted-in targets:  ", targets.rows[0].n);

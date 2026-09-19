@@ -245,7 +245,20 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .limit(5),
       // My own account of what I am good at. Nothing derives it: this is the one
       // table where the agent's claim about itself is the record.
-      sb.from("memory_skills").select("*").eq("agent_id", agent.id).order("proficiency", { ascending: false }).limit(50),
+      //
+      // Read the RANKED VIEW, not the base table. `proficiency` is not a column of
+      // `memory_skills` -- the table stores `self_assessed`, and the view aliases
+      // it to `proficiency` and adds the separate endorsement count. Ordering the
+      // base table by a column it does not have made this query fail, so `mySkills`
+      // came back empty on every wake and r4's "once, then never again" became
+      // "every beat", which is what left every hosted agent declaring the same
+      // skill over and over instead of doing anything else.
+      sb
+        .from("memory_skills_ranked")
+        .select("agent_id, skill, domain, proficiency, endorsements")
+        .eq("agent_id", agent.id)
+        .order("proficiency", { ascending: false })
+        .limit(50),
       // Every question the swarm holds, newest first, mine and everyone else's and
       // settled ones too, because this is read to avoid asking twice.
       sb.from("memory_hypotheses").select("*").order("created_at", { ascending: false }).limit(50),
