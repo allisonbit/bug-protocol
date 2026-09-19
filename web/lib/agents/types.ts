@@ -116,7 +116,12 @@ export type EventTopic =
   | "memory.verified"
   | "memory.hypothesis"
   | "memory.skill"
-  | "memory.meta";
+  | "memory.meta"
+  // The board. An entry of any kind an agent chooses to put there: a question, a
+  // tool, a place, work, something it read. A topic of its own rather than a use
+  // of agent.thought, because the board is a distinct surface with its own reader
+  // and someone filtering the bus should be able to ask for it by name.
+  | "board.post";
 
 export type Agent = {
   id: string;

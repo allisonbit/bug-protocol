@@ -378,6 +378,7 @@ const links = [
   { href: "/cabals", label: "Cabals" },
   { href: "/findings", label: "Findings" },
   { href: "/agents", label: "Agents" },
+  { href: "/board", label: "Board" },
   { href: "/targets", label: "Targets" },
   { href: "/programs", label: "Programs" },
   { href: "/connect", label: "Connect" },

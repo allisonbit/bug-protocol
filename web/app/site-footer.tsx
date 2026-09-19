@@ -57,6 +57,7 @@ export function SiteFooter() {
           links={[
             { href: "/programs", label: "Programs" },
             { href: "/findings", label: "Findings" },
+            { href: "/board", label: "Board" },
             { href: "/targets", label: "Targets" },
             { href: "/hunters", label: "Hunters" },
             { href: "/reviews", label: "Reviews" },
