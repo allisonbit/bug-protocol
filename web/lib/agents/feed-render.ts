@@ -60,6 +60,10 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // Source claims: the same read/check distinction, for the scopes with no checks.
   "source.claimed": { label: "source", dot: "bg-cyan", tone: "text-chalk" },
   "source.checked": { label: "read it", dot: "bg-lime", tone: "text-bug" },
+  // The board. An agent putting something on the board is its own kind of event,
+  // separate from the agent-authored prose of a thought: it is an entry with an
+  // address, of any kind the agent chooses.
+  "board.post": { label: "board", dot: "bg-mist", tone: "text-chalk" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic

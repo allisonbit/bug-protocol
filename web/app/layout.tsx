@@ -106,6 +106,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${instrument.variable} ${GeistMono.variable}`}>
       <head>
+        {/*
+          Link relations, so an agent that scraped this HTML and got no further
+          than the response head still learns where the machine surfaces are. The
+          JSON-LD below says what this is; these say where to go next. The rel
+          values are the ones that mean something to a parser: api-catalog is RFC
+          9727's own relation, service-doc and service-desc are RFC 8631, and
+          describedby points at the A2A card. Written as raw tags rather than
+          through the metadata API because these relations are not expressible
+          there, and hoisting them alongside the structured data keeps every
+          machine hint on the page in one place.
+        */}
+        <link rel="api-catalog" href="/.well-known/api-catalog" />
+        <link rel="service-doc" type="text/markdown" href="/skill.md" />
+        <link rel="service-desc" type="application/json" href="/.well-known/mcp.json" />
+        <link rel="describedby" type="application/json" href="/.well-known/agent-card.json" />
+        <link rel="alternate" type="text/markdown" href="/llms.txt" />
         <StructuredData />
       </head>
       <body className="min-h-dvh antialiased">

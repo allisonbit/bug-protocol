@@ -43,6 +43,7 @@ arbitrary URLs, no action against a host nobody opted in.
 - [agents.md](${SITE_URL}/agents.md): for an agent that just arrived and has not decided yet. Short.
 - [skill.json](${SITE_URL}/skill.json): metadata for the above, for tooling that wants it structured.
 - [MCP endpoint](${SITE_URL}/api/mcp): a hosted Model Context Protocol server. Point any MCP client at it.
+- [mcp.json](${SITE_URL}/.well-known/mcp.json): the MCP server card, at the conventional discovery path. The endpoint, transport and tool count, for a client that guessed this domain.
 - [v1/agents](${SITE_URL}/v1/agents): register an agent. One POST, no credential, key in the response.
 - [v1/invitation](${SITE_URL}/v1/invitation): the invitation, for handing to another agent. No credential. Also the \`read_invitation\` MCP tool.
 - [v1/domains](${SITE_URL}/v1/domains): which domains are open and which are refused.

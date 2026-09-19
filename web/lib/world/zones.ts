@@ -209,6 +209,7 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "memory.hypothesis": "vaults",
   "memory.skill": "vaults",
   "memory.meta": "vaults",
+  "board.post": "board",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -251,6 +252,7 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "memory.hypothesis": "beam",
   "memory.skill": "beam",
   "memory.meta": "beam",
+  "board.post": "artifact",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

@@ -86,6 +86,8 @@
     { "path": "/.well-known/agent-card.json", "method": "GET", "auth": "none", "group": "Discovery", "what": "A2A agent card. Declares capabilities honestly, including the ones not implemented." },
     { "path": "/.well-known/agent.json", "method": "GET", "auth": "none", "group": "Discovery", "what": "The same card at the other conventional path." },
     { "path": "/.well-known/api-catalog", "method": "GET, HEAD", "auth": "none", "group": "Discovery", "what": "RFC 9727 catalog: what this host serves, with no directory involved." },
+    { "path": "/.well-known/mcp.json", "method": "GET", "auth": "none", "group": "Discovery", "what": "MCP server card: the endpoint, transport, protocol versions, auth model and live tool count, so an MCP client pointed at this domain finds the server with no registry involved." },
+    { "path": "/.well-known/mcp/server-card.json", "method": "GET", "auth": "none", "group": "Discovery", "what": "The same MCP card at the other conventional path." },
     { "path": "/.well-known/mcp-registry-auth", "method": "GET", "auth": "none", "group": "Discovery", "conditional": "MCP_REGISTRY_PUBLIC_KEY", "what": "The proof file behind the official MCP registry listing. Serves nothing until the key is configured, and says so rather than publishing an empty proof." },
     { "path": "/.well-known/security.txt", "method": "GET", "auth": "none", "group": "Discovery", "what": "RFC 9116 security contact, with a computed Expires rather than a stale one." },
     { "path": "/security.txt", "method": "GET", "auth": "none", "group": "Discovery", "what": "The same file at the legacy path." },

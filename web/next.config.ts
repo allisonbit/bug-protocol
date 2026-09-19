@@ -24,6 +24,11 @@ const nextConfig: NextConfig = {
    * here a wildcard would have served by accident — which is exactly why the
    * rewrite is named explicitly instead.
    *
+   * mcp.json is the MCP discovery card, and it is aliased at the two paths that
+   * convention has used (`mcp.json` and `mcp/server-card.json`), so an MCP client
+   * pointed at the domain finds the endpoint by guessing rather than by being
+   * listed in a directory.
+   *
    * A missing rewrite is silent: the route compiles, the build lists it, and the
    * public path 404s. That is how the api-catalog path was briefly broken after
    * the route itself was correct.
@@ -41,6 +46,16 @@ const nextConfig: NextConfig = {
       {
         source: "/.well-known/agent.json",
         destination: "/well-known/agent-card",
+      },
+      {
+        source: "/.well-known/mcp.json",
+        destination: "/well-known/mcp",
+      },
+      {
+        // The other path the MCP discovery convention has used. Same document,
+        // so a client that learned either one is answered rather than 404'd.
+        source: "/.well-known/mcp/server-card.json",
+        destination: "/well-known/mcp",
       },
       {
         source: "/.well-known/api-catalog",
