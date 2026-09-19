@@ -97,28 +97,37 @@ const TENS = {
   seventy: 70, eighty: 80, ninety: 90,
 };
 
-/** Read the number words and digit runs out of a shattered sentence, in order. */
+/**
+ * The same solver as lib/moltbook.ts, which the routes use. The two are kept in
+ * step by hand because this script runs outside the bundler and cannot import a
+ * TypeScript module; if you change one, change the other.
+ */
+
+/** Delete the scattered symbols, lowercase, and collapse doubled letters, so
+ * "tW]eNn-Tyy" becomes "twenty". Split on whitespace afterwards. */
+function shards(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z ]+/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => t.replace(/(.)\1+/g, "$1"));
+}
+
+/** Read the number words out of a shattered sentence, in order. */
 function numbersIn(text) {
-  const cleaned = text.toLowerCase().replace(/[^a-z0-9]+/g, " ");
-  const tokens = cleaned.split(/\s+/).filter(Boolean);
   const out = [];
   let acc = null;
   const flush = () => {
     if (acc !== null) out.push(acc);
     acc = null;
   };
-  for (const t of tokens) {
-    if (/^\d+$/.test(t)) {
-      flush();
-      out.push(Number(t));
-      continue;
-    }
+  for (const t of shards(text)) {
     if (t in UNITS) {
       acc = (acc ?? 0) + UNITS[t];
       continue;
     }
     if (t in TENS) {
-      // "twenty" then "five" is twenty-five; "twenty" then "meters" is twenty.
       if (acc !== null) flush();
       acc = TENS[t];
       continue;
@@ -131,7 +140,6 @@ function numbersIn(text) {
       acc = (acc ?? 1) * 1000;
       continue;
     }
-    // A non-number word ends a multi-word number.
     flush();
   }
   flush();
@@ -140,24 +148,27 @@ function numbersIn(text) {
 
 /** Pick the operator from the verbs the shattered sentence still contains. */
 function operatorIn(text) {
-  const t = ` ${text.toLowerCase().replace(/[^a-z]+/g, " ")} `;
-  const has = (...words) => words.some((w) => t.includes(` ${w} `));
-  if (has("times", "multiplied", "doubles", "triples", "product")) return "*";
-  if (has("divided", "split", "ratio", "per", "over")) return "/";
-  if (has("slows", "slower", "minus", "less", "decreases", "drops", "loses", "down", "subtract")) return "-";
-  if (has("plus", "adds", "gains", "faster", "increases", "more", "speeds")) return "+";
+  const t = ` ${shards(text).join(" ")} `;
+  // Substring rather than whole-token: the shattering leaves the verbs intact
+  // often enough that a stem match reads them ("slows" carries "slow").
+  const has = (...words) => words.some((w) => t.includes(w));
+  if (has("times", "multiplied", "double", "triple", "product")) return "*";
+  if (has("divided", "split", "ratio")) return "/";
+  if (has("slow", "minus", "les", "decreas", "drop", "lose", "down", "subtract")) return "-";
   return "+";
 }
 
 function solveChallenge(text, override) {
-  if (override && override !== true) return Number(override).toFixed(2);
+  if (override && override !== true) {
+    const n = Number(override);
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  }
   const nums = numbersIn(text);
   if (nums.length < 2) return null;
-  const a = nums[0];
-  const b = nums[1];
+  const [a, b] = nums;
   const op = operatorIn(text);
   const value = op === "+" ? a + b : op === "-" ? a - b : op === "*" ? a * b : a / b;
-  return value.toFixed(2);
+  return Number.isFinite(value) ? value.toFixed(2) : null;
 }
 
 // --- the invitation ----------------------------------------------------------
@@ -198,6 +209,17 @@ async function cmdSubmolts() {
 
 async function cmdInvitation() {
   console.log(await invitation());
+}
+
+/** Solve a challenge by hand: `solve "A] lO^bSt-Er ..."`. */
+async function cmdSolve() {
+  const text = process.argv.slice(3).filter((a) => !a.startsWith("--")).join(" ");
+  if (!text) {
+    console.error('usage: node scripts/moltbook-bridge.cjs solve "<challenge text>"');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(solveChallenge(text, arg("answer")) ?? "(could not solve; pass --answer)");
 }
 
 async function cmdPost() {
@@ -269,6 +291,7 @@ const COMMANDS = {
   submolts: cmdSubmolts,
   invitation: cmdInvitation,
   post: cmdPost,
+  solve: cmdSolve,
 };
 
 async function main() {

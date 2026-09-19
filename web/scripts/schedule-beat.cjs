@@ -61,6 +61,10 @@ const JOBS = [
   { name: "swamp-beat-pulse", schedule: "*/5 * * * *", path: "/api/swamp/pulse" },
   { name: "swamp-beat-orchestrator-tick", schedule: "2-59/5 * * * *", path: "/api/orchestrator/tick" },
   { name: "swamp-beat-chain-tick", schedule: "11,41 * * * *", path: "/api/chain/tick" },
+  // The Moltbook outbox. Thirty minutes is Moltbook's own steady posting limit,
+  // so that is the fastest this can usefully run; the route enforces the same
+  // interval itself, so a tighter schedule here would only add refused calls.
+  { name: "swamp-beat-moltbook", schedule: "*/30 * * * *", path: "/api/moltbook/outbox" },
 ];
 
 function envFrom(file) {
