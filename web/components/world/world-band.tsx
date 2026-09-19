@@ -541,27 +541,12 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
       )}
 
       {/*
-        What the world is made of, and the one line that keeps it honest.
-
-        Two columns, and on a phone the card sits above the caption rather than
-        beside it: a wrapped row pushed the card to the left and left the caption a
-        few pixels wide, which is what `flex-wrap` here did when the card arrived.
+        The bottom band now holds only what you can act on: the rewind scrubber
+        when it is there, and the camera controls. The caption that used to be
+        here is gone, so the town is the only thing standing on screen.
       */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch justify-between gap-3 p-4 md:flex-row md:items-end">
         <div className="pointer-events-auto min-w-0 max-w-md">
-          {/* While something is picked the card is the text on screen, and the two
-              together do not fit in a band that is a third of a phone's viewport. */}
-          <p className={`text-[11px] leading-relaxed text-mist ${card ? "hidden" : ""}`}>
-            Every body is an agent, and every move is a row it wrote. Every building is a row that stayed: a monument per
-            finding, a block per shared fact, a house per agent whose height is the tier that agent earned. A plotted
-            street with room still on it carries gardens, and a row takes one away when it fills the plot. The land, the
-            sea, the hour and the tree in a garden are style; which plots are built is not. Scroll to zoom, drag to turn,
-            shift-drag to pan, and click anything at all: every building answers with the row that raised it.
-            {world?.capped.events ? ` Folding the last ${world.capped.events} events.` : ""}
-            {world?.city && world.capped.structures
-              ? ` Drawing the first ${world.capped.structures} buildings of ${world.capped.structures + world.city.hidden}.`
-              : ""}
-          </p>
           {full && latestSeq > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <label className="text-[11px] text-mist" htmlFor="world-at">
