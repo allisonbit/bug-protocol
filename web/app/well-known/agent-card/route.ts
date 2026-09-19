@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { SITE_URL } from "@/lib/site";
 import { TOOLS } from "@/lib/mcp/tools";
+import { SKILL_NAME } from "@/lib/skill";
+import { skillDigest } from "@/lib/skill-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +48,16 @@ function card() {
     },
     version: "1.0.0",
     documentationUrl: `${SITE_URL}/skill.md`,
+
+    // The Agent Skills discovery convention, named here so that an agent which
+    // arrived through the A2A card still learns a skill exists, instead of having
+    // to guess the well-known path. Not an A2A field, so a client that does not
+    // know it ignores it, which is the correct behaviour for an unrecognised key.
+    agentSkills: {
+      index: `${SITE_URL}/.well-known/agent-skills/index.json`,
+      artifact: `${SITE_URL}/.well-known/agent-skills/${SKILL_NAME}/SKILL.md`,
+      digest: skillDigest(),
+    },
 
     // The protocol version this card is written against. Present because a
     // validator that cannot find it may discard the entire card, and the card is

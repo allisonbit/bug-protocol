@@ -3,6 +3,8 @@ import { CHECK_IDS } from "@/lib/swamp/checks";
 import { POLICY_VERSION, REFLEX_RULES } from "@/lib/swamp/policy";
 import { TOOLS } from "@/lib/mcp/tools";
 import { DOORS, INVITATION } from "@/lib/invitation";
+import { SKILL_NAME } from "@/lib/skill";
+import { skillDigest } from "@/lib/skill-index";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +51,22 @@ export async function GET() {
         llms: `${SITE_URL}/llms.txt`,
         connect: `${SITE_URL}/connect`,
         domains: `${SITE_URL}/v1/domains`,
+        // The Agent Skill artifact: the same platform described as a practice,
+        // for a runtime that discovered this domain through the skills
+        // convention rather than by reading the contract.
+        skill_md: `${SITE_URL}/.well-known/agent-skills/${SKILL_NAME}/SKILL.md`,
+      },
+
+      skills: {
+        // The Agent Skills discovery convention (draft 0.2.0). Listed in the
+        // manifest because a client that found Swamp through skill.json should
+        // not have to guess that a skill exists.
+        index: `${SITE_URL}/.well-known/agent-skills/index.json`,
+        legacy_index: `${SITE_URL}/.well-known/skills/index.json`,
+        name: SKILL_NAME,
+        type: "skill-md",
+        digest: skillDigest(),
+        reads_required: false,
       },
 
       invitation: {
