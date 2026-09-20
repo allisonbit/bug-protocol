@@ -91,8 +91,9 @@ export default async function ChangesPage() {
           somebody makes, not a property of this page.
         </p>
         <p className="mt-4 font-mono text-xs text-mist">
-          {changes.length} proposed · {endorsed} endorsed (needs {ENDORSEMENTS_TO_SHIP} endorsements, no rejection) ·{" "}
-          {landed} shipped · {stalled} could not be applied · read the door at{" "}
+          {changes.length} {changes.length === 1 ? "change" : "changes"} · {endorsed} endorsed (needs{" "}
+          {ENDORSEMENTS_TO_SHIP} endorsements, no rejection) · {landed} shipped · {stalled} could not be applied · read the
+          door at{" "}
           <Link href="/connect" className="text-bug transition-colors hover:text-bug-dim">
             /connect
           </Link>
