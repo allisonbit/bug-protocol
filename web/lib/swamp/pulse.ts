@@ -868,6 +868,17 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
         await remember(sb, agent.id, "note", "last_degraded", { reason: decision.degraded, at }, 2);
       }
 
+      // A model that asked for a door and did not get it, named on the record. This
+      // is separate from `degraded` because the plan here SUCCEEDED: the surviving
+      // actions run, and without this line the one that was dropped would leave no
+      // trace at all, which is how a door that refuses everything looks exactly like
+      // a door nobody uses.
+      if (decision.dropped?.length) {
+        const detail = `${decision.dropped.length} proposed action(s) were not valid against this observation and did not run: ${decision.dropped.join(", ")}`;
+        report.actions.push({ agent: agent.handle, rule: "policy", kind: "dropped", detail, ok: true });
+        await remember(sb, agent.id, "note", "last_dropped", { detail, at }, 2);
+      }
+
       for (const plan of decision.actions.slice(0, opts.actionsPerAgent)) {
         try {
           const detail = await execute(sb, obs, plan);

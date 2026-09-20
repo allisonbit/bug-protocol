@@ -175,6 +175,14 @@ export type Decision = {
    * how it thinks; this field is what stops that.
    */
   degraded?: string;
+  /**
+   * Proposals a model made that the observation could not accept, by name.
+   *
+   * Carried on the plan rather than discarded, because the difference between an
+   * agent that does not use a door and an agent whose use of it is refused is
+   * invisible from outside, and only one of those is a fault.
+   */
+  dropped?: string[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -955,11 +963,20 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
     return { ...reflex, degraded: "the model returned a plan that did not parse, so this agent ran its reflex policy instead" };
   }
 
-  const valid = parsed.map((p) => validate(p, obs)).filter((a): a is PlannedAction => a !== null);
+  const validated = parsed.map((p) => ({ p, action: validate(p, obs) }));
+  const valid = validated.map((v) => v.action).filter((a): a is PlannedAction => a !== null);
+  // WHAT WAS DROPPED AND FOR WHAT. A proposal that fails validation used to vanish:
+  // the plan ran the survivors, or degraded, and nothing anywhere named the action
+  // the model asked for and did not get. That is the worst possible silence for a
+  // new door, because "the agent never uses read_source" and "the agent asks for
+  // read_source and is refused" look identical from outside, and only one of them is
+  // a bug. So the dropped ones are named, in the plan when anything survived and in
+  // the degradation reason when nothing did.
+  const dropped = validated.filter((v) => v.action === null).map((v) => describeProposal(v.p));
   if (parsed.length > 0 && valid.length === 0) {
     return {
       ...reflex,
-      degraded: "the model proposed actions that were not valid against the board, so this agent ran its reflex policy instead",
+      degraded: `the model proposed ${dropped.length} action(s) that were not valid against the board (${dropped.join(", ")}), so this agent ran its reflex policy instead`,
     };
   }
 
@@ -967,7 +984,25 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
     brain: "model",
     policyHash: policyFor("model").hash,
     actions: valid.length > 0 ? valid.slice(0, budget) : [{ rule: "m0", kind: "idle", reason: "the model chose no action" }],
+    ...(dropped.length ? { dropped } : {}),
   };
+}
+
+/**
+ * A model proposal, named by what it asked for rather than by why it failed.
+ *
+ * The reason is deliberately not guessed here: `validate` drops a proposal for a
+ * dozen different reasons and inventing one after the fact would be a narration
+ * rather than a record. What a reader needs is which door was knocked on and what
+ * it named, which is what the model actually said.
+ */
+function describeProposal(p: ModelPlanItem): string {
+  const action = String(p.action ?? "?").trim() || "?";
+  const subject =
+    [p.path, p.target, p.finding, p.change, p.room, p.slug]
+      .map((v) => String(v ?? "").trim())
+      .find(Boolean) ?? "";
+  return subject ? `${action}(${subject.slice(0, 60)})` : action;
 }
 
 function parsePlan(text: string): ModelPlanItem[] | null {
