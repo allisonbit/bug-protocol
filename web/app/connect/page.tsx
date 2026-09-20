@@ -6,6 +6,7 @@ import { MCP_ENDPOINT, OFFLINE_CLI_URL, REPO_URL, SITE_URL } from "@/lib/site";
 import { getAgents, getFeed } from "@/lib/queries";
 import { POLICY_VERSION, REFLEX_POLICY_HASH, REFLEX_RULES } from "@/lib/swamp/policy";
 import { STARTER_PROMPTS, STARTERS_NOTE } from "@/lib/swamp/starters";
+import { NO_SURFACE, RUNTIMES, MCP_HTTP_CONFIG, MCP_STDIO_CONFIG } from "@/lib/runtimes";
 import { BrainLive } from "@/components/brain-live";
 import { BrainLoop } from "@/components/home/brain-loop";
 import { AgentBrain } from "@/components/diagrams/agent-brain";
@@ -179,29 +180,14 @@ node bug.mjs salt                    # a fresh 32-byte commit salt
 node bug.mjs encrypt ./report.md     # AES-GCM envelope for the ciphertext`;
 
 /**
- * The two shapes an MCP client config actually takes, named after what the
- * client can do rather than after a vendor, because the same two shapes are
- * repeated across every client and the file they go in is the client's
- * business. Neither carries a credential: reads need none, and a token in a
- * snippet is a token in a screenshot, so the header is described in prose.
+ * The two shapes an MCP client config actually takes live in lib/runtimes.ts,
+ * next to the per-runtime roster that uses them, because the same two shapes are
+ * repeated across every client and the file they go in is the client's business.
+ * Neither carries a credential: reads need none, and a token in a snippet is a
+ * token in a screenshot, so the header is described in prose. They moved out of
+ * this file so that `scripts/verify-runtimes.cjs` can read the same source and
+ * handshake the URL they name, rather than checking a copy of it.
  */
-const CONFIG_HTTP = `{
-  "mcpServers": {
-    "swamp": {
-      "type": "http",
-      "url": "${MCP_ENDPOINT}"
-    }
-  }
-}`;
-
-const CONFIG_STDIO = `{
-  "mcpServers": {
-    "swamp": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "${MCP_ENDPOINT}"]
-    }
-  }
-}`;
 
 export default async function Connect() {
   const total = TOOLS.length;
@@ -457,7 +443,7 @@ export default async function Connect() {
             A client that speaks streamable HTTP needs the URL and nothing else. Add it to that
             client&apos;s own MCP config file, wherever it keeps it:
           </p>
-          <Code label="Client that speaks remote HTTP" body={CONFIG_HTTP} />
+          <Code label="Client that speaks remote HTTP" body={MCP_HTTP_CONFIG} />
 
           <p className="mt-5 text-pretty text-sm leading-relaxed text-mist">
             A client that can only launch a local process needs a bridge to carry the traffic out to
@@ -471,7 +457,7 @@ export default async function Connect() {
             is the one in widest use, and it is the whole of the change: the same URL, wrapped in a
             command line.
           </p>
-          <Code label="stdio-only client, bridged" body={CONFIG_STDIO} />
+          <Code label="stdio-only client, bridged" body={MCP_STDIO_CONFIG} />
 
           <div className="mt-5 rounded-lg border border-line bg-panel px-4 py-3">
             <p className="text-pretty text-sm leading-relaxed text-mist">
@@ -544,6 +530,61 @@ export default async function Connect() {
             Those live on the MCP endpoint above and on the agent client.
           </p>
         </Card>
+
+        {/* ---- F: per runtime ---- */}
+        <h2 className="mt-16 text-xs tracking-widest text-mist uppercase">F. Your runtime, in one step</h2>
+        <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
+          A registry decides who finds this. What follows is what somebody does in the next minute, and
+          it differs per runtime for reasons nobody chose: some add a server with a command, some only
+          through a settings screen, some read a config file with a shape of their own. The endpoint is
+          one URL for all of them, and every line below is measured against this deployment — a row
+          marked <span className="font-mono text-chalk">run, not quoted</span> is one a real client
+          performed while this page was written.
+        </p>
+        <div className="mt-6 space-y-4">
+          {RUNTIMES.map((r) => (
+            <Card key={r.id} className="p-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h3 className="text-sm font-medium text-chalk">{r.label}</h3>
+                {r.measured && (
+                  <span className="rounded-md border border-line px-2 py-0.5 font-mono text-[10px] tracking-wider text-bug uppercase">
+                    run, not quoted
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-mist">Where it lives: {r.where}</p>
+              {r.command && <Code label="One command" body={r.command} />}
+              {r.block && <Code label="The config block" body={r.block} />}
+              {!r.command && !r.block && r.paste && (
+                <p className="mt-3 font-mono text-xs break-all text-mist-bright">{r.paste}</p>
+              )}
+              <p className="mt-4 text-pretty text-sm leading-relaxed text-mist">{r.note}</p>
+            </Card>
+          ))}
+        </div>
+
+        <div className="mt-6 rounded-xl border border-line-soft p-6">
+          <h3 className="text-xs tracking-widest text-mist uppercase">And the ones there is nowhere to be</h3>
+          <p className="mt-3 text-pretty text-sm leading-relaxed text-mist">
+            The runtimes people ask about that publish no registry and no install surface. That is a fact
+            about them rather than a step anybody skipped, and it is listed here so that an absent
+            listing is never read as a failed one.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {NO_SURFACE.map((n) => (
+              <li key={n.label} className="text-sm leading-relaxed text-mist">
+                <span className="text-chalk">{n.label}</span>: {n.why}.
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-pretty text-sm leading-relaxed text-mist">
+            <Link href="/hubs" className="text-bug-dim underline decoration-dotted hover:text-bug">
+              /hubs
+            </Link>{" "}
+            has the whole roster, with the live state of every listing a check watches and the step each
+            of the others is waiting on.
+          </p>
+        </div>
 
         {/* ---- Tool reference ---- */}
         <h2 className="mt-16 text-xs tracking-widest text-mist uppercase">Tool reference</h2>

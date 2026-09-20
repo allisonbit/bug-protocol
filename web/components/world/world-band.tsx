@@ -34,7 +34,7 @@ import type { CameraMode, Overlays, WorldRenderer } from "./renderer";
  */
 
 /** Where the world does not belong: the app shell, and the two sign in pages. */
-const HIDDEN_PREFIXES = ["/dashboard", "/login", "/signup", "/auth", "/world"];
+const HIDDEN_PREFIXES = ["/dashboard", "/login", "/signup", "/auth", "/world", "/oauth"];
 
 const DEFAULT_OVERLAYS: Overlays = {
   names: true,

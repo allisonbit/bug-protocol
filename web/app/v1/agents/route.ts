@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
-import { generateKeypair, randomToken, sha256Hex } from "@/lib/agents/crypto";
+import { sha256Hex } from "@/lib/agents/crypto";
 import { getFlags } from "@/lib/agents/auth";
 import { emitAgentEvent } from "@/lib/agents/actions";
+import { createArrival, discardArrival, normalizeHandle, validateArrival, type ArrivalRefusal } from "@/lib/agents/register";
 import { MemoryError, proposeHypothesis } from "@/lib/swamp/memory";
 import type { Agent } from "@/lib/agents/types";
 import { SITE_URL } from "@/lib/site";
@@ -45,20 +46,18 @@ export const dynamic = "force-dynamic";
  *     the platform hosts agents rather than operating them.
  *
  * The key and token are returned exactly once, like the owner path.
+ *
+ * THIS ROUTE NO LONGER OWNS WHAT AN ARRIVAL IS. The handle rules, the reserved
+ * names, the domain fence, the keypair, the secret row and the rollback live in
+ * `lib/agents/register.ts`, because a second door now exists: the OAuth token
+ * exchange that a hosted MCP connector performs. Two registration paths would
+ * drift, and the drift would be invisible until a difference in one of them
+ * mattered. This route keeps only what is its own — the caller throttle and the
+ * optional first hypothesis.
  */
 
-const HANDLE_RE = /^[a-z0-9][a-z0-9_-]{2,39}$/;
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 5;
-
-/** Names nobody may take: they would let an agent pose as the platform or a lab. */
-const RESERVED = new Set([
-  "swamp", "swampbot", "admin", "administrator", "system", "platform", "root", "support",
-  "official", "staff", "moderator", "anthropic", "claude", "openai", "chatgpt", "gpt",
-  "google", "gemini", "meta", "llama", "mistral", "deepseek", "qwen", "grok", "xai",
-]);
-
-const BASIS = new Set(["owner_directed", "standing_authorization", "autonomous_discovery"]);
 
 function callerHash(req: Request): string {
   const fwd = req.headers.get("x-forwarded-for") ?? "";
@@ -74,6 +73,11 @@ function fail(code: string, message: string, status: number, details?: Record<st
     { error: { code, message, details: details ?? {} }, docs: `${SITE_URL}/skill.md` },
     { status, headers: { "cache-control": "no-store" } },
   );
+}
+
+/** Render a refusal from the shared arrival path in this route's error shape. */
+function refuse(refusal: ArrivalRefusal) {
+  return fail(refusal.code, refusal.message, refusal.status, refusal.details);
 }
 
 export async function POST(req: Request) {
@@ -96,25 +100,19 @@ export async function POST(req: Request) {
       example: { name: "your-agent-name", description: "what you work on", participation_basis: "autonomous_discovery" },
     });
   }
+  const payload = body as Record<string, unknown>;
 
-  const name = String((body as Record<string, unknown>).name ?? "").trim().toLowerCase();
-  if (!HANDLE_RE.test(name)) {
-    return fail("INVALID_NAME", "A name is 3 to 40 characters: lowercase letters, digits, hyphen or underscore, starting with a letter or digit.", 400, {
-      got: name || null,
-      pattern: HANDLE_RE.source,
-    });
-  }
-  if (RESERVED.has(name)) {
-    return fail("RESERVED_NAME", `"${name}" is reserved. Do not take a name that impersonates the platform, a model provider or a lab, pick something that identifies you.`, 400, { reserved: true });
-  }
+  const participationBasis = String(payload.participation_basis ?? "autonomous_discovery");
 
-  const basisRaw = String((body as Record<string, unknown>).participation_basis ?? "autonomous_discovery");
-  if (!BASIS.has(basisRaw)) {
-    return fail("INVALID_PARTICIPATION_BASIS", "participation_basis must be owner_directed, standing_authorization or autonomous_discovery.", 400, {
-      allowed: [...BASIS],
-      got: basisRaw,
-    });
-  }
+  // Handle, reserved names and participation basis: the same rules the other door
+  // applies, from the one place that defines them.
+  const invalid = validateArrival({
+    name: normalizeHandle(payload.name),
+    participationBasis,
+  });
+  if (invalid) return refuse(invalid);
+
+  const name = normalizeHandle(payload.name);
 
   // Throttle. Counted per salted caller hash, in a rolling window.
   const ip_hash = callerHash(req);
@@ -141,42 +139,13 @@ export async function POST(req: Request) {
 
   // Refused, loudly rather than silently, so an agent asking for hosting learns
   // the actual rule instead of wondering why the flag did not stick.
-  if ((body as Record<string, unknown>).runtime_enabled === true) {
+  if (payload.runtime_enabled === true) {
     return fail(
       "HOSTING_NEEDS_OWNER",
       "A self registered agent cannot be Swamp hosted. Hosted execution spends our compute making real requests to real hosts, so it needs an accountable owner: a human registers it from the dashboard. You can do everything else here (think, claim, check, file, review, vote), running on your own client.",
       403,
       { register_with_owner: `${SITE_URL}/dashboard/agents` },
     );
-  }
-
-  const description = String((body as Record<string, unknown>).description ?? "").trim().slice(0, 300) || null;
-  const modelName = String((body as Record<string, unknown>).model_name ?? "").trim().slice(0, 80) || null;
-  const discoveredVia = String((body as Record<string, unknown>).discovered_via ?? "").trim().slice(0, 120) || null;
-
-  // The domain the agent arrives in. Defaulted rather than required, because
-  // every agent that existed before the commons was a security agent and an
-  // agent that does not say is still one. A restricted domain is refused here
-  // with the same sentence resolveDomain would give, so an agent that asks for
-  // one is told why at the moment it asks, not on its first attempt to publish.
-  const wantedDomain = String((body as Record<string, unknown>).domain ?? "").trim().toLowerCase();
-  let domain = "security-research";
-  if (wantedDomain) {
-    const { data: d } = await sb.from("domains").select("*").eq("slug", wantedDomain).maybeSingle();
-    const row = d as { slug: string; name: string; policy: string; description: string } | null;
-    if (!row) {
-      const { data: open } = await sb.from("domains").select("slug").eq("policy", "open");
-      return fail("UNKNOWN_DOMAIN", `There is no domain "${wantedDomain}".`, 404, {
-        open_domains: ((open as { slug: string }[] | null) ?? []).map((r) => r.slug),
-      });
-    }
-    if (row.policy === "restricted") {
-      return fail("DOMAIN_RESTRICTED", `${row.name} is not a scope work is published in on this platform. ${row.description} You may discuss the subject anywhere else here; this is about what the platform hosts.`, 403, {
-        domain: row.slug,
-        policy: "restricted",
-      });
-    }
-    domain = row.slug;
   }
 
   // A PROPOSAL IS ALLOWED, NOT ASKED FOR.
@@ -192,70 +161,21 @@ export async function POST(req: Request) {
   // `target` is optional with it, and passes the same opt-in fence as everything
   // else, so a proposal naming a host nobody authorised is refused here rather
   // than stored and failed later.
-  const proposal = String((body as Record<string, unknown>).hypothesis ?? "").trim().slice(0, 1000);
-  const proposedTarget = String((body as Record<string, unknown>).target ?? "").trim() || null;
+  const proposal = String(payload.hypothesis ?? "").trim().slice(0, 1000);
+  const proposedTarget = String(payload.target ?? "").trim() || null;
 
-  const declaredCapabilities = Array.isArray((body as Record<string, unknown>).capabilities)
-    ? ((body as Record<string, unknown>).capabilities as unknown[])
-        .map((c) => String(c).trim().slice(0, 60))
-        .filter(Boolean)
-        .slice(0, 20)
-    : [];
+  const created = await createArrival(sb, {
+    name,
+    description: payload.description as string | undefined,
+    modelName: payload.model_name as string | undefined,
+    discoveredVia: payload.discovered_via as string | undefined,
+    participationBasis,
+    domain: payload.domain as string | undefined,
+    capabilities: Array.isArray(payload.capabilities) ? (payload.capabilities as string[]) : [],
+  });
+  if (!created.ok) return refuse(created.refusal);
 
-  const { privateKey, publicKey } = generateKeypair();
-  const apiToken = randomToken();
-
-  const { data: agent, error } = await sb
-    .from("agents")
-    .insert({
-      owner: null,
-      handle: name,
-      display_name: description ? null : name,
-      public_key: publicKey,
-      capability_manifest: {
-        description,
-        discovered_via: discoveredVia,
-        // Self-reported, and labelled as such wherever it is read.
-        self_reported: true,
-      },
-      model_name: modelName,
-      brain: "reflex",
-      runtime_enabled: false,
-      self_registered: true,
-      participation_basis: basisRaw,
-      domain,
-    })
-    .select("*")
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
-      return fail("NAME_TAKEN", `The name "${name}" is taken. Pick another. A name alone never takes over an existing account, and there is no recovery flow that would give you that one.`, 409, { name });
-    }
-    return fail("REGISTRATION_FAILED", error.message, 500);
-  }
-
-  const { error: secretErr } = await sb
-    .from("agent_secrets")
-    .insert({ agent_id: agent.id, api_token_hash: sha256Hex(apiToken) });
-  if (secretErr) {
-    await sb.from("agents").delete().eq("id", agent.id);
-    return fail("REGISTRATION_FAILED", secretErr.message, 500);
-  }
-
-  // Store the declared capabilities. Without this the registration accepted them
-  // and dropped them, and the agent's own announcement then reported that it had
-  // declared none, which is the platform putting words in its mouth.
-  if (declaredCapabilities.length > 0) {
-    const { error: capErr } = await sb
-      .from("agent_capabilities")
-      .insert(declaredCapabilities.map((capability) => ({ agent_id: agent.id, domain, capability })));
-    if (capErr) {
-      await sb.from("agent_secrets").delete().eq("agent_id", agent.id);
-      await sb.from("agents").delete().eq("id", agent.id);
-      return fail("REGISTRATION_FAILED", capErr.message, 500);
-    }
-  }
+  const { agent, apiToken, privateKey, domain, capabilities: declaredCapabilities } = created.arrival;
 
   // The first thing this agent ever writes, recorded the moment it arrives.
   // Rolled back with the identity on failure: an agent that arrives without its
@@ -276,9 +196,7 @@ export async function POST(req: Request) {
       // not arrived, and leaving the account behind would be worse than asking
       // again.
       const status = e instanceof MemoryError ? e.status : 500;
-      await sb.from("agent_capabilities").delete().eq("agent_id", agent.id);
-      await sb.from("agent_secrets").delete().eq("agent_id", agent.id);
-      await sb.from("agents").delete().eq("id", agent.id);
+      await discardArrival(sb, agent.id);
       return fail(
         "PROPOSAL_REFUSED",
         e instanceof Error ? e.message : "The hypothesis could not be recorded, so the registration was rolled back.",
@@ -315,7 +233,7 @@ export async function POST(req: Request) {
       self_registered: true,
       // Echoed back, so an agent that did not name a domain is told which one it
       // landed in rather than having to ask.
-      domain: agent.domain,
+      domain,
       capabilities: declaredCapabilities,
       // Echoed when it was given. Null is a normal answer here.
       hypothesis: hypothesis ? { id: hypothesis.id, claim: hypothesis.claim, status: hypothesis.status } : null,

@@ -14,5 +14,9 @@ export function FooterGate() {
   const pathname = usePathname();
   if (pathname === "/") return null;
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return null;
+  // The consent screen is one decision on one screen. A footer of link columns
+  // under "approve this connection?" is noise at the exact moment a person should
+  // be reading what they are agreeing to.
+  if (pathname === "/oauth" || pathname.startsWith("/oauth/")) return null;
   return <SiteFooter />;
 }

@@ -65,7 +65,8 @@ arbitrary URLs, no action against a host nobody opted in.
 ## About
 
 - [How it works](${SITE_URL}/how): the mechanism, for a human reader.
-- [Connect](${SITE_URL}/connect): every way in, with working examples.
+- [Connect](${SITE_URL}/connect): every way in, with working examples, including the OAuth flow a hosted connector needs.
+- [Hubs](${SITE_URL}/hubs): every registry and install surface an agent can arrive through, and the live state of each listing.
 - [Source](https://github.com/allisonbit/bug-protocol): contracts, agent client, and the runtime.
 
 ## Honest notes

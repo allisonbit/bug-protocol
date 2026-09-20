@@ -3,6 +3,8 @@ import { supabaseForToken } from "@/lib/supabase/bearer";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { agentForToken } from "@/lib/agents/auth";
 import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools";
+import { wwwAuthenticate } from "@/lib/oauth/server";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * Remote MCP server for Swamp, spoken over Streamable HTTP (JSON-RPC 2.0). Point
@@ -17,6 +19,14 @@ import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools
  *     can run unattended. Those writes are recorded with provenance 'token'.
  * Public tools work with neither. Stateless: each POST is answered with a
  * single JSON response, so no session store or SSE channel is needed.
+ *
+ * A THIRD WAY IN, WHICH IS WHY THE CHALLENGE BELOW EXISTS: a hosted connector
+ * cannot hold a pasted key, so it performs OAuth and receives an ordinary agent
+ * token, which then reaches this route through the same `Authorization: Bearer`
+ * path as any other. `agentForToken` needed no change to accept it. An
+ * unauthenticated call to an agent-only tool answers HTTP 401 with a
+ * `WWW-Authenticate` header pointing at this origin's protected-resource
+ * metadata, which is how a client discovers the authorization server at all.
  */
 
 export const runtime = "nodejs";
@@ -32,7 +42,27 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version",
+  // A browser-based client cannot read the challenge header unless it is exposed
+  // explicitly, and that header is the only thing that tells it where to get a
+  // token. Without this line the OAuth flow is invisible to exactly the clients
+  // that need it most.
+  "Access-Control-Expose-Headers": "WWW-Authenticate",
 } as const;
+
+/** The same headers, plus the challenge that starts an OAuth handshake. */
+const CHALLENGE_HEADERS = { ...CORS, "WWW-Authenticate": wwwAuthenticate() } as const;
+
+/**
+ * Thrown when an agent-only tool is called with no credential at all. It is not an
+ * error in the call, it is the protocol's way of saying "authenticate": a client
+ * that has not tried yet is told where to try, and a client that HAS tried and was
+ * refused keeps reading the reason as tool content.
+ */
+class CredentialRequired extends Error {
+  constructor(readonly payload: object) {
+    super("credential required");
+  }
+}
 
 type Id = string | number | null;
 type Rpc = { jsonrpc?: string; id?: Id; method?: string; params?: Record<string, unknown> };
@@ -115,9 +145,17 @@ async function dispatch(msg: Rpc, req: Request): Promise<object | null> {
         const text = agentRejection
           ? agentRejection
           : SUPABASE_CONFIGURED
-            ? "This tool acts as a registered agent. Send your agent API token in an `X-Agent-Token` header (register one at /dashboard/agents)."
+            ? `This tool acts as a registered agent. Send an agent API token as \`X-Agent-Token\` or \`Authorization: Bearer\`. Register one yourself with a single POST to ${SITE_URL}/v1/agents, or complete the OAuth flow this server advertises at ${SITE_URL}/.well-known/oauth-authorization-server.`
             : "The Swamp backend isn't connected to this deployment yet, so agent actions aren't available.";
-        return ok(id, { content: [{ type: "text", text }], isError: true });
+        const refusal = ok(id, { content: [{ type: "text", text }], isError: true });
+        // Two situations that look alike and are not. No credential AT ALL means
+        // the client has not tried to authenticate, which is the case a 401
+        // challenge exists for. A credential that was sent and refused keeps the
+        // 200-with-isError shape, so the caller's model reads why its key failed
+        // and can fix it, instead of being handed a transport error with no
+        // content to act on.
+        if (!agentCredential && SUPABASE_CONFIGURED) throw new CredentialRequired(refusal);
+        return refusal;
       }
       if (tool.auth && !user && !agent) {
         const text = SUPABASE_CONFIGURED
@@ -144,6 +182,20 @@ async function dispatch(msg: Rpc, req: Request): Promise<object | null> {
   }
 }
 
+/**
+ * Dispatch one message, turning a credential challenge into a value rather than an
+ * exception, so a batch can answer every other message it was sent and still carry
+ * the challenge out to the HTTP layer.
+ */
+async function runOne(msg: Rpc, req: Request): Promise<{ body: object | null; challenge: boolean }> {
+  try {
+    return { body: await dispatch(msg, req), challenge: false };
+  } catch (e) {
+    if (e instanceof CredentialRequired) return { body: e.payload, challenge: true };
+    throw e;
+  }
+}
+
 export async function POST(req: Request) {
   let body: unknown;
   try {
@@ -156,18 +208,21 @@ export async function POST(req: Request) {
   if (Array.isArray(body)) {
     if (body.length === 0) return NextResponse.json(err(null, -32600, "Empty batch."), { status: 400, headers: CORS });
     const out: object[] = [];
+    let challenge = false;
     for (const m of body) {
-      const r = await dispatch((m ?? {}) as Rpc, req);
-      if (r) out.push(r);
+      const r = await runOne((m ?? {}) as Rpc, req);
+      if (r.body) out.push(r.body);
+      if (r.challenge) challenge = true;
     }
     if (out.length === 0) return new NextResponse(null, { status: 202, headers: CORS });
-    return NextResponse.json(out, { headers: CORS });
+    return NextResponse.json(out, { status: challenge ? 401 : 200, headers: challenge ? CHALLENGE_HEADERS : CORS });
   }
 
   const msg = (body ?? {}) as Rpc;
-  const res = await dispatch(msg, req);
-  if (!res) return new NextResponse(null, { status: 202, headers: CORS });
-  return NextResponse.json(res, { headers: CORS });
+  const one = await runOne(msg, req);
+  if (!one.body) return new NextResponse(null, { status: 202, headers: CORS });
+  if (one.challenge) return NextResponse.json(one.body, { status: 401, headers: CHALLENGE_HEADERS });
+  return NextResponse.json(one.body, { headers: CORS });
 }
 
 export async function OPTIONS() {
@@ -195,7 +250,7 @@ export async function GET(req: Request) {
       description: "Remote MCP server for Swamp: a public habitat for autonomous security agents, sitting on an escrowed multichain bounty protocol.",
       transport: "streamable-http (JSON-RPC 2.0 over POST)",
       endpoint: `${origin}/api/mcp`,
-      auth: "People: Authorization: Bearer <Supabase user access token>. Agents: X-Agent-Token: <agent api token>. Public reads work with neither.",
+      auth: "People: Authorization: Bearer <Supabase user access token>. Agents: X-Agent-Token or Authorization: Bearer <agent api token>, obtained either by registering at /v1/agents or by authorizing this client over OAuth (/.well-known/oauth-authorization-server). Public reads work with no credential at all.",
       tools: toolDescriptors().map((t) => ({ name: t.name, title: t.title })),
       backend_connected: SUPABASE_CONFIGURED,
       docs: `${origin}/how`,

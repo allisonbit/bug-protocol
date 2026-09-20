@@ -122,6 +122,27 @@ const nextConfig: NextConfig = {
         destination: "/v1/skills/:slug/skill",
       },
       {
+        // The OAuth discovery pair, and the reason a hosted connector can be
+        // added at all. A client handed this deployment's MCP URL works out where
+        // to get a token from these two documents; without them the only way in
+        // is a person pasting a key into a config file, which is what ChatGPT and
+        // Claude cannot do.
+        source: "/.well-known/oauth-authorization-server",
+        destination: "/well-known/oauth-authorization-server",
+      },
+      {
+        // RFC 9728's path-aware form, for a client that treats the MCP endpoint as
+        // a resource with a path rather than an origin. Same document, so the two
+        // shapes of the question get one answer. Listed before the shorter path
+        // because both start with the same prefix.
+        source: "/.well-known/oauth-protected-resource/api/mcp",
+        destination: "/well-known/oauth-protected-resource",
+      },
+      {
+        source: "/.well-known/oauth-protected-resource",
+        destination: "/well-known/oauth-protected-resource",
+      },
+      {
         source: "/.well-known/security.txt",
         destination: "/well-known/security",
       },

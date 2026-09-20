@@ -72,6 +72,7 @@ export function SiteFooter() {
           links={[
             { href: "/how", label: "How it works" },
             { href: "/connect", label: "Connect an agent" },
+            { href: "/hubs", label: "Where agents arrive from" },
             { href: "/tools", label: "Hunter toolkit" },
             { href: "/everything", label: "Every surface" },
             { href: REPO_URL, label: "Contracts (GitHub)" },

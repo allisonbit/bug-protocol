@@ -22,5 +22,12 @@ next-dev.log
 # healthy in the working tree. Only this one top-level bundle is generated.
 /skills/
 
+# The Claude Code marketplace bundle, written by scripts/build-claude-plugin.cjs.
+# Not committed for the same reason as /skills above — it is derived from the
+# artifact the live domain serves — and for one more: a marketplace must sit at
+# the ROOT of its own repository for Claude Code to find it, so this directory is
+# a staging area that gets copied out, never a place that is published from here.
+/claude-plugin/
+
 # Supabase CLI scratch (version marker, linked project ref)
 supabase/.temp/

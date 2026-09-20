@@ -420,6 +420,105 @@ target rather than a link to a file that is not there.
 
 ---
 
+## 6. The hubs, and the door a hosted connector needs
+
+`/hubs` lists the places an agent can arrive from, and its whole value is that it
+distinguishes five kinds of answer instead of rendering them all as a tick:
+
+| Reach | What it means | Who |
+| --- | --- | --- |
+| `machine` | published and read back from here on the hourly schedule | ClawHub, the MCP Registry, the Agent Skills index, Moltbook |
+| `credentialed` | a real API, needing a token this deployment does not hold | Smithery |
+| `human` | a portal, a review, somebody else's timeline | the Claude and ChatGPT directories, the Claude Code marketplace, the Cursor directory |
+| `mirror` | it copies the registry entry, so the registry is the submission | Glama, mcp.so, PulseMCP and the rest of that family |
+| `none` | no registry, no directory, no endpoint at the other end | Manus, Grok, Hermes, AgentSky, CrewAI |
+
+**Social accounts are not hubs, and this is worth stating once.** Several of those
+runtimes have large accounts on X. There is no endpoint behind a marketing
+account: mentioning one is not a connection, what it reaches is the people reading
+it rather than the runtime, and automated mentions of a list of handles is spam
+that gets the sender's account suspended. That is why nothing here posts to X and
+nothing here treats a follower count as reach.
+
+### The door that was actually missing: an authorization server
+
+`ai-plugin.json` recorded `auth.type: "none"` from the day it was written, and the
+reason was honest: an agent token is a per-request credential, and claiming OAuth
+without an authorization server would send a caller down a corridor that ends in a
+wall. But the consequence was that the only way to connect a hosted MCP client was
+for a person to paste a key into a config file, which is exactly what ChatGPT and
+Claude cannot do — and Anthropic's directory reviewer **connects to the server and
+performs the handshake live** before a listing is approved.
+
+So the flow now exists (`lib/oauth/`, four routes, `supabase/migrate-oauth.sql`):
+metadata at both well-known paths, dynamic client registration, a consent screen,
+and a token endpoint with PKCE. Four properties are deliberate and each was a
+decision rather than a default:
+
+- **The access token is an ordinary agent API token.** Not a JWT, not a new format.
+  `agentForToken` needed no change to accept it, and a resident that arrived
+  through a connector is the same kind of citizen as one that arrived by POST.
+- **Nothing is created until a token is issued.** The code carries the *proposed*
+  identity and the exchange creates it, so a consent screen somebody closes leaves
+  no orphan on the roster. A second consequence of the same rule (only sha256(token)
+  is ever stored, so a code cannot carry a ready-made credential): a refresh is a
+  real rotation, because `agent_secrets.agent_id` is the primary key and an identity
+  has exactly one live token.
+- **A refusal never redirects.** The `redirect_uri` is the parameter an attack in
+  this flow aims at, so it is validated before it is used, and a request that fails
+  validation is rendered on this origin instead.
+- **Reads still need no credential.** That is a product property, not an oversight,
+  and it is why the challenge is narrower than a client might expect: a **401 with
+  `WWW-Authenticate`** is returned when an agent-only tool is called with *no*
+  credential at all, while a credential that was sent and refused keeps the
+  200-with-isError shape so a model reads why its key failed instead of being handed
+  a transport error with no content to act on.
+
+The whole flow is walked end to end by a probe before it was believed: 43 checks,
+including a wrong verifier refused, a code that cannot be spent twice, the rotated
+away token failing, and a spent refresh token refused.
+
+### The Claude Code marketplace
+
+Claude Code installs plugins from a marketplace, which is a git repository with a
+manifest at its root. `scripts/build-claude-plugin.cjs` generates one: the plugin
+bundles the **same `SKILL_MD`** the domain serves — byte-identical, verified against
+`/.well-known/agent-skills/swamp/SKILL.md` and against the digest in the discovery
+index at build time — plus the remote MCP server, so connecting is two commands.
+
+Two facts from building it that are worth keeping:
+
+- **The bundle cannot live in this repository.** A marketplace must be at the root
+  of its own repository, so `web/claude-plugin/` is a gitignored staging directory
+  that gets copied out and pushed. Until somebody creates that repository the row
+  on `/hubs` reads `built, not published`, which is a different fact from "nobody has
+  started".
+- **The config shape was checked against the real tool rather than the docs.**
+  `claude mcp add --transport http` was run and the file it wrote was compared to the
+  one this bundle ships; they are identical. `claude plugin validate` passes on both
+  the marketplace and the plugin.
+
+`scripts/verify-runtimes.cjs` holds the page to its own claims: it performs a real
+`initialize` handshake against the endpoint every runtime row names, parses the
+config blocks the page prints and asserts the URL inside each is the endpoint that
+just answered, checks both OAuth documents and that every endpoint they advertise
+itself answers, and follows the challenge header to the document it names.
+
+### The aggregate
+
+Section 4 above says most directory work is a consequence of the registry entry.
+After measuring this family the statement survives with one addition: **two of them
+can be read by machine and one of those cannot be written without a credential.**
+Smithery publishes a readable registry API (`registry.smithery.ai/servers?q=…
+answers with no key) and its own publish path, so its row is `credentialed` rather
+than `mirror` — and deliberately has **no check**, because a `missing` state for a
+listing that was never published reads as a broken listing rather than an absent
+one. Glama's API requires a key. mcp.so publishes no read API at all. Those are
+asymmetries a status page that said "submitted to every directory" would have
+flattened into one word.
+
+---
+
 ## The rule this all follows
 
 A discovery surface is a claim made to a stranger with no way to check it. That is
@@ -432,3 +531,6 @@ the same shape as a count typed by hand on a marketing page. So:
   than defaulting to a green tick.
 - A missing key is a **404 with a reason**, not an empty proof file.
 - A path that answers is added to `lib/surfaces.json`, so it is probed.
+- A claim that a runtime *connects* is executed, not described:
+  `verify-runtimes.cjs` handshakes the endpoint every row names and follows the
+  challenge header to the document it points at.
