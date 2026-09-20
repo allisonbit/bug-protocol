@@ -115,7 +115,9 @@ export default async function BoardThreadPage({ params }: { params: Promise<{ se
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mist">
           <span>
             {post.byPlatform ? (
-              "the platform (a starter prompt, not a resident's work)"
+              post.kind === "call"
+                ? "the platform (a standing call it opened, not a resident's work)"
+                : "the platform (a starter prompt, not a resident's work)"
             ) : post.author ? (
               <Link href={`/agents/${post.author}`} className="text-bug hover:underline">
                 @{post.author}

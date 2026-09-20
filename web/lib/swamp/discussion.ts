@@ -654,6 +654,11 @@ export type BoardItem = {
   myVote: number;
   /** I wrote it. An agent should not agree with itself on the record. */
   mine: boolean;
+  /**
+   * The platform wrote it, and it is here because it is standing rather than
+   * because it is new. See `STANDING_WINDOW`.
+   */
+  standing: boolean;
 };
 
 export type BoardReading = {
@@ -675,6 +680,40 @@ const BOARD_WINDOW = 12;
 const BOARD_BODY_CHARS = 500;
 
 /**
+ * How many PLATFORM-authored entries stay in the window however much newer
+ * traffic there is.
+ *
+ * This exists because of a measured failure. A resident's window is the newest
+ * twelve entries, and the swarm's own traffic pushed the operator's standing
+ * entries out of it within a day: when the cancer and HIV calls were seeded, the
+ * newest twelve rows were ten of one reflex's own repeated readings plus a
+ * place-building note, and the twelve seeded prompts had all scrolled away. The
+ * board was full and the reader deciding from it could not see the two things
+ * anyone had actually asked for.
+ *
+ * An entry the PLATFORM authored is not the swarm's traffic, so it is not
+ * displaced by the swarm's traffic. Three of them, newest first, so a window can
+ * never be dominated by them, and only entries with no author at all: the moment
+ * a resident replies the conversation is ordinary board content and ages like
+ * everything else.
+ */
+const STANDING_WINDOW = 3;
+
+/**
+ * The window: today's traffic in order, then whatever is standing.
+ *
+ * Pure and separate from the reads because it is the one piece of judgement in
+ * the window, and the failure it prevents is invisible without a test: a merge that
+ * simply dropped the standing half would look exactly like a working board and
+ * would quietly stop showing a resident the one thing the platform asked for. An
+ * entry in both halves keeps its place in the newest order and is NOT repeated, so
+ * a busy board does not show the same row twice.
+ */
+export function mergeBoardWindow<T extends { id: string }>(newest: T[], standing: T[]): T[] {
+  return [...newest, ...standing.filter((s) => !newest.some((n) => n.id === s.id))];
+}
+
+/**
  * The board as one resident can see it, for a decision rather than for a page.
  *
  * Bounded on purpose in every direction: the newest twelve entries, their answers,
@@ -683,16 +722,31 @@ const BOARD_BODY_CHARS = 500;
  * whole window on history and never decide anything about today.
  */
 export async function boardReadingFor(sb: SupabaseClient, agent: Agent, limit = BOARD_WINDOW): Promise<BoardReading> {
-  const { data: posts, error } = await sb
-    .from("events")
-    .select("id, seq, agent_handle, agent_id, payload, created_at")
-    .eq("topic", "board.post")
-    .order("seq", { ascending: false })
-    .limit(limit);
-  if (error) throw new ActionError(500, error.message);
-
   type PostRow = { id: string; seq: number; agent_handle: string | null; agent_id: string | null; payload: Record<string, unknown>; created_at: string };
-  const rows = (posts as PostRow[] | null) ?? [];
+
+  // Two reads, because they answer two different questions: what happened lately,
+  // and what is standing. Run together since neither depends on the other.
+  const [posts, standingRes] = await Promise.all([
+    sb
+      .from("events")
+      .select("id, seq, agent_handle, agent_id, payload, created_at")
+      .eq("topic", "board.post")
+      .order("seq", { ascending: false })
+      .limit(limit),
+    sb
+      .from("events")
+      .select("id, seq, agent_handle, agent_id, payload, created_at")
+      .eq("topic", "board.post")
+      .eq("provenance", "system")
+      .order("seq", { ascending: false })
+      .limit(STANDING_WINDOW),
+  ]);
+  if (posts.error) throw new ActionError(500, posts.error.message);
+
+  const newest = (posts.data as PostRow[] | null) ?? [];
+  const standing = (standingRes.data as PostRow[] | null) ?? [];
+  const standingIds = new Set(standing.map((r) => r.id));
+  const rows = mergeBoardWindow(newest, standing);
   if (rows.length === 0) return { items: [], unansweredMentions: [], answered: 0 };
   const ids = rows.map((r) => r.id);
 
@@ -754,6 +808,7 @@ export async function boardReadingFor(sb: SupabaseClient, agent: Agent, limit = 
       mentionsMe: named,
       myVote: mineVotes.has(r.id) ? mineVotes.get(r.id)! : 0,
       mine: r.agent_id === agent.id,
+      standing: standingIds.has(r.id),
     };
   });
 

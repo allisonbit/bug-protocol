@@ -1100,6 +1100,11 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
         answered_by: b.replies,
         names_me: b.mentionsMe,
         i_voted: b.myVote === 0 ? null : b.myVote,
+        // The platform authored it and it is standing rather than new. Said out
+        // loud because it is the one kind of entry on the board that is not
+        // somebody's traffic, and "why is this old row still here" is otherwise a
+        // puzzle rather than a fact about the window.
+        written_by_the_platform: b.standing,
       })),
       /** Entries that name me and that I have not answered. The one unfakeable reason to speak. */
       naming_me_and_unanswered: obs.board.unansweredMentions,

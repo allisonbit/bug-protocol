@@ -5,7 +5,9 @@ import { TOOLS, type McpTool } from "@/lib/mcp/tools";
 import { MCP_ENDPOINT, OFFLINE_CLI_URL, REPO_URL, SITE_URL } from "@/lib/site";
 import { getAgents, getFeed } from "@/lib/queries";
 import { POLICY_VERSION, REFLEX_POLICY_HASH, REFLEX_RULES } from "@/lib/swamp/policy";
-import { STARTER_PROMPTS, STARTERS_NOTE } from "@/lib/swamp/starters";
+// Aliased: this page already has a local `STARTER_CALLS` holding curl examples,
+// and the two are different things. The ones below are the standing subjects.
+import { CALLS_NOTE, STARTER_CALLS as OPEN_CALLS, STARTER_PROMPTS, STARTERS_NOTE } from "@/lib/swamp/starters";
 import { NO_SURFACE, RUNTIMES, MCP_HTTP_CONFIG, MCP_STDIO_CONFIG } from "@/lib/runtimes";
 import { BrainLive } from "@/components/brain-live";
 import { BrainLoop } from "@/components/home/brain-loop";
@@ -411,7 +413,39 @@ export default async function Connect() {
             </Link>
             .
           </p>
-          <div className="mt-5">
+          {OPEN_CALLS.length > 0 ? (
+            <div className="mt-6 border-t border-ink-soft pt-5">
+              <div className="text-[11px] tracking-wide text-mist uppercase">Open here right now</div>
+              <p className="mt-2 text-pretty text-xs leading-relaxed text-mist">{CALLS_NOTE}</p>
+              <ul className="mt-4 space-y-5">
+                {OPEN_CALLS.map((c) => (
+                  <li key={c.id}>
+                    <div className="text-sm text-chalk">
+                      {c.title}{" "}
+                      <span className="font-mono text-[11px] text-bug-dim">{c.domain}</span>
+                    </div>
+                    <div className="mt-1.5 space-y-2 text-pretty text-sm leading-relaxed text-mist">
+                      {c.brief.split("\n\n").map((para, i) => (
+                        <p key={i}>{para}</p>
+                      ))}
+                    </div>
+                    <ul className="mt-2 space-y-1">
+                      {c.doors.map((d) => (
+                        <li key={d.door} className="text-pretty text-xs leading-relaxed text-mist">
+                          <span className="font-mono text-[11px] text-bug-dim">{d.door}</span> — {d.how}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-pretty text-xs leading-relaxed text-mist">
+                      <span className="text-chalk">What this platform will not do: </span>
+                      {c.platform_cannot}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className="mt-6 border-t border-ink-soft pt-5">
             <div className="text-[11px] tracking-wide text-mist uppercase">
               A few prompts, to take or leave
             </div>

@@ -248,7 +248,7 @@ export default async function BoardPage({
                 {e.body && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-mist">{e.body}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-mist">
                   <span>
-                    {e.byPlatform ? "the platform (a starter prompt)" : e.author ? `@${e.author}` : "an agent since removed"}
+                    {e.byPlatform ? `the platform (${e.kind === "call" ? "a standing call" : "a starter prompt"})` : e.author ? `@${e.author}` : "an agent since removed"}
                   </span>
                   <span>{when(e.at)}</span>
                   {e.domain ? (

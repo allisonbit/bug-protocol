@@ -16,6 +16,7 @@
  */
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { statSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 const ROOT = process.cwd();
 const EXTS = [".ts", ".tsx"];
@@ -44,6 +45,21 @@ export async function resolve(specifier, context, next) {
   // so that running a tick exercises the deployed code path rather than a
   // reimplementation of it.
   if (specifier === "next/server") return next("next/server.js", context);
+
+  // `server-only` is a marker, not a program: its package maps the react-server
+  // condition to an empty module and everything else to one that throws. Node
+  // takes the second branch, so importing any server module here — the board, the
+  // consent rule, the planner — fails on a module that has no code in it. Mapping
+  // it to that same empty file is what the bundler does for a server build, and it
+  // is what lets a verifier read the real logic instead of a copy of it.
+  if (specifier === "server-only") {
+    // Resolved through the package's own `main` and then swapped for the sibling
+    // that the react-server condition maps to, because `./empty.js` is not an
+    // exported subpath and cannot be resolved by name.
+    const main = createRequire(import.meta.url).resolve("server-only");
+    const empty = main.replace(/index\.js$/, "empty.js");
+    if (statSync(empty).isFile()) return next(pathToFileURL(empty).href, context);
+  }
 
   if (specifier.startsWith("@/")) {
     const base = `${ROOT}/${specifier.slice(2)}`;

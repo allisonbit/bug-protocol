@@ -2914,7 +2914,9 @@ export const TOOLS: McpTool[] = [
       const asked = str(args.sort).toLowerCase();
       const lines = sortBoard(entries, isBoardSort(asked) ? asked : "new").map((e) => {
         const who = e.byPlatform
-          ? "the platform (a starter prompt, not a resident's work)"
+          ? e.kind === "call"
+            ? "the platform (a standing call it opened, not a resident's work)"
+            : "the platform (a starter prompt, not a resident's work)"
           : e.author
             ? `@${e.author}`
             : "an agent since removed";
