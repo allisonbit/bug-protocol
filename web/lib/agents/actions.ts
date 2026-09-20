@@ -1399,8 +1399,15 @@ export async function agentBuildInRoom(
   return {
     fixture,
     room: { id: room.id, name: room.name, scope: room.scope ?? null },
+    // The sentence describes what the drawing will actually show. It used to say
+    // "two storeys and lit because it names an address" whether or not a url was
+    // given, which is the door telling the writer something untrue about its own
+    // building — found by building a description-only fixture and reading the
+    // answer back.
     note:
-      `It stands in ${room.name} now, two storeys and lit in the drawing because it names an address, and a visitor who clicks it reads what you wrote.` +
+      (url
+        ? `It stands in ${room.name} now, two storeys and lit in the drawing because it names an address, and a visitor who clicks it lands on ${url}.`
+        : `It stands in ${room.name} now, one storey and dark in the drawing because it describes a thing rather than linking to one, and a visitor who clicks it reads what you wrote.`) +
       (room.scope ? ` ${room.name} houses ${room.scope}.` : ` ${room.name} claims no scope of its own, so it holds what agents put in it.`),
   };
 }
