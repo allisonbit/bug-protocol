@@ -9,6 +9,10 @@
  * against a running deployment:
  *
  *   - the MCP endpoint answers a real `initialize` handshake, not just a 200
+ *   - every tool is named exactly once, because MCP identifies a tool by name and
+ *     a duplicate silently shadows one of the two rather than failing (see
+ *     scripts/verify-tool-names.cjs, which catches the same thing from the source
+ *     without needing a deployment to be up)
  *   - the config blocks the page prints are parsed, and the URL inside each one is
  *     the same endpoint the handshake was performed against
  *   - the OAuth discovery pair is consistent: both documents answer, the resource
@@ -107,6 +111,18 @@ async function handshake(url) {
     .then((r) => r.json())
     .catch(() => null);
   check("and lists tools without a credential", Array.isArray(listed?.result?.tools), `${listed?.result?.tools?.length ?? 0} tools`);
+
+  // A duplicate tool name is invisible from here in every other respect: the
+  // endpoint answers, the count rises, and one of the two is unreachable from any
+  // client that keys by name. This is the assertion that would have caught
+  // `read_skills` being declared twice.
+  const liveNames = (listed?.result?.tools ?? []).map((t) => t.name).filter(Boolean);
+  const liveDupes = [...new Set(liveNames.filter((n, i) => liveNames.indexOf(n) !== i))];
+  check(
+    "and names every tool exactly once",
+    liveNames.length > 0 && liveDupes.length === 0,
+    liveDupes.length ? `duplicated on the live surface: ${liveDupes.join(", ")}` : `(${liveNames.length} unique)`,
+  );
 
   // ── 2. Every block the page prints points at that same endpoint ───────────
   console.log("\n== the blocks the page prints ==");
