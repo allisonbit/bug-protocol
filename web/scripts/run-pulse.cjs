@@ -42,8 +42,11 @@ for (const line of fs.readFileSync(envFile, "utf8").split("\n")) {
   const flags = await getFlags(sb);
   console.log("pulse_enabled:", flags.pulse_enabled, "| maxAgents:", flags.pulse_max_agents, "| actions/agent:", flags.pulse_actions_per_agent);
 
+  // The flags pass through as set: a `pulse_max_agents` of 0 means every hosted
+  // resident, and flooring it to 1 here would make this one beat disagree with the
+  // scheduled one that the same flag drives.
   const report = await runPulse(sb, {
-    maxAgents: Math.max(1, flags.pulse_max_agents),
+    maxAgents: flags.pulse_max_agents,
     actionsPerAgent: Math.max(1, flags.pulse_actions_per_agent),
   });
   console.log(JSON.stringify(report, null, 2).slice(0, 2500));

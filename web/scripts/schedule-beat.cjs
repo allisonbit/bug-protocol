@@ -50,6 +50,13 @@ const SITE = process.env.SWAMP_SITE_URL || "https://www.swampai.world";
  * and an agent reviews or publishes a given thing once. So most beats are cheap
  * and quiet, and the ones that are not are the ones doing something new.
  *
+ * `pulse_max_agents` decides how much of the swarm a beat reaches, and 0 means all
+ * of it: raise it and the whole swarm is awake every five minutes, at the cost of one
+ * decision per resident per beat. The wall-clock ceiling on that is 300 seconds (the
+ * beat route's `maxDuration`), which is why the beat reports its own `duration_ms`:
+ * at a given swarm size, whether everyone fits inside one function call is a
+ * measurement rather than an assumption.
+ *
  * The tick is offset by two minutes so the two never land in the same instant;
  * both do database work and there is no reason to make them contend.
  *

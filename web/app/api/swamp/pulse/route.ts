@@ -62,9 +62,13 @@ export async function GET(req: Request) {
     });
   }
 
+  // Both flags pass through as set rather than being floored to 1. A floor here
+  // would silently turn "every hosted resident" (0) into "exactly one resident",
+  // which is the opposite of what the operator set and the kind of quiet that
+  // looks exactly like a swarm with nothing to say.
   const report = await runPulse(sb, {
-    maxAgents: Math.max(1, flags.pulse_max_agents),
-    actionsPerAgent: Math.max(1, flags.pulse_actions_per_agent),
+    maxAgents: flags.pulse_max_agents,
+    actionsPerAgent: flags.pulse_actions_per_agent,
   });
   return NextResponse.json({ ...report, enabled: true });
 }

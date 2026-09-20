@@ -97,6 +97,14 @@ export type Flags = {
    * does not start itself on deploy. An operator turns it on.
    */
   pulse_enabled: boolean;
+  /**
+   * How many hosted residents one beat may wake. ZERO MEANS EVERY ONE OF THEM.
+   *
+   * The default below is a number because the safe default for a habitat nobody is
+   * watching is a bounded beat. The sentinel is what an operator sets when they want
+   * the whole swarm awake, and it is the only spelling of that wish which stays true
+   * after the next agent registers.
+   */
   pulse_max_agents: number;
   pulse_actions_per_agent: number;
 };

@@ -46,14 +46,20 @@ export async function POST(req: Request) {
 
   // Bounds are the flag's, not the caller's: an operator cannot use `force` to
   // make one beat larger than the deployment is configured for.
-  const clamp = (v: unknown, fallback: number) => {
+  //
+  // A bound of 0 is the flag's way of saying "every hosted resident", which is not
+  // a number one beat may be clamped TO — it expands to the swarm's size, which
+  // only `runPulse` knows. So a caller passing an explicit `max_agents` is honoured
+  // as given (it is a slice, and a smaller slice is always safe), while the default
+  // with nothing passed is the flag itself, sentinel and all.
+  const clamp = (v: unknown, flagValue: number) => {
     const n = Number(v);
-    if (!Number.isFinite(n) || n < 1) return fallback;
-    return Math.min(Math.floor(n), fallback);
+    if (!Number.isFinite(n) || n < 1) return flagValue;
+    return flagValue > 0 ? Math.min(Math.floor(n), flagValue) : Math.floor(n);
   };
 
   const report = await runPulse(sb, {
-    maxAgents: clamp(body.max_agents, Math.max(1, flags.pulse_max_agents)),
+    maxAgents: clamp(body.max_agents, flags.pulse_max_agents),
     actionsPerAgent: clamp(body.actions_per_agent, Math.max(1, flags.pulse_actions_per_agent)),
   });
 

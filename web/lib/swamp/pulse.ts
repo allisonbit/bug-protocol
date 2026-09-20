@@ -72,6 +72,13 @@ export type PulseReport = {
   agents_available: number;
   agents_pulsed: number;
   agents_awoke: number;
+  /**
+   * Hosted residents this beat did not wake, because the cap is smaller than the
+   * swarm. This was declared and never once assigned, so it read 0 on every beat
+   * including the ones that woke half the swarm: a field that exists to say who was
+   * left out is worth nothing if it always says nobody. It is derived from the two
+   * counts above rather than tracked, so it cannot drift from them.
+   */
   agents_slept: number;
   checks_run: number;
   findings_filed: number;
@@ -79,6 +86,17 @@ export type PulseReport = {
   cabals_formed: number;
   cabals_dissolved: number;
   next_cursor: number;
+  /**
+   * How long the beat took, in milliseconds.
+   *
+   * This is the measurement a beat cannot make about itself from the inside: the
+   * route that drives it is a 300-second function, and a beat that runs past that
+   * is killed mid-flight, with the residents it had not reached simply not woken
+   * and the report never returned. So "every hosted agent wakes" is a claim with a
+   * wall-clock bound behind it, and whether the bound holds at a given swarm size
+   * is a fact to read rather than to assume.
+   */
+  duration_ms: number;
   actions: ActionLog[];
   errors: string[];
 };
@@ -800,6 +818,16 @@ async function reconcileCabals(sb: SupabaseClient, obs: Observation): Promise<{ 
 // ---- the beat ---------------------------------------------------------------
 
 export type PulseOptions = {
+  /**
+   * How many hosted residents one beat may wake. Round-robin, so a swarm larger
+   * than this still gets fair coverage over several beats.
+   *
+   * ZERO (or less) MEANS EVERY HOSTED RESIDENT, and that is the honest spelling of
+   * "the whole swarm wakes each beat". A number is a slice, and a slice of a growing
+   * swarm is a share that quietly shrinks: a cap of 8 is the whole swarm at eight
+   * residents and half of it at sixteen, with nothing on any surface saying which
+   * one it currently is. A cap that means "everyone" does not rot that way.
+   */
   maxAgents: number;
   actionsPerAgent: number;
 };
@@ -814,6 +842,7 @@ export type PulseOptions = {
  */
 export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<PulseReport> {
   const at = new Date().toISOString();
+  const startedAt = Date.now();
   const report: PulseReport = {
     ok: true,
     at,
@@ -828,8 +857,22 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
     cabals_formed: 0,
     cabals_dissolved: 0,
     next_cursor: 0,
+    duration_ms: 0,
     actions: [],
     errors: [],
+  };
+  /**
+   * Stamp the wall clock on every way out, including the early ones.
+   *
+   * The count of who did not wake is derived here rather than incremented in the
+   * loop, because every way out of this function has to agree about it: a beat that
+   * died on the hosted-agents read and one that ran every resident both pass through
+   * this line.
+   */
+  const done = (): PulseReport => {
+    report.duration_ms = Date.now() - startedAt;
+    report.agents_slept = Math.max(0, report.agents_available - report.agents_pulsed);
+    return report;
   };
 
   // Hosted agents only, the pulse never acts for an agent whose owner hasn't
@@ -842,11 +885,11 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
     .order("id", { ascending: true });
   if (hostedErr) {
     report.errors.push(`agents: ${hostedErr.message}`);
-    return report;
+    return done();
   }
   const hosted = (hostedRows as Agent[] | null) ?? [];
   report.agents_available = hosted.length;
-  if (hosted.length === 0) return report;
+  if (hosted.length === 0) return done();
 
   // 1) Liveness. An agent whose runtime SWAMP runs does not go offline between
   // beats: the thing that would be offline is our own loop, and if that stopped
@@ -861,10 +904,16 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   const liveHosted = hosted;
 
   // 2) Round-robin selection, so a long list still gets fair coverage.
+  //
+  // A cap of zero means every hosted resident, and a cap larger than the swarm is
+  // the same thing: both are clamped to the swarm by the `Math.min` below, so the
+  // cursor advances by the swarm's size and a beat that wakes everyone wakes the
+  // same everyone next time rather than drifting through a rotation.
+  const cap = opts.maxAgents > 0 ? opts.maxAgents : liveHosted.length;
   const cursor = await readCursor(sb);
   const start = hosted.length > 0 ? cursor % hosted.length : 0;
   const selected: Agent[] = [];
-  for (let i = 0; i < Math.min(opts.maxAgents, liveHosted.length); i++) {
+  for (let i = 0; i < Math.min(cap, liveHosted.length); i++) {
     selected.push(liveHosted[(start + i) % liveHosted.length]);
   }
   report.next_cursor = (start + selected.length) % liveHosted.length;
@@ -990,7 +1039,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   }
 
   await writeCursor(sb, report.next_cursor, at);
-  return report;
+  return done();
 }
 
 // ---- the singleton pulse row ------------------------------------------------
