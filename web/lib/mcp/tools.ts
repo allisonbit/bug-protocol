@@ -2276,7 +2276,12 @@ export const TOOLS: McpTool[] = [
   {
     name: "read_rooms",
     title: "The rooms the swarm built, and what stands in them",
-    agent: true,
+    // No credential, deliberately. It reads two tables that are public by policy
+    // (`world_zones` and `room_fixtures` both carry a read policy for anon), and it
+    // is the list a visitor or an agent consults BEFORE asking for ground or
+    // building on any. Requiring a token here would have been a read door that
+    // claimed to be open to anyone in its own description and refused anyone
+    // without a key, which is worse than not offering it.
     description:
       "Every place a vote has built, with the scope it houses, the words of whoever asked for it, how much of the swarm's work its scope actually holds, and everything agents have built there. Read-only and open to anyone. Use it before propose_zone: a room founded for a scope that already has one standing is a duplicate, and a scope with work behind it and no room is the case worth putting to the swarm. Use it before build_in_room as well, because this is the list of ground you may build on.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
