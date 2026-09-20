@@ -53,18 +53,44 @@ export function SwampShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const active = viewFor(pathname);
   const [railOpen, setRailOpen] = useState(false);
+  /**
+   * THE PANEL, AND THE ONE ROUTE IT STARTS FOLDED ON.
+   *
+   * `/world` is the world. On that page the drawing should own the screen and the
+   * legend should be something a reader opens rather than something sitting on top
+   * of it. Every other swamp route is unchanged: there the panel is the page frame
+   * and it starts open, exactly as it did before.
+   *
+   * This FOLDS the panel; it does not delete it. The folded panel is hidden with a
+   * class rather than unmounted, so `/world`'s own HTML still carries every zone,
+   * every kind of structure and every sealed ground — which is what a reader who is
+   * not looking at a canvas, and every crawler, actually reads. It is the same
+   * pattern the rail already uses while its sheet is closed.
+   */
+  const onWorld = pathname === "/world";
+  const [panelOpen, setPanelOpen] = useState(!onWorld);
 
   // A navigation closes the mobile sheet. Without this it stays open over the page
-  // you just asked for, which is the single most annoying way to implement one.
+  // you just asked for, which is the single most annoying way to implement one. The
+  // panel's default rides along: leaving `/world` reopens it, arriving at it folds it.
   useEffect(() => {
     setRailOpen(false);
-  }, [pathname]);
+    setPanelOpen(!onWorld);
+  }, [pathname, onWorld]);
 
   const current = VIEWS.find((v) => v.id === active) ?? null;
 
   return (
     <div className="flex h-dvh min-h-[420px] flex-col overflow-hidden bg-ink">
-      <Header active={active} pathname={pathname} railOpen={railOpen} onToggleRail={() => setRailOpen((v) => !v)} />
+      <Header
+        active={active}
+        pathname={pathname}
+        railOpen={railOpen}
+        onToggleRail={() => setRailOpen((v) => !v)}
+        onWorld={onWorld}
+        panelOpen={panelOpen}
+        onTogglePanel={() => setPanelOpen((v) => !v)}
+      />
 
       {/*
         THE STAGE, in two arrangements from one DOM order.
@@ -97,7 +123,21 @@ export function SwampShell({ children }: { children: React.ReactNode }) {
               panel is the page frame and no page had to be rewritten to live here.
               The rule lives in globals.css, deliberately, so it can be read in one
               place instead of being inferred from twenty four diffs. */}
+          {/* THE HANDLE, for when the panel is folded and the pointer is a thumb. On
+              a wide screen the header carries the same control, so this one is only
+              where that one does not reach. */}
+          {!panelOpen && (
+            <button
+              onClick={() => setPanelOpen(true)}
+              aria-expanded={false}
+              className="relative z-10 self-start rounded-xl border border-line bg-ink/90 px-3 py-2 text-[11px] text-mist shadow-lift backdrop-blur-xl transition-colors hover:text-chalk lg:hidden"
+            >
+              the legend
+            </button>
+          )}
+
           <section
+            aria-hidden={!panelOpen}
             aria-label={current ? `${current.label}: ${current.what}` : "The swamp"}
             /* On `lg` the three offsets are named individually rather than as
                `inset-y-4` plus a `bottom-20` override. Both would set `bottom`, and
@@ -105,7 +145,9 @@ export function SwampShell({ children }: { children: React.ReactNode }) {
                anything readable here — so the panel would sometimes run under the
                dock and sometimes not, and the difference would be a Tailwind
                upgrade. */
-            className="swamp-panel relative min-w-0 rounded-2xl border border-line bg-ink/90 p-5 shadow-lift backdrop-blur-xl lg:absolute lg:top-4 lg:bottom-20 lg:left-4 lg:w-[min(720px,calc(100vw-388px))] lg:overflow-y-auto lg:overscroll-contain lg:p-7"
+            className={`swamp-panel ${
+              panelOpen ? "" : "hidden"
+            } relative min-w-0 rounded-2xl border border-line bg-ink/90 p-5 shadow-lift backdrop-blur-xl lg:absolute lg:top-4 lg:bottom-20 lg:left-4 lg:w-[min(720px,calc(100vw-388px))] lg:overflow-y-auto lg:overscroll-contain lg:p-7`}
           >
             {children}
           </section>
@@ -166,11 +208,17 @@ function Header({
   pathname,
   railOpen,
   onToggleRail,
+  onWorld,
+  panelOpen,
+  onTogglePanel,
 }: {
   active: ViewId | null;
   pathname: string;
   railOpen: boolean;
   onToggleRail: () => void;
+  onWorld: boolean;
+  panelOpen: boolean;
+  onTogglePanel: () => void;
 }) {
   const current = VIEWS.find((v) => v.id === active) ?? null;
   return (
@@ -210,6 +258,20 @@ function Header({
           </>
         ) : null}
       </span>
+
+      {/* The panel toggle: wide screens only, and only on `/world`. There the panel is
+          a legend over the drawing rather than the page frame, so folding it is a
+          choice a reader can make. Everywhere else the panel IS the page, and a
+          control to hide the page would be a control to hide the site. */}
+      {onWorld && (
+        <button
+          onClick={onTogglePanel}
+          aria-expanded={panelOpen}
+          className="hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-mist transition-colors hover:text-chalk lg:block"
+        >
+          {panelOpen ? "close the legend" : "the legend"}
+        </button>
+      )}
 
       {/* The rail toggle, small screens only: the rail is a sheet there. */}
       <button

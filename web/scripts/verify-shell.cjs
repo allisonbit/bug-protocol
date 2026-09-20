@@ -247,5 +247,70 @@ say(
   `${atLg.panel.right - atLg.panel.x}px`,
 );
 
+/*
+ * THE PANEL FOLDS ON `/world`, AND FOLDS RATHER THAN VANISHES.
+ *
+ * Every way this can go wrong is silent, so each is asserted from the source:
+ *
+ *   1. IT IS `/world` EXACTLY. A prefix match would fold the panel on `/rooms` too,
+ *      and a fold that spreads is a fold nobody asked for.
+ *   2. THE PANEL IS HIDDEN, NOT UNMOUNTED. Unmounting would drop `/world`'s own
+ *      HTML — every zone, every kind of structure, every sealed ground — and that
+ *      HTML is the whole of the page to a reader who has no canvas and to every
+ *      crawler. Folding is a display change or it is a deletion.
+ *   3. THE WORLD IS WHAT FOLDING REVEALS. `variant="fill"` draws the habitat behind
+ *      the panel; under `variant="band"` the stage would be empty and folding would
+ *      reveal a blank rectangle, which is worse than the panel it hid.
+ *   4. THERE IS A WAY BACK AT BOTH WIDTHS, and it says whether it is open.
+ */
+console.log("\n== the panel folds on /world, and folds rather than vanishes ==");
+say(
+  shellSource.includes('const onWorld = pathname === "/world";'),
+  "the fold is decided by an exact match on /world",
+  "a prefix would fold the rooms and the residents as well",
+);
+say(
+  shellSource.includes("useState(!onWorld)"),
+  "and that is the panel's starting state rather than a later correction",
+  "so /world never opens and then closes itself",
+);
+say(
+  shellSource.includes('panelOpen ? "" : "hidden"'),
+  "the folded panel is hidden by a class, not unmounted",
+  "so /world's own HTML still carries the legend",
+);
+say(!shellSource.includes("{panelOpen && ("), "  and nothing conditionally renders the panel itself");
+say(shellSource.includes("{!panelOpen && ("), "a handle exists only while it is folded");
+say(
+  shellSource.includes('<WorldBand variant="fill" />'),
+  "the world is drawn behind the panel, which is what folding reveals",
+);
+const bandSource = fs.readFileSync(path.join(__dirname, "..", "components", "world", "world-band.tsx"), "utf8");
+say(
+  bandSource.includes("!full && !fill &&"),
+  "  and the fill variant never hides itself on a pathname",
+  "/world is one of the routes that draws it",
+);
+say(
+  shellSource.includes("aria-hidden={!panelOpen}"),
+  "the folded panel is out of reach of a screen reader as well as of the eye",
+);
+say(
+  shellSource.includes("aria-expanded={panelOpen}"),
+  "and the control that reopens it announces whether it is open",
+);
+say(
+  shellSource.includes("self-start rounded-xl border border-line bg-ink/90 px-3 py-2 text-[11px] text-mist shadow-lift backdrop-blur-xl transition-colors hover:text-chalk lg:hidden"),
+  "there is a way back for a thumb, where the header's control does not reach",
+);
+say(
+  shellSource.includes("hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-mist transition-colors hover:text-chalk lg:block"),
+  "and one for a pointer, wide screens only",
+);
+say(
+  shellSource.includes('{panelOpen ? "close the legend" : "the legend"}'),
+  "the control names what it does rather than showing an icon",
+);
+
 console.log(`\nshell: ${failed === 0 ? "all checks passed" : `${failed} FAILED`}`);
 process.exitCode = failed === 0 ? 0 : 1;
