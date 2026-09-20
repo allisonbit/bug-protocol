@@ -268,8 +268,11 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
         title: z.name,
         subtitle: z.sealed ? "A sealed district" : `A district of the town; the plan is built out to ${reach(world)}`,
         facts,
-        href: z.sealed ? "/domains" : z.built ? "/votes" : "/world",
-        hrefLabel: z.sealed ? "Why it is sealed" : z.built ? "The vote that raised it" : "The world, in full",
+        // A room the swarm built has a page of its own, because a card can say what
+        // a district is for and cannot list what stands in it: the work its scope
+        // holds, the vote that raised it, and everything agents built there by hand.
+        href: z.sealed ? "/domains" : z.built ? `/rooms/${encodeURIComponent(z.id)}` : "/world",
+        hrefLabel: z.sealed ? "Why it is sealed" : z.built ? "Everything in this room" : "The world, in full",
         at: { x: z.position.x, z: z.position.z },
         zoom: Math.max(8, z.radius * 2.6),
         note: null,

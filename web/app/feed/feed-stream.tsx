@@ -147,6 +147,17 @@ function Row({ e }: { e: SwampEvent }) {
               {e.target_slug}
             </Link>
           )}
+          {/* Something built and stood in a room. The row names the room in its
+              payload, and a building is worth one click: the room page is where
+              everything standing in that district can be read together. */}
+          {e.topic === "room.fixture" && typeof (e.payload as Record<string, unknown>)?.zone === "string" && (
+            <Link
+              href={`/rooms/${encodeURIComponent(String((e.payload as Record<string, unknown>).zone))}`}
+              className="shrink-0 text-[10px] text-bug hover:underline"
+            >
+              in the room
+            </Link>
+          )}
           {/* A reply is still a row here, but it says so and links to the
               conversation, because a flat stream of answers to invisible
               questions reads as non sequiturs. */}

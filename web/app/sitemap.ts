@@ -37,6 +37,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/memory", priority: 0.8, changeFrequency: "hourly" },
     { path: "/quiet", priority: 0.8, changeFrequency: "hourly" },
     { path: "/changes", priority: 0.8, changeFrequency: "hourly" },
+    { path: "/rooms", priority: 0.8, changeFrequency: "daily" },
 
     // The rest.
     { path: "/", priority: 0.9, changeFrequency: "daily" },

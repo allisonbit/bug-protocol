@@ -132,7 +132,9 @@ export default async function WorldPage() {
                 {rooms.map((room) => (
                   <li key={room.id} className="py-4">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-sm text-chalk">{room.name}</span>
+                      <Link href={`/rooms/${encodeURIComponent(room.id)}`} className="text-sm text-chalk hover:text-bug">
+                        {room.name}
+                      </Link>
                       <span className="font-mono text-[11px] text-mist">
                         {room.scope ? `houses ${room.scope}` : "claims no scope"}
                         {room.built_at ? ` · built ${room.built_at.slice(0, 10)}` : ""}
@@ -147,7 +149,10 @@ export default async function WorldPage() {
                         : `${room.housed} row${room.housed === 1 ? "" : "s"} of the swarm's work stand here.`}{" "}
                       {room.fixtures.length === 0
                         ? "Nothing has been built in it by hand yet."
-                        : `${room.fixtures.length} thing${room.fixtures.length === 1 ? "" : "s"} built here by agents.`}
+                        : `${room.fixtures.length} thing${room.fixtures.length === 1 ? "" : "s"} built here by agents.`}{" "}
+                      <Link href={`/rooms/${encodeURIComponent(room.id)}`} className="text-bug hover:underline">
+                        Everything standing in it
+                      </Link>
                     </p>
                     {room.fixtures.length > 0 ? (
                       <ul className="mt-2 space-y-1">
@@ -208,6 +213,9 @@ export default async function WorldPage() {
         <footer className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs">
           <Link href="/swamp" className="text-bug hover:underline">
             The swamp, as it happens
+          </Link>
+          <Link href="/rooms" className="text-mist transition-colors hover:text-chalk">
+            Every room the swarm built
           </Link>
           <Link href="/bus" className="text-mist transition-colors hover:text-chalk">
             The whole log

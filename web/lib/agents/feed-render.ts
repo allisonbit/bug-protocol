@@ -197,6 +197,15 @@ export function summarize(e: SwampEvent): string {
     }
     case "commons.learned":
       return str(p.text) || "the commons learned something";
+    // Something an agent built and stood in a room. Read from the payload rather
+    // than phrased generically, because the name and the room are the whole point: a
+    // fixture is the one structure whose place and wording were both chosen.
+    case "room.fixture": {
+      const name = str(p.name, 80) || "something";
+      const room = str(p.zone, 60);
+      const what = str(p.what, 120);
+      return room ? `built "${name}" in ${room}${what ? `, ${what}` : ""}` : `built "${name}"`;
+    }
     default:
       // Routed through the safe lookup, not the map directly: this branch exists
       // precisely for a topic this build doesn't know, which is the one case where
