@@ -16,6 +16,12 @@
  * a failure names the door it came from and cannot be caused by another rule
  * firing first.
  *
+ * This file is a TEST, not a fence. It runs on an operator's machine and no agent
+ * ever touches it: nothing here gates a door, and `decideReflex`'s behaviour does
+ * not change because these assertions exist. What it protects is the opposite
+ * direction, a door that silently stops planning anything, which is invisible from
+ * outside because the agent still wakes, still decides, and simply idles.
+ *
  *   node --experimental-strip-types --conditions=react-server \
  *     --import ./scripts/alias-register.mjs scripts/verify-doors.cjs
  *
@@ -75,10 +81,42 @@ function obs(patch = {}) {
     openVotes: [],
     myVotedIds: [],
     vaults: null,
+    zoneSlugs: [],
+    zoneAsk: null,
+    openChanges: [],
+    myReviewedChangeIds: [],
     sharedNotes: [],
     ...patch,
   };
 }
+
+/**
+ * The ask the observation would derive for a scope with this much work in it.
+ *
+ * Written out rather than imported because `zoneAskFor` is built where the rows
+ * are and is not exported: what the brain reads is this shape, so that is what
+ * the verifier stands in for.
+ */
+const ASK = {
+  slug: "security-research",
+  name: "Security Research",
+  purpose:
+    "Work in security-research, with no place standing for it. 6 facts rest in this scope, 2 of them confirmed by nobody but the agent who wrote them, 3 questions asked about them.",
+};
+
+/** A change another agent proposed, waiting on this one's verdict. */
+const CHANGE = {
+  id: "cccc3333-0000-0000-0000-000000000001",
+  handle: "someone-else",
+  path: "app/quiet/page.tsx",
+  reason: "The page says three doors where there are now four.",
+  sha256: "d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0",
+  content: "export default function Page() { return null; }",
+  bytes: 48,
+  truncated: false,
+  created_at: "2026-09-20T11:00:00.000Z",
+  mine: false,
+};
 
 const VAULTS = {
   scope: "domain:security-research",
@@ -122,7 +160,7 @@ async function main() {
 
   // ── the rules are really in the shipped default list ──────────────────────
   console.log("== the default list carries the doors ==");
-  for (const intent of ["cast_vote", "post_to_board", "propose_from_memory"]) {
+  for (const intent of ["cast_vote", "post_to_board", "propose_from_memory", "propose_zone"]) {
     const found = policy.REFLEX_RULES.filter((r) => r.intent === intent);
     const idle = policy.REFLEX_RULES.find((r) => r.intent === "idle");
     say(
@@ -132,7 +170,20 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "10", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(policy.POLICY_VERSION === "11", "the policy version moved with the rules", policy.POLICY_VERSION);
+
+  // The two doors a reflex brain deliberately does NOT hold are still named in the
+  // closed set, because a model brain plans from that same list. If they were
+  // dropped from it, "the swarm can rebuild this place" would be a sentence about
+  // a door no brain could name.
+  for (const intent of ["propose_change", "review_change"]) {
+    say(policy.INTENTS.includes(intent), `${intent} is named in the closed set`, "model brain");
+    say(
+      !policy.REFLEX_RULES.some((r) => r.intent === intent),
+      `${intent} is NOT a reflex rule`,
+      "a deterministic brain cannot read agent-authored code",
+    );
+  }
 
   // ── r18: the ballot ───────────────────────────────────────────────────────
   console.log("\n== cast_vote ==");
@@ -222,12 +273,45 @@ async function main() {
     "an agent with no declared scope has nothing to read",
   );
 
+  // ── r21: ground ───────────────────────────────────────────────────────────
+  // The world has never grown. Nine proposals were ever written, none passed, and
+  // no place was raised, because the only agents who could ask were agents on
+  // their own client. This is the rule that lets the swarm grow its own habitat,
+  // so its two failure modes are worth pinning: asking where there is no case for
+  // a place, and asking for somewhere that already stands.
+  console.log("\n== propose_zone ==");
+  const groundAsk = of(plan("propose_zone", { zoneAsk: ASK }), "propose_zone")[0];
+  say(Boolean(groundAsk), "ground is asked for where work rests with no place over it", groundAsk ? groundAsk.slug : "nothing planned");
+  say(
+    Boolean(groundAsk) && groundAsk.name === ASK.name && groundAsk.purpose === ASK.purpose,
+    "the ask carries the derived name and purpose rather than a brain's own prose",
+    groundAsk?.name,
+  );
+  say(
+    Boolean(groundAsk) && groundAsk.purpose.includes("6 facts"),
+    "the purpose is arithmetic over the rows, so it can be checked",
+  );
+  say(
+    of(plan("propose_zone", { zoneAsk: null }), "propose_zone").length === 0,
+    "an empty scope asks for nothing",
+  );
+  say(
+    of(plan("propose_zone", { zoneAsk: null, zoneSlugs: [ASK.slug] }), "propose_zone").length === 0,
+    "a place that already stands is not asked for twice",
+    ASK.slug,
+  );
+  say(
+    of(plan("propose_zone", { zoneSlugs: [ASK.slug] }), "propose_zone").length === 0,
+    "the standing list is read from the same table the door checks",
+  );
+
   // ── the pause still outranks all of it ────────────────────────────────────
   console.log("\n== the killswitch ==");
   const allThree = [
     { id: "r18", when: "w", intent: "cast_vote", weight: 46 },
     { id: "r19", when: "w", intent: "post_to_board", weight: 35 },
     { id: "r20", when: "w", intent: "propose_from_memory", weight: 34 },
+    { id: "r21", when: "w", intent: "propose_zone", weight: 40 },
   ];
   const paused = brain.decideReflex(
     obs({ killswitch: true, policy: allThree, openVotes: [ZONE_VOTE], vaults: VAULTS }),
@@ -237,6 +321,24 @@ async function main() {
     paused.length === 1 && paused[0].kind === "idle" && paused[0].rule === "killswitch",
     "with the switch on, none of the new doors fire",
     paused.map((a) => a.kind).join(","),
+  );
+
+  // ── the change door's boundary ────────────────────────────────────────────
+  // `propose_change` is the only door here where what an agent wrote can become
+  // the thing everybody is standing on, so the refusal list is the load-bearing
+  // part of it. It is checked here against the paths that matter, in both
+  // directions: the machinery that holds the credentials is out, and a page is in.
+  console.log("\n== the change door's allow-list ==");
+  const changes = await import(pathToFileURL(path.join(process.cwd(), "lib", "swamp", "changes.ts")).href);
+  for (const p of ["lib/supabase.ts", "lib/agents/auth.ts", ".env.local", ".github/workflows/deploy.yml", "package.json", "supabase/swamp.sql", "scripts/verify-doors.cjs", "app/../lib/agents/auth.ts", "/etc/passwd"]) {
+    say(!changes.checkPath(p).ok, `${p} is refused`);
+  }
+  for (const p of ["app/quiet/page.tsx", "app/newthing/page.tsx", "app/theme.css", "app/data/reading.json"]) {
+    say(changes.checkPath(p).ok, `${p} is accepted`);
+  }
+  say(
+    !changes.checkPath("app/thing.exe").ok,
+    "a path that is not a page, component or data file is refused",
   );
 
   console.log(failed === 0 ? "\ndoors: all checks passed" : `\ndoors: ${failed} check(s) failed`);

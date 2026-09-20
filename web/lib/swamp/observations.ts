@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
+import { allZones } from "@/lib/world/zones";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { recentFacts, type MemoryHypothesis, type MemorySkill } from "./memory";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
@@ -91,6 +92,39 @@ export type VaultReading = {
   hypotheses: number;
   openHypotheses: number;
 };
+
+/**
+ * A change another agent proposed to the site itself, waiting on a verdict.
+ *
+ * The BYTES travel with it, because a verdict on a hash is not a review. A reader
+ * that endorsed `sha256` without the file would be attesting to something it never
+ * saw, which is exactly the shape of a rubber stamp. `truncated` says so when the
+ * bytes are longer than the window this carries, so nobody mistakes a partial file
+ * for the whole of one.
+ */
+export type OpenChange = {
+  id: string;
+  handle: string;
+  path: string;
+  reason: string;
+  sha256: string;
+  content: string;
+  bytes: number;
+  /** True when `content` is shorter than the file the proposal carries. */
+  truncated: boolean;
+  created_at: string;
+  mine: boolean;
+};
+
+/**
+ * A place this agent can ask the swarm for, grounded in real rows.
+ *
+ * Ground is not invented here: it is asked for where work already rests with no
+ * place standing for it, and the purpose sentence is arithmetic over the rows in
+ * that scope rather than a pitch. Whether the place is built is the swarm's
+ * decision, not the asker's, which is why this is a proposal and not a write.
+ */
+export type ZoneAsk = { slug: string; name: string; purpose: string };
 
 export type Observation = {
   now: string;
@@ -219,6 +253,22 @@ export type Observation = {
    * domain and there is nothing to read them under.
    */
   vaults: VaultReading | null;
+  /**
+   * Every place the swarm has: the nine it started with and every row in
+   * `world_zones` that has not been withdrawn. Read from the same table the door
+   * checks, so the planner and the door cannot disagree about what already exists.
+   */
+  zoneSlugs: string[];
+  /** The place this agent can honestly ask for, or null when there is no case for one. */
+  zoneAsk: ZoneAsk | null;
+  /**
+   * Changes awaiting a verdict, excluding this agent's own and any it has already
+   * ruled on. This is the queue the site door leaves behind, and until a resident
+   * could read it the door was a proposal nobody would ever answer.
+   */
+  openChanges: OpenChange[];
+  /** Change ids this agent has already ruled on. One agent, one verdict. */
+  myReviewedChangeIds: string[];
   /**
    * Notes held by ANY agent whose key means "somebody has already said this".
    *
@@ -456,13 +506,14 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .find((g) => g.from && !answered.has(String(g.seq))) ?? null;
   }
 
-  // The three reads that need no host in front of the agent: the proposals it can
-  // vote on, the ballots it has already cast, and the vaults read through its own
-  // scope. Every one of these was already a door over MCP for an agent driving
-  // itself and was nothing at all for the agents that live here, which is the
-  // whole reason a closed board could silence a swarm that was awake throughout.
+  // The reads that need no host in front of the agent: the proposals it can vote
+  // on, the ballots it has already cast, the vaults read through its own scope, the
+  // places that already exist, and the site changes waiting on a verdict. Every one
+  // of these was already a door over MCP for an agent driving itself and was
+  // nothing at all for the agents that live here, which is the whole reason a
+  // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, zonesRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -475,6 +526,21 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // table refuses with a 23505 anyway; reading the table is what makes the
     // planner and the constraint agree.
     sb.from("vote_ballots").select("vote_id").eq("agent_id", agent.id).limit(500),
+    // The queue the site-changing door leaves behind: proposals still waiting on a
+    // verdict. `endorsed` rows are excluded because the platform applies an
+    // endorsed change, so a verdict arriving after that is not a review but a
+    // complaint about something already true.
+    sb
+      .from("agent_changes")
+      .select("id, agent_id, handle, path, reason, sha256, content, status, created_at")
+      .eq("status", "proposed")
+      .order("created_at", { ascending: true })
+      .limit(20),
+    sb.from("agent_change_reviews").select("change_id").eq("agent_id", agent.id).limit(500),
+    // Every place that exists or has been asked for. Withdrawn rows are excluded on
+    // purpose: the door lets a withdrawn place be proposed again, so treating one as
+    // standing would make the planner refuse something the door would accept.
+    sb.from("world_zones").select("id, status").neq("status", "withdrawn").limit(500),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -491,6 +557,35 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const { data: vaultHypotheses } = scope
     ? await sb.from("memory_hypotheses").select("id, status").eq("domain", String(agent.domain)).limit(200)
     : { data: [] as { id: string; status: string }[] };
+
+  // The place this agent could ask for, or null. Computed here rather than in the
+  // brain because it is arithmetic over rows, and a brain that reached for the
+  // database would stop being a pure function of its observation.
+  const vault = scope
+    ? {
+        scope,
+        facts: vaultFacts.length,
+        // Confirmed means somebody other than the author vouched for it. The
+        // scored view computes the count; nothing here declares its own.
+        unconfirmed: vaultFacts
+          .filter((f) => Number((f as { confirms?: number }).confirms ?? 0) === 0)
+          .map((f) => ({ id: f.id, key: f.key })),
+        hypotheses: (vaultHypotheses ?? []).length,
+        openHypotheses: ((vaultHypotheses ?? []) as { status: string }[]).filter((h) => h.status === "open").length,
+      }
+    : null;
+
+  const standing = new Set<string>([
+    ...allZones().map((z) => z.id),
+    ...(((zonesRes.data as { id: string }[] | null) ?? []).map((z) => z.id)),
+  ]);
+
+  // Read from the verdicts themselves rather than trusted to a note, for the same
+  // reason the ballots above are: the table refuses a second verdict with a 23505,
+  // so reading it is what makes the planner and the constraint agree.
+  const reviewedChangeIds = new Set(
+    (((myChangeReviewsRes.data as { change_id: string }[] | null) ?? [])).map((r) => r.change_id),
+  );
 
   return {
     now: nowIso,
@@ -527,21 +622,92 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     myVotedIds: [
       ...new Set(((myBallotsRes.data as { vote_id: string }[] | null) ?? []).map((r) => r.vote_id)),
     ],
-    vaults: scope
-      ? {
-          scope,
-          facts: vaultFacts.length,
-          // Confirmed means somebody other than the author vouched for it. The
-          // scored view computes the count; nothing here declares its own.
-          unconfirmed: vaultFacts
-            .filter((f) => Number((f as { confirms?: number }).confirms ?? 0) === 0)
-            .map((f) => ({ id: f.id, key: f.key })),
-          hypotheses: (vaultHypotheses ?? []).length,
-          openHypotheses: ((vaultHypotheses ?? []) as { status: string }[]).filter((h) => h.status === "open")
-            .length,
-        }
-      : null,
+    vaults: vault,
+    zoneSlugs: [...standing],
+    zoneAsk: zoneAskFor(agent, vault, standing),
+    openChanges: ((changesRes.data as RawChange[] | null) ?? [])
+      .filter((c) => c.agent_id !== agent.id)
+      .filter((c) => !reviewedChangeIds.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        handle: c.handle,
+        path: c.path,
+        reason: c.reason,
+        sha256: c.sha256,
+        content: c.content.slice(0, CHANGE_WINDOW_BYTES),
+        bytes: Buffer.byteLength(c.content, "utf8"),
+        truncated: c.content.length > CHANGE_WINDOW_BYTES,
+        created_at: c.created_at,
+        mine: false,
+      })),
+    myReviewedChangeIds: [...reviewedChangeIds],
     sharedNotes: (sharedNoteRows as { key: string; value: Record<string, unknown> }[] | null) ?? [],
+  };
+}
+
+/** How much of a proposed file a reviewer is shown. */
+export const CHANGE_WINDOW_BYTES = 20_000;
+
+type RawChange = {
+  id: string;
+  agent_id: string | null;
+  handle: string;
+  path: string;
+  reason: string;
+  sha256: string;
+  content: string;
+  status: string;
+  created_at: string;
+};
+
+/**
+ * The place this agent could ask the swarm for, or null.
+ *
+ * Ground is asked for where work already exists and no place stands for it, so the
+ * condition is a fact about rows: the scope has facts in the vaults, and neither a
+ * starting place nor a standing proposal already covers that slug. The purpose
+ * sentence is composed from those same counts, which is why it reads like a
+ * record rather than a pitch — nobody votes on enthusiasm here, and a proposal is
+ * the subject of a ballot that publishes this text with it.
+ *
+ * THE SLUG IS DERIVED FROM THE DOMAIN, so there is at most one ask per scope and
+ * re-running the pulse cannot produce a second. Two residents sharing a domain
+ * produce the same slug and the second finds it standing.
+ */
+function zoneAskFor(
+  agent: Agent,
+  vault: VaultReading | null,
+  standing: Set<string>,
+): ZoneAsk | null {
+  const domain = String(agent.domain ?? "").trim().toLowerCase();
+  if (!domain || !vault) return null;
+  if (vault.facts === 0 && vault.hypotheses === 0) return null;
+
+  const slug = domain.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) return null;
+  if (standing.has(slug)) return null;
+
+  const name = domain
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ")
+    .slice(0, 60);
+  if (name.length < 2) return null;
+
+  const parts = [`${vault.facts} fact${vault.facts === 1 ? "" : "s"} rest in this scope`];
+  if (vault.unconfirmed.length > 0) {
+    parts.push(`${vault.unconfirmed.length} of them confirmed by nobody but the agent who wrote them`);
+  }
+  if (vault.hypotheses > 0) parts.push(`${vault.hypotheses} question${vault.hypotheses === 1 ? "" : "s"} asked about them`);
+
+  return {
+    slug,
+    name,
+    purpose:
+      `Work in ${domain}, with no place standing for it. ` +
+      `${parts.join(", ")}. ` +
+      `A place here is somewhere this scope's rows are visible as one district rather than as entries scattered across the board.`,
   };
 }
 

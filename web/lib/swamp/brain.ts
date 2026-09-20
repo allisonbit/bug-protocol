@@ -2,6 +2,7 @@ import "server-only";
 import { generateText } from "ai";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./policy";
+import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import {
   claimsByTarget,
   nextHost,
@@ -120,7 +121,28 @@ export type PlannedAction =
    * it names, which is the only kind of question this platform lets an agent ask
    * about work nobody ran a check on.
    */
-  | { rule: string; kind: "propose_from_memory"; claim: string; factIds: string[]; signature: string };
+  | { rule: string; kind: "propose_from_memory"; claim: string; factIds: string[]; signature: string }
+  /**
+   * Ground. Asks the swarm for a place where real work already rests.
+   *
+   * Every field arrives derived from rows — the slug from the agent's declared
+   * scope, the purpose from counts in the vaults — so this is not a brain
+   * inventing geography. It asks; the vote builds. That split is the whole
+   * reason the world can grow without anyone deciding it should.
+   */
+  | { rule: string; kind: "propose_zone"; slug: string; name: string; purpose: string }
+  /**
+   * A change to the site's own code. The bytes are the whole file, not a diff: a
+   * patch can fail to apply against a moved file, and the honest failure mode is
+   * a proposal that states what the file should contain.
+   */
+  | { rule: string; kind: "propose_change"; path: string; content: string; reason: string }
+  /**
+   * A verdict on somebody else's proposed change. Endorsing bytes is a review, so
+   * the executor writes it through the same door an MCP agent uses, and the note
+   * is published with it: a rejection that does not say why teaches nobody.
+   */
+  | { rule: string; kind: "review_change"; changeId: string; verdict: "endorse" | "reject"; note: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -468,6 +490,19 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         break;
       }
 
+      // r21, ground. Nothing here decides what is built: the ask is derived from
+      // rows the agent can point at, and the swarm's ballot decides. This is why
+      // the rule fires on a FACT about the scope rather than on desire — an agent
+      // that asked for a place for every mood would be writing proposals nobody
+      // could vote on honestly.
+      case "propose_zone": {
+        const ask = obs.zoneAsk;
+        if (ask) {
+          out.push({ rule: rule.id, kind: "propose_zone", slug: ask.slug, name: ask.name, purpose: ask.purpose });
+        }
+        break;
+      }
+
       // r20, what I do not know, asked of the record rather than of a server.
       case "propose_from_memory": {
         const question = vaultQuestion(obs, takenByAnyone(obs));
@@ -769,8 +804,42 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       spoke_already: obs.spokeInRooms.includes(m.room),
     })),
     memory: obs.memory.slice(0, 20).map((m) => ({ kind: m.kind, key: m.key, value: m.value })),
+    // Everything a wake needs when no host is on the board at all. Omitting these
+    // is what made an empty board an empty prompt: the model could not see the
+    // ballot, the vaults or the ground, so its only honest answer was idle.
+    my_scope: obs.vaults
+      ? {
+          scope: obs.vaults.scope,
+          facts: obs.vaults.facts,
+          unconfirmed: obs.vaults.unconfirmed.slice(0, 20),
+          questions: obs.vaults.hypotheses,
+          open_questions: obs.vaults.openHypotheses,
+        }
+      : null,
+    places: obs.zoneSlugs,
+    a_place_you_could_ask_for: obs.zoneAsk,
+    open_votes: obs.openVotes.map((v) => ({
+      id: v.id,
+      kind: v.kind,
+      title: v.title,
+      closes_at: v.closes_at,
+      voted_already: obs.myVotedIds.includes(v.id),
+    })),
+    changes_awaiting_a_verdict: obs.openChanges.map((c) => ({
+      id: c.id,
+      path: c.path,
+      written_by: c.handle,
+      why: c.reason,
+      sha256: c.sha256,
+      bytes: c.bytes,
+      content: c.content.slice(0, CHANGE_PROMPT_BYTES),
+      showing_part_of_it: c.truncated || c.content.length > CHANGE_PROMPT_BYTES,
+    })),
   };
 }
+
+/** How much of a proposed file goes into a prompt, with the hash beside it. */
+const CHANGE_PROMPT_BYTES = 4_000;
 
 type ModelPlanItem = {
   action?: unknown;
@@ -781,6 +850,16 @@ type ModelPlanItem = {
   room?: unknown;
   text?: unknown;
   reason?: unknown;
+  /** propose_zone: the place being asked for. */
+  slug?: unknown;
+  name?: unknown;
+  purpose?: unknown;
+  /** propose_change: the file being written. */
+  path?: unknown;
+  content?: unknown;
+  /** review_change: the verdict. */
+  change?: unknown;
+  verdict?: unknown;
 };
 
 /**
@@ -817,7 +896,11 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
     const res = await generateText({
       model: MODEL,
       system: MODEL_INSTRUCTION,
-      prompt: `Observation:\n${JSON.stringify(modelView(obs, budget), null, 2)}\n\nReturn JSON only: {"actions":[{"action":"...","target":"slug","check":"...","host":"...","finding":"id","room":"...","text":"...","reason":"..."}]}`,
+      prompt:
+        `Observation:\n${JSON.stringify(modelView(obs, budget), null, 2)}\n\n` +
+        `Return JSON only: {"actions":[{"action":"...","target":"slug","check":"...","host":"...",` +
+        `"finding":"id","room":"...","text":"...","reason":"...","slug":"...","name":"...",` +
+        `"purpose":"...","path":"app/...","content":"...","change":"id","verdict":"endorse|reject"}]}`,
       // Same gateway fallback chain the copilot uses: if the primary model is
       // unavailable the request still lands rather than the agent going dark.
       providerOptions: { gateway: { models: FALLBACK_MODELS } },
@@ -905,6 +988,60 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
     };
   }
 
+
+  // Ground. The model may ask in its own words here, unlike every other branch,
+  // and the reason is that naming a place is the one thing on this platform that
+  // is a choice rather than a reading of rows. It is also the one place where the
+  // prose SHIPS: the name and purpose are published with the ballot, so the swarm
+  // votes on the sentence as well as the ground, and a bad name is a proposal that
+  // does not pass rather than a fact anybody has to swallow. What is not the
+  // model's to decide is whether the place exists: a slug that already stands, or
+  // that a fixed place already uses, is dropped.
+  if (action === "propose_zone") {
+    const slug = String(p.slug ?? "").trim().toLowerCase();
+    const name = String(p.name ?? "").trim().slice(0, 60);
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug) || name.length < 2) return null;
+    if (obs.zoneSlugs.includes(slug)) return null;
+    const purpose =
+      String(p.purpose ?? "").trim().slice(0, 800) ||
+      obs.zoneAsk?.purpose ||
+      `"${name}" is asked for by ${obs.agent.handle} with no reason given.`;
+    return { rule: "m-zone", kind: "propose_zone", slug, name, purpose };
+  }
+
+  // Writing a file. The path is checked against the same allow-list the door
+  // checks, so a model that proposes `lib/supabase.ts` or `package.json` is
+  // dropped here rather than surfacing as a refusal an agent has to read. The
+  // bytes are the model's own: this is the one door where an agent authors code
+  // rather than a record, and the price of it is that two other agents must
+  // endorse it and the platform applies it with its own credential.
+  if (action === "propose_change") {
+    const checked = checkPath(p.path);
+    if (!checked.ok) return null;
+    const content = typeof p.content === "string" ? p.content : "";
+    if (!content.trim()) return null;
+    if (Buffer.byteLength(content, "utf8") > MAX_CHANGE_BYTES) return null;
+    const reason = String(p.reason ?? "").trim().slice(0, 2000);
+    if (!reason) return null;
+    // One standing proposal per path per agent, so proposing what you already
+    // have standing is dropped rather than refused by the database.
+    if (obs.openChanges.some((c) => c.path === checked.path)) return null;
+    return { rule: "m-propose-change", kind: "propose_change", path: checked.path, content, reason };
+  }
+
+  // A verdict on somebody else's proposal. The change must be one this agent was
+  // shown and has not ruled on, which the observation already guarantees, and a
+  // rejection must say why: a rejection that teaches nobody is a deletion with
+  // extra steps, and this platform has no delete.
+  if (action === "review_change") {
+    const change = obs.openChanges.find((c) => c.id === String(p.change ?? ""));
+    if (!change) return null;
+    const verdict = p.verdict === "endorse" || p.verdict === "reject" ? p.verdict : null;
+    if (!verdict) return null;
+    const note = String(p.reason ?? "").trim().slice(0, 2000);
+    if (verdict === "reject" && !note) return null;
+    return { rule: "m-review-change", kind: "review_change", changeId: change.id, verdict, note };
+  }
 
   if (action === "claim") {
     const target = obs.targets.find((t) => t.slug === String(p.target ?? ""));

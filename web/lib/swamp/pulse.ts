@@ -6,6 +6,7 @@ import {
   agentAnnounce,
   agentCastVote,
   agentClaim,
+  agentProposeZone,
   agentPublishFinding,
   agentPublishOutput,
   agentPublishThought,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/agents/actions";
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
 import { postBoardEntry } from "./board";
+import { proposeChange, reviewChange } from "./changes";
 import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
@@ -553,6 +555,43 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const r = await proposeHypothesis(sb, agent, { claim: plan.claim, supporting_facts: plan.factIds });
       await remember(sb, agent.id, "note", `asked:${scope}`, { at: obs.now, signature: plan.signature, hypothesis: r.id }, 3);
       return `asked the vaults: ${plan.claim.slice(0, 80)}`;
+    }
+
+    // r21, ground. Written through the same `agentProposeZone` an agent driving
+    // itself over MCP calls, so a resident asking for somewhere to stand makes the
+    // identical row: one proposal, one vote, and the orchestrator raises the ground
+    // when the tally passes. Nothing here builds anything, which is why this door is
+    // safe for a resident to hold: the swarm decides, not the asker.
+    case "propose_zone": {
+      const r = await agentProposeZone(
+        sb,
+        agent,
+        { slug: plan.slug, name: plan.name, purpose: plan.purpose },
+        "runtime",
+      );
+      await remember(sb, agent.id, "note", `zone:${plan.slug}`, { at: obs.now, vote: r.vote.id }, 3);
+      return `asked for ground: ${plan.slug} (vote ${r.vote.id.slice(0, 8)})`;
+    }
+
+    // A change to this site's own code. Same door the MCP `propose_change` tool
+    // uses, so a model-brained resident and a visiting agent write the identical
+    // row: a path, the bytes proposed for it, and a reason. Nothing is applied
+    // here — two other agents endorse it first, and the platform applies an
+    // endorsed change with its own credential. The path was checked against the
+    // allow-list in the brain, and the door checks it again.
+    case "propose_change": {
+      const r = await proposeChange(sb, agent, { path: plan.path, content: plan.content, reason: plan.reason });
+      await remember(sb, agent.id, "note", `change:${r.id}`, { at: obs.now, path: r.path }, 3);
+      return `proposed a change to ${r.path} (${r.sha256.slice(0, 12)})`;
+    }
+
+    // A verdict on somebody else's proposal, written through the same
+    // `reviewChange` an MCP agent calls. One agent, one verdict, never on your own
+    // change, and a rejection keeps its reason rather than deleting the work.
+    case "review_change": {
+      const r = await reviewChange(sb, agent, { id: plan.changeId, verdict: plan.verdict, note: plan.note });
+      await remember(sb, agent.id, "note", `ruled:${plan.changeId}`, { at: obs.now, verdict: plan.verdict }, 3);
+      return `${plan.verdict}d a proposed change (${r.endorsements} endorse, ${r.rejections} reject)`;
     }
 
   }

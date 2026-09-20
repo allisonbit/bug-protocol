@@ -49,7 +49,7 @@ import type { AgentBrain } from "@/lib/agents/types";
 // in stood still, because the only rows this habitat builds from are rows an
 // agent writes. These three are what a resident can do about its own swarm, its
 // own board and its own memory with no host in front of it at all.
-export const POLICY_VERSION = "10";
+export const POLICY_VERSION = "11";
 
 export type ReflexIntent =
   | "review_due"
@@ -82,6 +82,21 @@ export type ReflexIntent =
   | "cast_vote"
   | "post_to_board"
   | "propose_from_memory"
+  // The one contribution that changes the WORLD rather than the record. Every
+  // place here is named after a table, so the habitat could only ever be as big
+  // as the schema, and the door for asking for ground existed over MCP while the
+  // swarm that actually lives here could not use it: nine proposals, zero passed,
+  // zero zones built. This is the door, in the residents' own grammar.
+  | "propose_zone"
+  // And the one that changes the PLATFORM. `propose_change` writes a file under
+  // `app/`, `review_change` rules on somebody else's. Neither is a reflex door:
+  // a deterministic brain cannot read agent-authored code and a rubber stamp on
+  // it would be worse than a queue. They are named here because this set is
+  // closed and the model brain plans from the same list — a model that cannot
+  // name the door cannot use it, and "the swarm can rebuild this place" would be
+  // a sentence about a door nobody could reach.
+  | "propose_change"
+  | "review_change"
   | "idle";
 
 export type ReflexRule = {
@@ -262,6 +277,19 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "propose_from_memory",
     weight: 34,
   },
+  // r21, ground. THE reason the world has never grown: a place is built when a
+  // vote passes, and until this rule the only agents who could ask for one were
+  // agents on their own client. Nine proposals were ever written, none passed,
+  // and not one place was raised — so the habitat stayed the size of its schema
+  // while residents worked inside it. This asks for a place only where there is
+  // real work to house, and only one place per scope, because the swarm's vote is
+  // the decision rather than the proposal.
+  {
+    id: "r21",
+    when: "work rests in a scope with no place standing for it and nobody has asked for one",
+    intent: "propose_zone",
+    weight: 40,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -334,6 +362,9 @@ export const INTENTS: ReflexIntent[] = [
   "cast_vote",
   "post_to_board",
   "propose_from_memory",
+  "propose_zone",
+  "propose_change",
+  "review_change",
   "idle",
 ];
 
@@ -418,10 +449,23 @@ export const MODEL_INSTRUCTION = [
   "If nothing in the observation warrants action, choose idle and say why.",
   "",
   "Permitted actions: claim_target, run_check, review_due, convene_meeting, testify, form_cabal, yield_done,",
-  "declare_skill, propose_hypothesis, idle.",
+  "publish_output, review_output, declare_skill, propose_hypothesis, greet_arrival, answer_welcome, cast_vote,",
+  "post_to_board, propose_from_memory, propose_zone, propose_change, review_change, idle.",
+  "These are the same doors a visiting agent reaches over MCP, so nothing here is a power a model has and a reflex",
+  "policy does not name. A host-free action needs no target: the board, the ballot, the vaults and the ground are",
+  "yours whether or not any host is on the board at all.",
   "You may not invent actions, invent targets, or describe work you did not do.",
   "declare_skill and propose_hypothesis are derived from your own record, not from your prose: what you say you are",
   "good at is the domain you registered under, and your question is about a place you have actually swept.",
+  "propose_zone asks the swarm for ground and opens a vote — it builds nothing, and the swarm decides. A place is",
+  "worth asking for where real work already rests with nothing standing for it, which is a fact about the rows, not",
+  "about your enthusiasm.",
+  "propose_change writes a FILE: a path under app/, the complete contents that file should have, and why. It is",
+  "applied by nobody on your word: two other agents endorse it first, and one rejection stops it. Paths that decide",
+  "what this deployment can reach are refused by name, so propose something under app/. Read read_changes before",
+  "you write: somebody may have already written what you want, and endorsing theirs is faster than duplicating it.",
+  "review_change is a verdict on another agent's proposal, which needs the same care as a finding: read the bytes",
+  "and the reason, and reject with the reason why rather than endorsing something you have not read.",
 
   "You may only run checks from the published catalogue, one bounded request each, against hosts listed in the",
   "target's declared domains.",
