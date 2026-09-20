@@ -963,7 +963,10 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
     return { ...reflex, degraded: "the model returned a plan that did not parse, so this agent ran its reflex policy instead" };
   }
 
-  const validated = parsed.map((p) => ({ p, action: validate(p, obs) }));
+  const validated = parsed.map((p) => {
+    const action = validate(p, obs);
+    return { p, action, why: action === null ? whyDropped(p, obs) : null };
+  });
   const valid = validated.map((v) => v.action).filter((a): a is PlannedAction => a !== null);
   // WHAT WAS DROPPED AND FOR WHAT. A proposal that fails validation used to vanish:
   // the plan ran the survivors, or degraded, and nothing anywhere named the action
@@ -972,7 +975,9 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
   // read_source and is refused" look identical from outside, and only one of them is
   // a bug. So the dropped ones are named, in the plan when anything survived and in
   // the degradation reason when nothing did.
-  const dropped = validated.filter((v) => v.action === null).map((v) => describeProposal(v.p));
+  const dropped = validated
+    .filter((v) => v.action === null)
+    .map((v) => (v.why ? `${v.why}` : describeProposal(v.p)));
   if (parsed.length > 0 && valid.length === 0) {
     return {
       ...reflex,
@@ -991,10 +996,10 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
 /**
  * A model proposal, named by what it asked for rather than by why it failed.
  *
- * The reason is deliberately not guessed here: `validate` drops a proposal for a
- * dozen different reasons and inventing one after the fact would be a narration
- * rather than a record. What a reader needs is which door was knocked on and what
- * it named, which is what the model actually said.
+ * The reason is deliberately not invented: `validate` drops a proposal for a dozen
+ * different reasons, and a reason written after the fact would be narration. What
+ * a reader needs from here is which door was knocked on and what it named, which is
+ * what the model actually said.
  */
 function describeProposal(p: ModelPlanItem): string {
   const action = String(p.action ?? "?").trim() || "?";
@@ -1003,6 +1008,78 @@ function describeProposal(p: ModelPlanItem): string {
       .map((v) => String(v ?? "").trim())
       .find(Boolean) ?? "";
   return subject ? `${action}(${subject.slice(0, 60)})` : action;
+}
+
+/**
+ * Why the doors that take a path or an id refused it, when that is knowable.
+ *
+ * READ AND WRITE ARE THE TWO WHERE THE REASON DECIDES WHETHER THE AGENT CAN EVER
+ * DO THIS. `propose_change` is refused when the file has not been read at the
+ * revision it is serving, which is a step the writer has to take FIRST — and a
+ * model that is told only "that was not valid" will make the same proposal every
+ * wake forever. The reading itself shares the same fate: a file that does not exist
+ * or is a server route is refused at plan time, and the difference matters.
+ *
+ * So the three source-and-change doors explain themselves, from the SAME conditions
+ * `validate` used rather than from a guess about them, and every other door stays as
+ * it was. That is the line: a reason is reported where it is a fact about the
+ * observation, and never where it would be a story about the model.
+ */
+function whyDropped(p: ModelPlanItem, obs: Observation): string | null {
+  const action = String(p.action ?? "").trim();
+
+  if (action === "read_source") {
+    const checked = checkSourcePath(p.path);
+    if (!checked.ok) return `read_source: ${checked.error}`;
+    if (!obs.source.available) {
+      return `read_source(${checked.path}): this deployment carries no source snapshot, so no file can be read here`;
+    }
+    if (!obs.source.files.some((f) => f.path === checked.path)) {
+      return `read_source(${checked.path}): no file at that path, and the listing beside this observation says which paths exist`;
+    }
+    return null;
+  }
+
+  if (action === "propose_change") {
+    const checked = checkPath(p.path);
+    if (!checked.ok) return `propose_change: ${checked.error}`;
+    const content = typeof p.content === "string" ? p.content : "";
+    if (!content.trim()) return `propose_change(${checked.path}): a change needs the complete contents the file should have`;
+    if (Buffer.byteLength(content, "utf8") > MAX_CHANGE_BYTES) {
+      return `propose_change(${checked.path}): ${Buffer.byteLength(content, "utf8")} bytes, and a single change is capped at ${MAX_CHANGE_BYTES}`;
+    }
+    if (!String(p.reason ?? "").trim()) return `propose_change(${checked.path}): a change needs a reason`;
+    if (obs.openChanges.some((c) => c.path === checked.path)) {
+      return `propose_change(${checked.path}): you already have a standing proposal for that file, so withdraw it or propose a different one`;
+    }
+    const existing = obs.source.files.find((f) => f.path === checked.path);
+    const read = obs.mySourceRead;
+    if (existing && !read) {
+      return `propose_change(${checked.path}): read it with read_source first and write on the NEXT wake, because a change carries complete contents and you have not seen what they replace`;
+    }
+    if (existing && read && read.path !== checked.path) {
+      return `propose_change(${checked.path}): the file you are holding is ${read.path}, not this one. Read this one and write on the next wake`;
+    }
+    if (existing && read && read.sha256 !== existing.sha256) {
+      return `propose_change(${checked.path}): you read it at revision ${read.sha256.slice(0, 12)}, and it is serving ${existing.sha256.slice(0, 12)} now. Read it again`;
+    }
+    return null;
+  }
+
+  if (action === "review_change") {
+    const id = String(p.change ?? "").trim();
+    if (!obs.openChanges.some((c) => c.id === id)) {
+      return `review_change(${id}): that is not a change awaiting your verdict, which the observation lists`;
+    }
+    const verdict = p.verdict === "endorse" || p.verdict === "reject" ? p.verdict : null;
+    if (!verdict) return `review_change(${id}): verdict must be 'endorse' or 'reject'`;
+    if (verdict === "reject" && !String(p.reason ?? "").trim()) {
+      return `review_change(${id}): a rejection has to say why`;
+    }
+    return null;
+  }
+
+  return null;
 }
 
 function parsePlan(text: string): ModelPlanItem[] | null {
