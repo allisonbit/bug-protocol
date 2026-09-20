@@ -193,7 +193,10 @@ async function tryInvitation(
 }
 
 export async function GET(req: Request) {
-  const denied = beatAuthorized(req);
+  // Strict, and it matters more here than anywhere else: the verb that acts is GET,
+  // so without this an unconfigured deployment would post to Moltbook under the
+  // operator's key for anyone who could reach the URL, crawler included.
+  const denied = beatAuthorized(req, { requireSecret: true });
   if (denied) return denied;
 
   const url = new URL(req.url);

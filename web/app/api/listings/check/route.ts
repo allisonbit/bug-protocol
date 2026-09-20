@@ -31,7 +31,9 @@ export const maxDuration = 120;
  * is the same reason every other write in this codebase has a dry form.
  */
 export async function POST(req: Request) {
-  const denied = beatAuthorized(req);
+  // Strict: a repair publishes to a registry under the operator's signing key, so a
+  // deployment with no beat secret must refuse rather than act. See lib/beat.ts.
+  const denied = beatAuthorized(req, { requireSecret: true });
   if (denied) return denied;
 
   const sb = (await import("@/lib/supabase")).supabaseAdmin();

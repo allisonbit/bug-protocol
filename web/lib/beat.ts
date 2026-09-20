@@ -29,15 +29,54 @@ import { NextResponse } from "next/server";
  *     platform keeps this one settable. scripts/schedule-beat.cjs is where it
  *     gets installed.
  *
- * FAIL-OPEN, exactly as these routes already were: with neither secret set the
- * route still runs, so a fresh clone is alive before anyone configures anything.
- * Once either is set, a matching bearer is required.
+ * FAIL-OPEN BY DEFAULT, exactly as these routes already were: with neither secret
+ * set the route still runs, so a fresh clone is alive before anyone configures
+ * anything. Once either is set, a matching bearer is required.
+ *
+ * THAT ARGUMENT ONLY COVERS THE INTERNAL BEATS, so there is an option for the rest.
+ * Pulse, the orchestrator tick and the chain tick move the swamp's own state: the
+ * worst an unauthenticated caller can do is run a beat early, and in an
+ * unconfigured checkout there is barely any state for it to run against. Four
+ * routes are not like that. They act OUTSIDE this platform, under a credential
+ * that belongs to the operator: /api/skills/publish uploads to their ClawHub
+ * account, and the two Moltbook routes post and reply under their Moltbook key.
+ * For those, "alive before anyone configures anything" means "anyone who can
+ * reach the URL can spend the operator's accounts", and the only thing standing
+ * in the way was the absence of a *different* credential. So those pass
+ * `requireSecret` and refuse rather than act.
+ *
+ * This is measured, not hypothetical: with the beat secret unset, an
+ * unauthenticated POST to /api/skills/publish reached the ClawHub client and
+ * answered "nothing is queued" rather than "CLAWHUB_TOKEN is not set" — one
+ * queued skill away from an upload under the operator's name.
  */
-export function beatAuthorized(req: Request): NextResponse | null {
+export type BeatAuthOptions = {
+  /**
+   * Refuse when no secret is configured, instead of failing open. Use it on any
+   * route whose effect lands outside this platform.
+   */
+  requireSecret?: boolean;
+};
+
+export function beatAuthorized(req: Request, options: BeatAuthOptions = {}): NextResponse | null {
   const accepted = [process.env.CRON_SECRET, process.env.SWAMP_BEAT_SECRET].filter(
     (s): s is string => typeof s === "string" && s.length > 0,
   );
-  if (accepted.length === 0) return null;
+  if (accepted.length === 0) {
+    // 503 rather than 401: no credential the caller could send would be accepted,
+    // because there is nothing on this deployment to check it against. A 401 would
+    // tell a caller holding a perfectly good token to go and retry.
+    if (options.requireSecret) {
+      return NextResponse.json(
+        {
+          error:
+            "This deployment has no beat secret configured, so this route will not act. It writes outside this platform under the operator's credentials, which requires CRON_SECRET or SWAMP_BEAT_SECRET to be set first.",
+        },
+        { status: 503 },
+      );
+    }
+    return null;
+  }
 
   const header = req.headers.get("authorization") ?? "";
   const provided = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";

@@ -9,9 +9,12 @@
  * lies about what exists is worse than no index.
  *
  * A surface "exists" if it answers at all. 200 is fine. So is 401/403 (there, but
- * guarded), 405 (there, wrong method: most agent endpoints are POST only) and 400
- * (there, request was wrong). A 404 is a real failure: it is the site saying
- * nobody is here, which is exactly the failure the agent card once was.
+ * guarded), 405 (there, wrong method: most agent endpoints are POST only), 400
+ * (there, request was wrong) and 503 (there, but this deployment is not configured
+ * to serve it: the four routes that act outside the platform refuse until a beat
+ * secret is set, instead of spending the operator's accounts). A 404 is a real
+ * failure: it is the site saying nobody is here, which is exactly the failure the
+ * agent card once was.
  *
  * Usage:
  *   node scripts/verify-surfaces.cjs                 # against http://localhost:3000
@@ -24,7 +27,7 @@ const base = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
 const surfaces = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "lib", "surfaces.json"), "utf8"));
 
 const PAGE_OK = new Set([200, 301, 302, 307, 308]);
-const GUARDED = new Set([400, 401, 403, 405, 422]);
+const GUARDED = new Set([400, 401, 403, 405, 422, 503]);
 
 async function probe(url, needBody = false) {
   try {

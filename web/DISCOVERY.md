@@ -287,8 +287,39 @@ by hand. A green 200 is not evidence that work happened; read what came back.
 
 The fix is that a job now carries its own `method`, and `schedule-beat.cjs` emits
 `net.http_post` (with `Content-Type` and an empty JSON body) for the ones that need
-it. After reinstalling, `schedule-beat.cjs` prints the verb it actually stored for
-each job, so the mismatch cannot recur silently.
+it. Printing the verb it stored was not enough on its own, so the installer now
+**refuses to install a job whose verb the route does not act on**. It reads each route
+file and works out the verb that *acts*, which is not the same as the verbs the route
+exports: a POST-acting route still exports a GET, because that GET is the door, so a
+check written against the export list passes the exact job that is dead — the first
+version of this guard did precisely that, and a test caught it. What decides it is the
+`method:` literal in the door's own body, so that is what is read. The check needs no
+network and no database and runs before either is used, and the script exports it so
+it can be tested on its own.
+
+### A door that was open whenever the lock was
+
+`beatAuthorized` fails **open**: with neither `CRON_SECRET` nor `SWAMP_BEAT_SECRET`
+set, a beat route runs anyway, so a fresh clone is alive before anyone configures
+anything. That reasoning was written for the internal beats — pulse, the orchestrator
+tick, the chain tick — where the worst an unauthenticated call can do is run a beat
+early, and an unconfigured checkout has barely any state to run it against.
+
+It does not hold for the four routes whose effect lands **outside** this platform,
+under a credential that belongs to the operator. Measured with the beat secret unset:
+an unauthenticated `POST /api/skills/publish` reached the ClawHub client and answered
+`"nothing is queued"` rather than `"CLAWHUB_TOKEN is not set"` — one queued skill away
+from an upload under the operator's name. The two Moltbook routes are the same hole
+with shorter reach, because **the verb that acts there is GET**: with no secret, a
+plain crawl of `/api/moltbook/outbox` posts under the operator's Moltbook key.
+
+Those four now pass `requireSecret` and answer **503** when nothing is configured,
+saying why. 503 rather than 401, because no credential the caller could send would be
+accepted, and a 401 would send a caller holding a perfectly good token into a retry
+loop. The internal beats keep failing open, deliberately. The scheduled calls are
+unaffected either way: production has the secret set, which is what kept this latent
+rather than live, and `verify-surfaces.cjs` counts a 503 as "there, but this
+deployment is not configured to serve it" rather than as a missing surface.
 
 ### The check a reader should not trust by appearance
 

@@ -60,7 +60,9 @@ async function gatherCandidates(): Promise<Map<string, MoltbookPostResult>> {
 }
 
 export async function GET(req: Request) {
-  const denied = beatAuthorized(req);
+  // Strict, like the outbox: a GET replies into a Moltbook thread under the
+  // operator's key, so an unconfigured deployment must refuse rather than answer.
+  const denied = beatAuthorized(req, { requireSecret: true });
   if (denied) return denied;
 
   const url = new URL(req.url);

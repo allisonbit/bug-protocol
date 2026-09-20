@@ -65,6 +65,16 @@ const SITE = process.env.SWAMP_SITE_URL || "https://www.swampai.world";
  * so every beat reads the same way from the outside. A job that only ever sent
  * GET was therefore fetching the description and doing nothing, on schedule,
  * forever. The method is part of the job rather than a property of the routes.
+ *
+ * AND THAT IS WHY `verifyJobMethods` BELOW IS NOT OPTIONAL. That dead beat was
+ * invisible from every direction that normally catches a fault: cron recorded
+ * `succeeded`, pg_net recorded `200`, the route logged nothing, and there was no
+ * error anywhere, because fetching a description IS a successful request. The
+ * same shape will recur the moment somebody adds a job for a route that only
+ * acts on POST, and no amount of reading the output would show it. So before
+ * anything is scheduled, each job's verb is checked against the verb its route
+ * says it acts on, read from the route's own source: a mismatch fails the install
+ * instead of becoming a silent no-op. `verify-beat-verbs.cjs` pins the cases.
  */
 const JOBS = [
   { name: "swamp-beat-pulse", schedule: "*/5 * * * *", path: "/api/swamp/pulse" },
@@ -93,6 +103,87 @@ const JOBS = [
   { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check", method: "POST" },
 ];
 
+/** The route file for a job path, read from disk. A pure read: no request, no side effect. */
+function readRoute(pathname) {
+  const file = path.join(__dirname, "..", "app", pathname, "route.ts");
+  try {
+    return fs.readFileSync(file, "utf8");
+  } catch {
+    throw new Error(`${pathname}: no route file at ${file}`);
+  }
+}
+
+/** The HTTP methods a Next route file exports. */
+function exportedMethods(src) {
+  const methods = new Set();
+  for (const m of src.matchAll(/export\s+(?:async\s+)?(?:function\s+|const\s+)([A-Z]+)\s*[(=]/g)) {
+    if (["GET", "POST", "PUT", "PATCH", "DELETE"].includes(m[1])) methods.add(m[1]);
+  }
+  return [...methods];
+}
+
+/**
+ * The verb a route actually ACTS on — which is not the same as the verbs it exports.
+ *
+ * This is the trap, and a guard written the obvious way walks straight into it. A
+ * POST-only route still exports a GET, because that GET is a door that explains the
+ * route instead of silently 405-ing. So "exports GET" says nothing about whether a
+ * GET does the work, and the first version of this check — which compared the job
+ * against the export list — passed the very job that was dead. Reading the exports
+ * cannot detect this bug, because the exports are identical either way.
+ *
+ * What distinguishes them is already in the route: the door names the verb that
+ * acts, in a `method:` literal in its own body. So that literal decides it, and a
+ * route with no such literal is one whose GET is the working verb — which is every
+ * beat older than the POST pair. If a route ever advertises more than one verb, the
+ * installer refuses rather than guesses, because a guess here is how a beat dies
+ * quietly.
+ */
+function actingMethod(pathname) {
+  const src = readRoute(pathname);
+  const methods = exportedMethods(src);
+  if (methods.length === 0) {
+    throw new Error(`${pathname} exports no HTTP handler, so nothing can drive it`);
+  }
+  const advertised = new Set([...src.matchAll(/method:\s*"([A-Z]+)"/g)].map((m) => m[1]));
+  if (advertised.size > 1) {
+    throw new Error(
+      `${pathname} advertises more than one acting verb (${[...advertised].join(", ")}), so the installer cannot tell which one works`,
+    );
+  }
+  if (advertised.size === 1) {
+    const only = [...advertised][0];
+    if (!methods.includes(only)) {
+      throw new Error(`${pathname} advertises method: "${only}" but does not export ${only}`);
+    }
+    return only;
+  }
+  return methods.includes("GET") ? "GET" : methods[0];
+}
+
+/**
+ * Refuse to install a job whose verb the route does not act on.
+ *
+ * Both directions are wrong and only one is loud: a POST job on a GET-only route
+ * 405s, which is at least visible, while a GET job on a POST-acting route fetches
+ * the route's own explanation, answers 200 and does nothing forever. The second
+ * one shipped, so this closes the class rather than that instance.
+ */
+function verifyJobMethods(jobs = JOBS) {
+  for (const job of jobs) {
+    const wanted = job.method || "GET";
+    const acts = actingMethod(job.path);
+    if (wanted !== acts) {
+      throw new Error(
+        `${job.name} is scheduled as ${wanted}, but ${job.path} acts on ${acts}. ` +
+          `As a ${wanted} it would answer its own description and do nothing, on schedule, with no error ` +
+          `anywhere. Set method: "${acts}" on the job, or teach the route to act on ${wanted}.`,
+      );
+    }
+  }
+  return jobs.length;
+}
+
 function envFrom(file) {
   const out = {};
   if (!fs.existsSync(file)) return out;
@@ -103,7 +194,14 @@ function envFrom(file) {
   return out;
 }
 
-(async () => {
+async function main() {
+  // First, and before the database is touched: the schedule is wrong if this is
+  // wrong, and installing it anyway is how the dead beat got installed.
+  const verified = verifyJobMethods();
+  console.log(
+    `verbs verified against the routes: ${JOBS.map((j) => `${j.name}=${j.method || "GET"}`).join(", ")} (${verified})`,
+  );
+
   const env = envFrom(path.join(__dirname, "..", ".env.local"));
   const secret = process.env.SWAMP_BEAT_SECRET || env.SWAMP_BEAT_SECRET;
   if (!secret) throw new Error("no SWAMP_BEAT_SECRET (export it, or set it in .env.local)");
@@ -175,7 +273,15 @@ function envFrom(file) {
   for (const r of verbs.rows) console.log(`  ${r.jobname.padEnd(30)} ${r.method}`);
 
   await c.end();
-})().catch((e) => {
-  console.error("failed:", e.message);
-  process.exit(1);
-});
+}
+
+// Exported so the verb check can be exercised on its own, without a database and
+// without scheduling anything: a guard nobody can test is a guard nobody trusts.
+module.exports = { JOBS, verifyJobMethods, actingMethod, exportedMethods };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error("failed:", e.message);
+    process.exit(1);
+  });
+}

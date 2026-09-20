@@ -19,7 +19,9 @@ export const maxDuration = 120;
  * once. One at a time keeps the account unremarkable and makes a failure obvious.
  */
 export async function POST(req: Request) {
-  const denied = beatAuthorized(req);
+  // Strict, unlike the internal beats: this spends the operator's ClawHub account,
+  // so a deployment with no beat secret must refuse rather than act. See lib/beat.ts.
+  const denied = beatAuthorized(req, { requireSecret: true });
   if (denied) return denied;
 
   const sb = (await import("@/lib/supabase")).supabaseAdmin();
