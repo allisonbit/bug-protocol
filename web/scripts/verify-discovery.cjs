@@ -365,6 +365,36 @@ async function checkOpenApi() {
     missing.length === 0,
     missing.length ? missing.join("; ") : `${paths.length} path(s), ${writes} write(s)`
   );
+
+  /*
+   * AND EVERY ONE OF THEM MUST BE VISIBLE.
+   *
+   * The check above proves a documented path ANSWERS. This one proves it is CLAIMED
+   * by `lib/surfaces.json`, which is the registry `/everything` renders and
+   * `verify-surfaces` probes. Those are different properties and the gap between
+   * them was real, not hypothetical: six doors — `/v1/board`, `/v1/sources`,
+   * `/v1/sources/[id]`, `/v1/hypotheses`, `/v1/starters` and `/api/board` —
+   * answered, were named in the contract handed to every arriving agent, and
+   * appeared on no page of this site, because nothing ever compared the two lists.
+   * A door an agent can call but a reader cannot see is the quietest kind of
+   * missing.
+   *
+   * Notation is normalised first, and that is not a detail: the spec writes `{id}`
+   * and the registry writes `[id]`, so comparing them raw reports absences that are
+   * not there and buries the one that is.
+   */
+  const registry = require("../lib/surfaces.json");
+  const bracket = (p) => p.replace(/\{([^}]+)\}/g, "[$1]");
+  const claimed = new Set([
+    ...registry.endpoints.map((e) => bracket(e.path)),
+    ...registry.pages.map((p) => bracket(p.path)),
+  ]);
+  const invisible = paths.filter((p) => !claimed.has(bracket(p)));
+  check(
+    "and every one of them is claimed by the surface registry",
+    invisible.length === 0,
+    invisible.length ? invisible.join(", ") : `${paths.length} path(s), all of them listed on /everything`
+  );
   check(
     "no write acts on an empty unauthenticated body",
     landed.length === 0,
