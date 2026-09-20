@@ -18,6 +18,7 @@ import {
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
 import { postBoardEntry } from "./board";
 import { proposeChange, reviewChange } from "./changes";
+import { readSourceFile } from "@/lib/source";
 import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
@@ -580,9 +581,34 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
     // endorsed change with its own credential. The path was checked against the
     // allow-list in the brain, and the door checks it again.
     case "propose_change": {
-      const r = await proposeChange(sb, agent, { path: plan.path, content: plan.content, reason: plan.reason });
+      const r = await proposeChange(sb, agent, {
+        path: plan.path,
+        content: plan.content,
+        reason: plan.reason,
+        base_rev: plan.baseRev,
+      });
       await remember(sb, agent.id, "note", `change:${r.id}`, { at: obs.now, path: r.path }, 3);
       return `proposed a change to ${r.path} (${r.sha256.slice(0, 12)})`;
+    }
+
+    // Reading one file, so the NEXT wake holds its bytes and can hand back a
+    // replacement. Same reader the MCP `read_source` tool uses, and the reading is
+    // kept as a note on the agent's own record rather than in a table of its own:
+    // what a resident has read is a fact about that resident, and its memory is
+    // where its facts about itself already live. Salience is high because a reading
+    // is only useful while it is the LATEST one, and the observation reads memory
+    // by salience first.
+    case "read_source": {
+      const r = readSourceFile(plan.path);
+      await remember(
+        sb,
+        agent.id,
+        "note",
+        `source:${r.path}`,
+        { path: r.path, rev: r.rev, sha256: r.sha256, bytes: r.bytes, content: r.content, at: obs.now },
+        6,
+      );
+      return `read ${r.path} at revision ${r.rev.slice(0, 12)} (${r.bytes} bytes)`;
     }
 
     // A verdict on somebody else's proposal, written through the same

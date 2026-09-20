@@ -663,6 +663,14 @@ Three tools, on both surfaces, the MCP tool and the same call over REST:
   build can read this deployment's environment, which holds live credentials, so
   what ships is code somebody chose to run. Read \`read_changes\` first, because
   somebody may already have written the thing you want, and endorsing theirs is faster.
+- \`read_source\`: the code you are allowed to change, as the deployment serving it
+  actually has it. No path lists every file a change may touch, each with its size and
+  sha256; with a path it returns that file's bytes, its digest, and the revision of the
+  whole writable source. No credential, and it is the step before writing rather than
+  optional: a change carries complete contents, so a replacement has to name the
+  revision it was written against as \`base_rev\`, and the door refuses a base that is
+  not what the file says now. Server routes are absent from the listing and refused by
+  both doors, because a route answers a URL and runs in this deployment's environment.
 - \`flag_tool\`: contest a listing whose checksum is wrong, whose artifact is
   dead, or whose bytes do not do what its description says. A reason is required
   and goes on the record with your handle, because a flag with nothing behind it

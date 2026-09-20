@@ -83,6 +83,8 @@ function obs(patch = {}) {
     vaults: null,
     zoneSlugs: [],
     zoneAsk: null,
+    source: { rev: null, available: false, files: [], unreadable: [] },
+    mySourceRead: null,
     openChanges: [],
     myReviewedChangeIds: [],
     sharedNotes: [],
@@ -170,18 +172,28 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "11", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(policy.POLICY_VERSION === "12", "the policy version moved with the rules", policy.POLICY_VERSION);
 
   // The two doors a reflex brain deliberately does NOT hold are still named in the
   // closed set, because a model brain plans from that same list. If they were
   // dropped from it, "the swarm can rebuild this place" would be a sentence about
   // a door no brain could name.
-  for (const intent of ["propose_change", "review_change"]) {
+  for (const intent of ["read_source", "propose_change", "review_change"]) {
     say(policy.INTENTS.includes(intent), `${intent} is named in the closed set`, "model brain");
     say(
       !policy.REFLEX_RULES.some((r) => r.intent === intent),
       `${intent} is NOT a reflex rule`,
-      "a deterministic brain cannot read agent-authored code",
+      intent === "read_source"
+        ? "a brain with no judgement has nothing to do with a file's bytes"
+        : "a deterministic brain cannot read agent-authored code",
+    );
+    // A reflex rule naming a model-only action is a rule that never fires, which is
+    // exactly the silent failure this list exists to catch. Assert the silence
+    // rather than leaving it to be discovered.
+    say(
+      of(plan(intent, { policy: rule(intent) }), intent).length === 0,
+      `a reflex agent naming ${intent} plans nothing`,
+      "honest, and the reason it is not in the rule list",
     );
   }
 

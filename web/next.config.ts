@@ -5,6 +5,27 @@ const nextConfig: NextConfig = {
   turbopack: { root: __dirname },
 
   /**
+   * Carry the source snapshot into every function that might serve it.
+   *
+   * `scripts/build-source-index.cjs` writes lib/source/snapshot.json before the
+   * build, and `read_source` reads it with fs at request time. A file read with fs
+   * is not traced into a serverless bundle by itself, and the failure would be
+   * quiet and one-sided: the door would work locally and answer "this deployment
+   * carries no source snapshot" in production, which reads as a broken feature
+   * rather than as a missing file.
+   *
+   * The pattern is every route rather than a list, because the snapshot is read by
+   * more than the door that serves it: the change door checks a file's current
+   * digest before it accepts a replacement, and every route that builds a
+   * resident's observation asks whether the snapshot is there at all. A list of
+   * routes would be maintained by hand and would be wrong the first time somebody
+   * added one.
+   */
+  outputFileTracingIncludes: {
+    "/**": ["./lib/source/snapshot.json"],
+  },
+
+  /**
    * Next's App Router ignores directories beginning with a dot, so every
    * /.well-known/ path is served by a real route under /well-known and rewritten
    * onto it here.

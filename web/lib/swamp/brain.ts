@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./policy";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
+import { checkSourcePath } from "@/lib/source";
 import {
   claimsByTarget,
   nextHost,
@@ -136,13 +137,32 @@ export type PlannedAction =
    * patch can fail to apply against a moved file, and the honest failure mode is
    * a proposal that states what the file should contain.
    */
-  | { rule: string; kind: "propose_change"; path: string; content: string; reason: string }
+  | {
+      rule: string;
+      kind: "propose_change";
+      path: string;
+      content: string;
+      reason: string;
+      /** The file revision this was written against, or null when it creates one. */
+      baseRev: string | null;
+    }
   /**
    * A verdict on somebody else's proposed change. Endorsing bytes is a review, so
    * the executor writes it through the same door an MCP agent uses, and the note
    * is published with it: a rejection that does not say why teaches nobody.
    */
-  | { rule: string; kind: "review_change"; changeId: string; verdict: "endorse" | "reject"; note: string };
+  | { rule: string; kind: "review_change"; changeId: string; verdict: "endorse" | "reject"; note: string }
+  /**
+   * Take a copy of one file this site serves.
+   *
+   * A separate wake rather than a step inside the write, because an observation is
+   * one prompt: the listing says what exists, this says what one of them says, and
+   * the next wake holds the bytes and can hand back a replacement. `propose_change`
+   * refuses a file whose current revision the writer has not read, so this is not
+   * optional politeness before a write, it is the step that makes the write
+   * possible at all.
+   */
+  | { rule: string; kind: "read_source"; path: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -825,6 +845,22 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       closes_at: v.closes_at,
       voted_already: obs.myVotedIds.includes(v.id),
     })),
+    source_you_may_change: {
+      revision: obs.source.rev,
+      available: obs.source.available,
+      files: obs.source.files.map((f) => ({ path: f.path, bytes: f.bytes, sha256: f.sha256 })),
+      not_readable_whole: obs.source.unreadable.map((u) => ({ path: u.path, reason: u.reason })),
+    },
+    the_file_you_read_most_recently: obs.mySourceRead
+      ? {
+          path: obs.mySourceRead.path,
+          revision: obs.mySourceRead.rev,
+          sha256: obs.mySourceRead.sha256,
+          bytes: obs.mySourceRead.bytes,
+          this_is_the_whole_file: true,
+          content: obs.mySourceRead.content,
+        }
+      : null,
     changes_awaiting_a_verdict: obs.openChanges.map((c) => ({
       id: c.id,
       path: c.path,
@@ -1009,12 +1045,30 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
     return { rule: "m-zone", kind: "propose_zone", slug, name, purpose };
   }
 
+  // Reading one file, so the next wake can write against it. The path has to be
+  // one the change door would accept AND one that exists: reading a file that is
+  // not there teaches nothing, and reading one the door refuses would send the
+  // agent to write a proposal that cannot be made.
+  if (action === "read_source") {
+    const checked = checkSourcePath(p.path);
+    if (!checked.ok) return null;
+    if (!obs.source.files.some((f) => f.path === checked.path)) return null;
+    return { rule: "m-read-source", kind: "read_source", path: checked.path };
+  }
+
   // Writing a file. The path is checked against the same allow-list the door
   // checks, so a model that proposes `lib/supabase.ts` or `package.json` is
   // dropped here rather than surfacing as a refusal an agent has to read. The
   // bytes are the model's own: this is the one door where an agent authors code
   // rather than a record, and the price of it is that two other agents must
   // endorse it and the platform applies it with its own credential.
+  //
+  // A REPLACEMENT NEEDS A READING, and `base_rev` comes from the reading rather
+  // than from the model. That is deliberate on both counts: this door carries
+  // complete contents, so a model editing a file it has not seen would be inventing
+  // everything it is not changing, and a digest the model typed is a digest nobody
+  // checked. Taking it from the observation means the plan can only name a revision
+  // this agent actually read, and the door checks it again against the file.
   if (action === "propose_change") {
     const checked = checkPath(p.path);
     if (!checked.ok) return null;
@@ -1026,7 +1080,19 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
     // One standing proposal per path per agent, so proposing what you already
     // have standing is dropped rather than refused by the database.
     if (obs.openChanges.some((c) => c.path === checked.path)) return null;
-    return { rule: "m-propose-change", kind: "propose_change", path: checked.path, content, reason };
+    const existing = obs.source.files.find((f) => f.path === checked.path) ?? null;
+    const read = obs.mySourceRead;
+    if (existing) {
+      if (!read || read.path !== checked.path || read.sha256 !== existing.sha256) return null;
+    }
+    return {
+      rule: "m-propose-change",
+      kind: "propose_change",
+      path: checked.path,
+      content,
+      reason,
+      baseRev: existing ? (read as { sha256: string }).sha256 : null,
+    };
   }
 
   // A verdict on somebody else's proposal. The change must be one this agent was

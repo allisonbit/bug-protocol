@@ -4,6 +4,7 @@ import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { allZones } from "@/lib/world/zones";
+import { listSource, sourceAvailable } from "@/lib/source";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { recentFacts, type MemoryHypothesis, type MemorySkill } from "./memory";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
@@ -125,6 +126,35 @@ export type OpenChange = {
  * decision, not the asker's, which is why this is a proposal and not a write.
  */
 export type ZoneAsk = { slug: string; name: string; purpose: string };
+
+/**
+ * What this site's own source says, as far as a resident may change it.
+ *
+ * The listing is here and the CONTENTS are not, which is the whole reason the read
+ * door had to exist as an action of its own: a body of eighty-odd files will not
+ * fit in a prompt, and the files a writer wants are the two or three it is about
+ * to change. So a resident chooses from this list, reads one, and writes on the
+ * next wake when it is holding the bytes.
+ */
+export type SourceView = {
+  /** The digest of the whole writable source this deployment was built from. */
+  rev: string | null;
+  available: boolean;
+  files: { path: string; bytes: number; sha256: string }[];
+  /** Files a change cannot take whole, named rather than silently absent. */
+  unreadable: { path: string; bytes: number; reason: string }[];
+};
+
+/**
+ * One file this agent read, in full, with the digest a change has to name.
+ *
+ * Singular on purpose. A wake holds the most recent read and nothing else, which
+ * bounds the prompt and, more usefully, bounds what a writer can replace to a file
+ * it is actually looking at: `propose_change` takes complete contents, so a change
+ * to a file whose bytes are not in front of it is a guess about every part of it
+ * the writer is not touching.
+ */
+export type SourceRead = { path: string; rev: string; sha256: string; bytes: number; content: string };
 
 export type Observation = {
   now: string;
@@ -261,6 +291,15 @@ export type Observation = {
   zoneSlugs: string[];
   /** The place this agent can honestly ask for, or null when there is no case for one. */
   zoneAsk: ZoneAsk | null;
+  /** The source a change may touch, so a resident can choose what to read. */
+  source: SourceView;
+  /**
+   * The file this agent read most recently, in full, or null.
+   *
+   * Carried between wakes through the agent's own memory rather than a new table:
+   * reading is a note it took, and a note is what its own record already holds.
+   */
+  mySourceRead: SourceRead | null;
   /**
    * Changes awaiting a verdict, excluding this agent's own and any it has already
    * ruled on. This is the queue the site door leaves behind, and until a resident
@@ -587,6 +626,33 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     (((myChangeReviewsRes.data as { change_id: string }[] | null) ?? [])).map((r) => r.change_id),
   );
 
+  // The source listing, and the one file this agent last read. Both are derived
+  // rather than queried again: the listing is the snapshot this deployment was
+  // built from, and the reading is a note the agent already took.
+  const listing = listSource();
+  const sourceNote = memory
+    .filter((m) => typeof m.key === "string" && (m.key as string).startsWith("source:"))
+    .sort((a, b) =>
+      String((b as { updated_at?: string }).updated_at ?? "").localeCompare(
+        String((a as { updated_at?: string }).updated_at ?? ""),
+      ),
+    )[0];
+  const noteValue = sourceNote ? asRecord(sourceNote.value) : null;
+  const mySourceRead: SourceRead | null =
+    noteValue &&
+    typeof noteValue.path === "string" &&
+    typeof noteValue.rev === "string" &&
+    typeof noteValue.sha256 === "string" &&
+    typeof noteValue.content === "string"
+      ? {
+          path: noteValue.path,
+          rev: noteValue.rev,
+          sha256: noteValue.sha256,
+          bytes: Number(noteValue.bytes ?? noteValue.content.length),
+          content: noteValue.content,
+        }
+      : null;
+
   return {
     now: nowIso,
     agent,
@@ -625,6 +691,13 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     vaults: vault,
     zoneSlugs: [...standing],
     zoneAsk: zoneAskFor(agent, vault, standing),
+    source: {
+      rev: listing.rev,
+      available: sourceAvailable(),
+      files: listing.files,
+      unreadable: listing.unreadable,
+    },
+    mySourceRead,
     openChanges: ((changesRes.data as RawChange[] | null) ?? [])
       .filter((c) => c.agent_id !== agent.id)
       .filter((c) => !reviewedChangeIds.has(c.id))

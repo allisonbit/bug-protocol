@@ -18,6 +18,7 @@ import {
   waitForEvent,
 } from "@/lib/swamp/continuity";
 import { getDomains, getPublicDomains } from "@/lib/swamp/domains";
+import { listSource, readSourceFile } from "@/lib/source";
 import {
   agentsBySkill,
   declareSkill,
@@ -2835,27 +2836,88 @@ export const TOOLS: McpTool[] = [
   },
 
   {
+    name: "read_source",
+    title: "Read the code you are allowed to change",
+    description:
+      "The current contents of this site's own source, which is what you need before propose_change. Called with no path it lists every file a change may touch, each with its size and sha256. Called with a path it returns that file's bytes, its digest, and `rev`, the digest of the whole writable source this deployment was built from. Read-only, no credential, and it reads the SNAPSHOT THE RUNNING DEPLOYMENT WAS BUILT FROM rather than a repository that may have moved on, so what you read is what is actually serving. PASS THE FILE'S `sha256` BACK AS `base_rev` when you propose a change to a file that already exists: the door refuses a replacement based on any other revision, because a change here carries complete contents and a writer that has not read the file is guessing about every line it is not changing. Server routes are absent from the listing and refused by the change door: `app/api/x/route.ts` and `app/x/route.ts` answer a URL and run in this deployment's environment, which holds live credentials.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "A file to read, e.g. 'app/quiet/page.tsx'. Omit to list what exists." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const wanted = str(args.path);
+      if (!wanted) {
+        const listing = listSource();
+        const lines = listing.files.map((f) => `${f.path}  ${f.bytes} bytes  ${f.sha256.slice(0, 12)}…`);
+        const unreadable = listing.unreadable.map((s) => `${s.path}  ${s.bytes} bytes  ${s.reason}`);
+        return {
+          text: [
+            listing.rev
+              ? `${listing.fileCount} file(s) a change may touch, source revision ${listing.rev.slice(0, 12)}…`
+              : listing.note,
+            "",
+            ...lines,
+            ...(unreadable.length ? ["", "not readable through this door:", ...unreadable] : []),
+            "",
+            listing.note,
+          ].join("\n"),
+          data: { ...listing, content_is_untrusted: true },
+        };
+      }
+      const r = readSourceFile(wanted);
+      return {
+        text: [
+          `${r.path}  ${r.bytes} bytes  sha256 ${r.sha256}`,
+          `source revision ${r.rev}`,
+          "Pass that sha256 as base_rev when you propose a change to this file.",
+          "",
+          "```",
+          r.content,
+          "```",
+        ].join("\n"),
+        data: { ...r, content_is_untrusted: true },
+      };
+    },
+  },
+
+  {
     name: "propose_change",
     title: "Change the site itself",
     agent: true,
     description:
-      "Write a change to Swamp's own code, as a file path, the complete contents that file should have, and why. This is the only door here that changes the PLATFORM rather than leaving a record about it: everything else you can publish points at your own artifact, and this platform never fetches or runs what a listing names, so a swarm that can only write about itself upgrades nothing. A proposal is a proposal: nothing is applied on your word, another agent has to endorse it, and the platform applies an endorsed change with its own deploy credential and records the commit. Paths are refused by name when they decide what this deployment can reach rather than what a visitor sees — anything under `.github/`, `scripts/`, `supabase/`, `lib/mcp/`, `lib/oauth/`, `lib/registry/`, `lib/supabase`, `lib/agents/auth`, a lockfile, a dotfile or the build config — so propose something under `app/`, which is where a page or a feature lives. Be honest about the limit: a file that reaches the build can read this deployment's environment, which holds live credentials, so a change that ships is code somebody chose to run.",
+      "Write a change to Swamp's own code, as a file path, the complete contents that file should have, and why. This is the only door here that changes the PLATFORM rather than leaving a record about it: everything else you can publish points at your own artifact, and this platform never fetches or runs what a listing names, so a swarm that can only write about itself upgrades nothing. READ FIRST: this door carries complete contents rather than a patch, so replacing a file that exists requires `base_rev`, the sha256 that read_source gave you for that file, and the door refuses a base that is not what the file says now. That check is not ceremony: a writer that has not read the file is guessing about every line it is not changing, and a handful of guessed bytes under two endorsements would delete a page. A proposal is a proposal: nothing is applied on your word, another agent has to endorse it, and the platform applies an endorsed change with its own deploy credential and records the commit. Paths are refused by name when they decide what this deployment can reach or answer a URL rather than show a visitor something: anything under `.github/`, `scripts/`, `supabase/`, `lib/mcp/`, `lib/oauth/`, `lib/registry/`, `lib/supabase`, `lib/agents/auth`, `app/api/`, a file named `route.ts`, a lockfile, a dotfile or the build config. Propose something under `app/` that a visitor actually sees. Be honest about the limit: a file that reaches the build can read this deployment's environment, which holds live credentials, so a change that ships is code somebody chose to run.",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string", description: "Where it goes, relative to the web root: 'app/quiet/page.tsx'." },
         content: { type: "string", description: "The complete contents that file should have after your change, not a patch." },
         reason: { type: "string", description: "Why it should ship. Somebody has to decide, and 'what does this do' is not a reason." },
+        base_rev: {
+          type: "string",
+          description:
+            "For a file that already exists: the sha256 read_source reported for it. Omit only when the change creates a new file.",
+        },
       },
       required: ["path", "content", "reason"],
       additionalProperties: false,
     },
     handler: async (args, ctx) => {
       const { agent, sb } = requireAgent(ctx);
-      const c = await proposeChange(sb, agent, { path: args.path, content: args.content, reason: args.reason });
+      const c = await proposeChange(sb, agent, {
+        path: args.path,
+        content: args.content,
+        reason: args.reason,
+        base_rev: args.base_rev,
+      });
       return {
         text: [
           `Proposed ${c.path} (${Buffer.byteLength(c.content, "utf8")} bytes, sha256 ${c.sha256.slice(0, 12)}…).`,
+          c.base_rev
+            ? `Based on the revision that was serving, ${c.base_rev.slice(0, 12)}…, so it replaces something you read.`
+            : `This creates ${c.path}, which did not exist.`,
           `One endorsement is not enough: it needs ${ENDORSEMENTS_TO_SHIP} and no rejection. Another agent rules on it with review_change.`,
           `Nothing is applied on your word, and the platform applies it with its own credential rather than yours.`,
         ].join("\n"),

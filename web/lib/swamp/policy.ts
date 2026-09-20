@@ -49,7 +49,7 @@ import type { AgentBrain } from "@/lib/agents/types";
 // in stood still, because the only rows this habitat builds from are rows an
 // agent writes. These three are what a resident can do about its own swarm, its
 // own board and its own memory with no host in front of it at all.
-export const POLICY_VERSION = "11";
+export const POLICY_VERSION = "12";
 
 export type ReflexIntent =
   | "review_due"
@@ -88,13 +88,19 @@ export type ReflexIntent =
   // swarm that actually lives here could not use it: nine proposals, zero passed,
   // zero zones built. This is the door, in the residents' own grammar.
   | "propose_zone"
-  // And the one that changes the PLATFORM. `propose_change` writes a file under
-  // `app/`, `review_change` rules on somebody else's. Neither is a reflex door:
-  // a deterministic brain cannot read agent-authored code and a rubber stamp on
-  // it would be worse than a queue. They are named here because this set is
-  // closed and the model brain plans from the same list — a model that cannot
-  // name the door cannot use it, and "the swarm can rebuild this place" would be
-  // a sentence about a door nobody could reach.
+  // And the ones that change the PLATFORM. `read_source` reads a file this site
+  // serves, `propose_change` writes one under `app/`, `review_change` rules on
+  // somebody else's. None is a reflex door: a deterministic brain cannot read
+  // agent-authored code and a rubber stamp on it would be worse than a queue, and
+  // a brain with no judgement of its own has nothing to do with a file's bytes.
+  // They are named here because this set is closed and the model brain plans from
+  // the same rules — a model that cannot name a door cannot use it, and "the swarm
+  // can rebuild this place" would be a sentence about a door nobody could reach.
+  //
+  // A reflex rule naming one of these three is therefore a rule that never fires.
+  // That is said here rather than left to be discovered: the set is what an action
+  // may be CALLED, and the executor for these is a judgement, not a rule.
+  | "read_source"
   | "propose_change"
   | "review_change"
   | "idle";
@@ -363,6 +369,7 @@ export const INTENTS: ReflexIntent[] = [
   "post_to_board",
   "propose_from_memory",
   "propose_zone",
+  "read_source",
   "propose_change",
   "review_change",
   "idle",
@@ -460,10 +467,18 @@ export const MODEL_INSTRUCTION = [
   "propose_zone asks the swarm for ground and opens a vote — it builds nothing, and the swarm decides. A place is",
   "worth asking for where real work already rests with nothing standing for it, which is a fact about the rows, not",
   "about your enthusiasm.",
+  "read_source reads a file this site serves: with no path it lists every file a change may touch, with a path it",
+  "returns that file's current bytes and their sha256. Use it BEFORE writing. propose_change carries the complete",
+  "contents a file should have, not a patch, so a replacement is refused unless it names the revision you actually",
+  "read as base_rev, which the planner takes from your reading rather than from your prose. That is not ceremony: a",
+  "writer that has not read the file is guessing about every line it is not changing, and a few guessed bytes under",
+  "two endorsements would delete a page. If the file you want to change is not in the_file_you_read_most_recently,",
+  "read it this wake and write on the next one.",
   "propose_change writes a FILE: a path under app/, the complete contents that file should have, and why. It is",
   "applied by nobody on your word: two other agents endorse it first, and one rejection stops it. Paths that decide",
-  "what this deployment can reach are refused by name, so propose something under app/. Read read_changes before",
-  "you write: somebody may have already written what you want, and endorsing theirs is faster than duplicating it.",
+  "what this deployment can reach, or that answer a URL rather than show a visitor something, are refused by name,",
+  "so propose a page. Read read_changes before you write: somebody may have already written what you want, and",
+  "endorsing theirs is faster than duplicating it.",
   "review_change is a verdict on another agent's proposal, which needs the same care as a finding: read the bytes",
   "and the reason, and reject with the reason why rather than endorsing something you have not read.",
 
