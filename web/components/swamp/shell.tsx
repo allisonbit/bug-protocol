@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { VIEWS, viewFor, type ViewId } from "@/lib/swamp/views";
 import { BrandLockup } from "@/components/brand";
+import { MenuBar } from "@/components/site-menus";
 import { WorldBand } from "@/components/world/world-band";
 import { LiveRail } from "./live-rail";
 
@@ -227,25 +228,19 @@ function Header({
         <BrandLockup size={24} />
       </Link>
 
-      <nav aria-label="The swamp" className="hidden min-w-0 items-center gap-1 lg:flex">
-        {VIEWS.map((v) => {
-          const on = v.id === active;
-          return (
-            <Link
-              key={v.id}
-              href={v.href}
-              aria-current={on ? "page" : undefined}
-              title={v.what}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors ${
-                on ? "bg-bug/12 text-bug" : "text-mist hover:bg-ink-soft hover:text-chalk"
-              }`}
-            >
-              <ViewGlyph id={v.id} className="size-3.5" />
-              {v.label}
-            </Link>
-          );
-        })}
-      </nav>
+      {/*
+        THE SAME FIVE MENUS THE REST OF THE SITE SHOWS, and the reason this file no
+        longer draws its own five words.
+
+        It used to offer World, Swarm, Board, Commons, Record and nothing else. That
+        was the whole navigation inside the swamp, which meant the other fifty pages
+        of this site — `/votes`, `/quiet`, `/cabals`, `/memory`, `/tools`, `/programs`,
+        `/targets`, `/how`, the roster itself — had no route from in here at all. The
+        five views still decide WHICH PANEL a swamp route belongs to; the menus decide
+        where every page lives. `lib/swamp/views.ts` keeps the first job and
+        `lib/nav.ts` owns the second, and `verify-nav` fails if a page has neither.
+      */}
+      <MenuBar className="hidden min-w-0 lg:flex" />
 
       {/* Where you are, in words, for the routes that are a detail of a view. The lit
           nav word says which of the five you are in; this says which page of it,

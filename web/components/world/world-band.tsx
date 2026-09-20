@@ -37,6 +37,23 @@ import type { CameraMode, Overlays, WorldRenderer } from "./renderer";
 /** Where the world does not belong: the app shell, and the two sign in pages. */
 const HIDDEN_PREFIXES = ["/dashboard", "/login", "/signup", "/auth", "/world", "/oauth"];
 
+/**
+ * THE BAND'S HEIGHT, AND THE ONE PLACE IT IS DELIBERATELY SMALLER.
+ *
+ * The band was `38vh`, capped at 440px, which made the habitat the first 400 pixels
+ * of a page and never the point of it — the thing this product IS, rendered as a
+ * banner above the actual content. It is now the same size `/world` opens at, so the
+ * town is the first thing on every page that shows it.
+ *
+ * These six routes are the exception and they are a reading problem, not an aesthetic
+ * one: a bus row's payload, a memory fact, a commitment's proof, a stored ballot, a
+ * code change's bytes and a stack trace are long, monospaced, and read by scrolling.
+ * Three quarters of a screen of town above them means every one of those pages opens
+ * by pushing its own content below the fold, so here the band is roughly half.
+ * "Full screen" sits on the band either way, for a reader who wants the whole thing.
+ */
+const DENSE_BAND_PREFIXES = ["/bus", "/memory", "/commitments", "/votes", "/changes", "/faults"];
+
 const DEFAULT_OVERLAYS: Overlays = {
   names: true,
   speech: true,
@@ -497,6 +514,7 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" | "f
   }
 
   const t = world?.totals;
+  const dense = DENSE_BAND_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   return (
     <section
@@ -509,9 +527,9 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" | "f
         className={
           fill
             ? "block size-full touch-none"
-            : full
+            : full || !dense
               ? "block h-[74vh] min-h-[420px] w-full touch-none"
-              : "block h-[38vh] max-h-[440px] min-h-[260px] w-full touch-none"
+              : "block h-[46vh] min-h-[280px] w-full touch-none"
         }
       />
 

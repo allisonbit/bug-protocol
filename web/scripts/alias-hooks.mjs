@@ -4,13 +4,18 @@
  *  1. `@/lib/...`:  the tsconfig path alias. Next maps it; Node does not.
  *  2. `./thing`:  extensionless relative imports. TypeScript resolves these;
  *                  Node's ESM loader requires the extension and refuses.
+ *  3. `./thing.json`:  a plain JSON import, which the bundler accepts and Node's
+ *                  ESM loader refuses without an import attribute. `lib/nav.ts`
+ *                  imports `lib/surfaces.json` so that the menu, the map and the
+ *                  verifier all read one file, and a check that cannot load the
+ *                  list it is checking is not a check.
  *
- * Without both, none of the lib modules can be loaded outside the framework, so
+ * Without all three, none of the lib modules can be loaded outside the framework, so
  * the tools in this folder that call real app code need
  * `--import ./scripts/alias-register.mjs`.
  */
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { statSync } from "node:fs";
+import { statSync, readFileSync } from "node:fs";
 
 const ROOT = process.cwd();
 const EXTS = [".ts", ".tsx"];
@@ -58,4 +63,17 @@ export async function resolve(specifier, context, next) {
   }
 
   return next(specifier, context);
+}
+
+/**
+ * JSON as a module. Node's own json format demands `with { type: "json" }`, which
+ * TypeScript and the bundler neither require nor want here, so the file is read and
+ * handed over as the default export instead. Only `.json` is touched.
+ */
+export async function load(url, context, next) {
+  if (url.endsWith(".json")) {
+    const text = readFileSync(fileURLToPath(url), "utf8");
+    return { format: "module", shortCircuit: true, source: `export default ${text};` };
+  }
+  return next(url, context);
 }

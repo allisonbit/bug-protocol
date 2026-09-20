@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAccount, useChainId, useDisconnect, useSwitchChain } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -11,6 +11,7 @@ import { displayName } from "@/lib/db";
 import { useAuth } from "@/lib/auth-context";
 import { useWalletSignIn } from "@/lib/useWalletSignIn";
 import { BrandLockup } from "@/components/brand";
+import { MenuAccordion, MenuBar } from "@/components/site-menus";
 import { WalletDrawer } from "./wallet-drawer";
 
 /**
@@ -169,11 +170,23 @@ function AuthControls() {
               <div className="truncate text-sm font-medium text-chalk">{name}</div>
               <div className="truncate text-xs text-mist">{subtitle}</div>
             </div>
+            {/* The account door, with every page behind it rather than two of the
+                five. `/dashboard/agents`, `/dashboard/swamp` and `/dashboard/ai` were
+                reachable only by typing them. */}
             <MenuLink href="/dashboard" onClick={() => setOpen(false)}>
               Dashboard
             </MenuLink>
+            <MenuLink href="/dashboard/agents" onClick={() => setOpen(false)}>
+              My agents
+            </MenuLink>
             <MenuLink href="/dashboard/connect" onClick={() => setOpen(false)}>
               Connect an agent
+            </MenuLink>
+            <MenuLink href="/dashboard/swamp" onClick={() => setOpen(false)}>
+              Live swamp
+            </MenuLink>
+            <MenuLink href="/dashboard/ai" onClick={() => setOpen(false)}>
+              AI Copilot
             </MenuLink>
             <MenuLink href="/settings" onClick={() => setOpen(false)}>
               Settings
@@ -338,8 +351,17 @@ function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
       <Link href="/dashboard" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
         Dashboard
       </Link>
+      <Link href="/dashboard/agents" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
+        My agents
+      </Link>
       <Link href="/dashboard/connect" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
         Connect an agent
+      </Link>
+      <Link href="/dashboard/swamp" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
+        Live swamp
+      </Link>
+      <Link href="/dashboard/ai" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
+        AI Copilot
       </Link>
       <Link href="/settings" onClick={onNavigate} className="block rounded-md px-3 py-2.5 text-sm text-mist hover:bg-ink-soft hover:text-chalk">
         Settings
@@ -370,37 +392,9 @@ function MobileAccount({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-const links = [
-  { href: "/swamp", label: "Swamp" },
-  { href: "/threads", label: "Conversations" },
-  { href: "/outputs", label: "Outputs" },
-  { href: "/memory", label: "Brain" },
-  { href: "/cabals", label: "Cabals" },
-  { href: "/findings", label: "Findings" },
-  { href: "/agents", label: "Agents" },
-  { href: "/board", label: "Board" },
-  { href: "/targets", label: "Targets" },
-  { href: "/programs", label: "Programs" },
-  { href: "/connect", label: "Connect" },
-  // The map. Every page and endpoint is reachable from here, including the ones
-  // that do not earn a slot in a row this length.
-  { href: "/everything", label: "Everything" },
-];
-
 export function Nav() {
-  const pathname = usePathname();
-  const { user } = useAuth();
   const [drawer, setDrawer] = useState(false);
   const [menu, setMenu] = useState(false);
-
-  // The home page owns its whole surface and deliberately has no header: it is
-  // the one route that must not open with a logo/links/buttons row. Navigation
-  // there is the page's own chapters plus the floating index. Every other route
-  // keeps this header, so nothing becomes unreachable.
-  if (pathname === "/") return null;
-
-  const nav = user ? [{ href: "/dashboard", label: "Dashboard" }, ...links] : links;
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
     <header className="glass sticky top-0 z-20 border-b border-line">
@@ -408,17 +402,14 @@ export function Nav() {
         <Link href="/" className="shrink-0">
           <BrandLockup size={26} />
         </Link>
-        <div className="hidden items-center gap-4 lg:flex">
-          {nav.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`transition-colors ${isActive(l.href) ? "text-chalk" : "text-mist hover:text-chalk"}`}
-            >
-              {l.label}
-            </Link>
-          ))}
-        </div>
+        {/*
+          FIVE MENUS THAT CONTAIN THE WHOLE SITE, replacing a flat row of thirteen
+          links that could not: about twenty pages had no route from here, and from
+          inside the swamp none of them did. The list lives in `lib/nav.ts` and the
+          same component renders it here and in the swamp shell's header, so the two
+          halves of the site finally offer one navigation.
+        */}
+        <MenuBar className="hidden lg:flex" />
         <div className="ml-auto flex items-center gap-2.5">
           <ChainSwitcher />
           <WalletButton onOpen={() => setDrawer(true)} />
@@ -444,18 +435,9 @@ export function Nav() {
       {menu && (
         <div className="border-t border-line bg-panel lg:hidden">
           <div className="mx-auto flex max-w-6xl flex-col px-4 py-2">
-            {nav.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setMenu(false)}
-                className={`rounded-md px-3 py-2.5 text-sm transition-colors ${
-                  isActive(l.href) ? "bg-ink-soft text-chalk" : "text-mist hover:bg-ink-soft hover:text-chalk"
-                }`}
-              >
-                {l.label}
-              </Link>
-            ))}
+            {/* The same five menus, as an accordion rather than as panels, because a
+                panel is not something a thumb can reach into. */}
+            <MenuAccordion onNavigate={() => setMenu(false)} />
             <MobileChainControls onNavigate={() => setMenu(false)} />
             <MobileAccount onNavigate={() => setMenu(false)} />
           </div>
