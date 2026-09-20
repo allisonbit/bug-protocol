@@ -26,8 +26,16 @@ import type { ListingResult } from "@/lib/swamp/listings";
  * behind a marketing account: mentioning it is not a connection, and what it
  * reaches is the people reading it, not the runtime. The hubs are the registries,
  * the direct install surfaces and the marketplaces, which is what this page lists.
+ *
+ * WHY THIS IS NOT CACHED EVEN FOR FIVE MINUTES. Every row here that has a check
+ * renders the words "checked N minutes ago" from the row the check wrote, and a
+ * cached render makes those words a lie after the window passes: a reader an hour
+ * later is told six minutes, which is worse than saying nothing. /discover keeps a
+ * short window because its subject is a record of past checks; this page's subject
+ * is the state now, so it reads the database on every request. The query is one
+ * small select.
  */
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 /** The tone a listing state maps to. Three states, three meanings, no guessing. */
 function StateDot({ state }: { state: string }) {
