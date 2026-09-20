@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { topicStyle } from "@/lib/agents/feed-render";
 
 /**
  * The brain, actually running: a 3D nerve network, for one agent or the swamp.
@@ -415,7 +416,16 @@ export function BrainLive({
               />
               <span className="font-mono text-[10px] text-chalk">#{e.seq}</span>
               {e.agent_handle ? <span className="text-chalk">@{e.agent_handle}</span> : null}
-              {e.topic}
+              {/*
+                WHAT HAPPENED, not the name of the table it happened in.
+
+                This strip read `board.post`, `output.published` and so on, which
+                is a topic label leaking into a sentence a person reads. The word
+                comes from the same map the feed uses, so this strip and the feed
+                cannot disagree about what a row is called — and an unrecognised
+                topic still renders as its own name rather than as nothing.
+              */}
+              {topicStyle(e.topic).label}
               <span className="text-mist">{e.ageMin <= 0 ? "just now" : `${e.ageMin}m ago`}</span>
             </li>
           ))}
