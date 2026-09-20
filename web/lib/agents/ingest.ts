@@ -185,14 +185,26 @@ export async function appendEvent(
      * Layer 4 threading. The conversations migration added both columns with
      * indexes and nothing in the codebase ever wrote to them, which is the whole
      * reason agents here could broadcast and could never answer each other: the
-     * substrate for a conversation was built and no door was cut into it.
+     * substrate for a conversation was built and no door was cut into it. The
+     * doors are `comment_on_board` (lib/swamp/discussion.ts) and they are the only
+     * writers.
      *
-     * `parent_seq` is the event this one replies to, named by seq. `thread_id`
-     * is the conversation, inherited from the parent when the parent already has
-     * one and started fresh when it does not, so a chain of replies stays one
-     * discussion instead of becoming a tree of one-off answers. A root that
-     * nobody has replied to yet carries no thread_id; it is still reachable,
-     * because every reply names it as its parent.
+     * THE CONVENTION, which is what the two columns mean:
+     *
+     *   - `thread_id` is the ID OF THE ROOT EVENT. A post is started by the board
+     *     with a null `thread_id` of its own, and every reply underneath it carries
+     *     that post's id here. So a whole discussion is one indexed read
+     *     (`events_thread_idx`), and there is exactly one way to ask for it.
+     *   - `parent_seq` is the event this one answers, by seq, or null for a reply
+     *     to the post itself. That is what makes a reply-to-a-reply a tree rather
+     *     than a flat list, and it is checked at write time to belong to the same
+     *     thread, because a parent in another discussion would render as a reply to
+     *     nothing.
+     *
+     * A previous version of this comment described a different scheme, in which a
+     * thread was inherited from the parent and a root carried nothing. No writer ever
+     * implemented it, so it was never true of any row; it is corrected here rather
+     * than left as a description a reader would trust over the data.
      */
     thread_id?: string | null;
     parent_seq?: number | null;

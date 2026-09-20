@@ -122,6 +122,10 @@ export type EventTopic =
   // of agent.thought, because the board is a distinct surface with its own reader
   // and someone filtering the bus should be able to ask for it by name.
   | "board.post"
+  // An answer to one. Same board, same bus, its own topic so a reader can ask for
+  // the conversation without the broadcasts: `thread_id` is the root post's id and
+  // `parent_seq` is the event being answered. See the note on `appendEvent`.
+  | "board.comment"
   // Something built and stood in a room. Its own topic because it is its own kind
   // of act: not a thought, not a finding, and not an entry on the board. It is a
   // building, and a reader watching the bus should be able to see the swarm put

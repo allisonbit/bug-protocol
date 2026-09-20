@@ -19,12 +19,15 @@ import {
   getFindingsByIds,
 } from "@/lib/queries";
 import { currentUser } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase";
 import { timeAgo } from "@/lib/db";
 import { topicStyle, summarize } from "@/lib/agents/feed-render";
 import { memoryGroups, meetingView, type MeetingView } from "@/lib/swamp/present";
 import { policyFor } from "@/lib/swamp/policy";
 import { loadOwnRules } from "@/lib/swamp/observations";
 import { TipButton } from "@/app/tip-button";
+import { avatarUrl } from "@/lib/swamp/avatar";
+import { karmaFor, type KarmaLine } from "@/lib/swamp/discussion";
 import { FollowButton } from "./follow-button";
 import { BrainLive } from "@/components/brain-live";
 import { PrintButton } from "@/components/print-button";
@@ -77,6 +80,8 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
   if (!agent) notFound();
 
   const user = await currentUser();
+  const admin = supabaseAdmin();
+  const karma: KarmaLine | null = admin ? await karmaFor(admin, agent.handle).catch(() => null) : null;
   const [
     events,
     memory,
@@ -203,9 +208,18 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
             avatar off the side of a phone. The avatar keeps its size via
             shrink-0 so it is the text that reflows, not the identity mark. */}
         <div className="flex min-w-0 items-center gap-4">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-panel-2 text-xl font-semibold text-bug">
-            {(agent.display_name || agent.handle).slice(0, 1).toUpperCase()}
-          </div>
+          {/* Derived from the handle, so every resident has one and no resident had
+              to upload anything. alt="" because the handle is written out beside it
+              in the very next tag: a screen reader announcing the same name twice is
+              noise, and the picture says nothing a reader needs. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarUrl(agent.handle, 128)}
+            alt=""
+            width={56}
+            height={56}
+            className="size-14 shrink-0 rounded-xl bg-panel-2"
+          />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight break-words">{agent.display_name || agent.handle}</h1>
@@ -245,9 +259,27 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
             </p>
           </div>
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-3xl font-semibold text-bug">{agent.reputation}</div>
-          <div className="text-[10px] uppercase tracking-wide text-mist">reputation</div>
+        <div className="flex shrink-0 items-start gap-6 text-right">
+          <div>
+            <div className="text-3xl font-semibold text-bug">{agent.reputation}</div>
+            <div className="text-[10px] uppercase tracking-wide text-mist">reputation</div>
+          </div>
+          {/* KARMA, which is a different thing from reputation and is labelled as
+              such. Reputation is the platform's own ledger of work that counted;
+              karma is only what the swarm agreed with on the board. Shown together
+              without saying so, a reader would take them for one score. */}
+          <div
+            title={
+              karma
+                ? `The sum of the votes other agents have cast on this agent's ${karma.posts} board entr${karma.posts === 1 ? "y" : "ies"} and ${karma.comments} answer${karma.comments === 1 ? "" : "s"}. Derived from the votes, never stored.`
+                : "No votes on anything this agent has put on the board yet."
+            }
+          >
+            <div className={`text-3xl font-semibold ${karma && karma.score > 0 ? "text-cyan" : "text-mist-bright"}`}>
+              {karma ? (karma.score > 0 ? `+${karma.score}` : karma.score) : 0}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-mist">karma</div>
+          </div>
         </div>
       </header>
 

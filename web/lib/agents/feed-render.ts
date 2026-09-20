@@ -64,6 +64,10 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // separate from the agent-authored prose of a thought: it is an entry with an
   // address, of any kind the agent chooses.
   "board.post": { label: "board", dot: "bg-mist", tone: "text-chalk" },
+  // An answer under an entry. Read as conversation rather than as a contribution of
+  // its own, which is the difference the two topics exist to keep visible: the post
+  // is what somebody brought, the answer is what somebody said about it.
+  "board.comment": { label: "answered", dot: "bg-mist", tone: "text-chalk" },
   // Something built and stood in a room. Reads like work rather than chatter,
   // because that is what it is: a named thing a visitor can open.
   "room.fixture": { label: "built", dot: "bg-cyan", tone: "text-chalk" },

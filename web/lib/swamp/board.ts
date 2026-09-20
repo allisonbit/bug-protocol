@@ -33,6 +33,12 @@ import type { Agent, SwampEvent } from "@/lib/agents/types";
  */
 
 export type BoardEntry = {
+  /**
+   * The event's own id, which is how a reply names the entry it answers and how a
+   * vote names what it is about. Null for the one kind of entry that is not an event
+   * at all: a host proposal, which is a row in `targets` waiting to be proved.
+   */
+  id: string | null;
   seq: number | null;
   at: string;
   /** The handle that put it there. Null only for a host proposal with no author. */
@@ -143,6 +149,7 @@ export async function postSystemEntry(sb: SupabaseClient, input: BoardPostInput)
   if (error) throw new ActionError(500, error.message);
 
   return {
+    id: null,
     seq: (data as { seq: number } | null)?.seq ?? null,
     at,
     author: null,
@@ -225,6 +232,7 @@ export async function postBoardEntry(
   }
 
   return {
+    id: row?.id ?? null,
     seq: row?.seq ?? null,
     at,
     author: agent.handle,
@@ -242,6 +250,7 @@ export async function postBoardEntry(
 function entryFromEvent(e: SwampEvent): BoardEntry {
   const p = (e.payload ?? {}) as Record<string, unknown>;
   return {
+    id: e.id,
     seq: e.seq,
     at: e.created_at,
     author: e.agent_handle ?? null,
@@ -276,7 +285,7 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
 
   let q = sb
     .from("events")
-    .select("seq, created_at, agent_handle, target_slug, payload, provenance")
+    .select("id, seq, created_at, agent_handle, target_slug, payload, provenance")
     .eq("topic", "board.post")
     .order("seq", { ascending: false })
     .limit(limit);
@@ -310,6 +319,9 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
     }
     for (const r of rows) {
       entries.push({
+        // A host proposal has no event behind it, so it has no id to be replied to or
+        // voted on. `inert` is what says so, and the doors refuse it by name.
+        id: null,
         seq: null,
         at: r.created_at,
         author: r.proposed_by ? (handles.get(r.proposed_by) ?? null) : null,

@@ -18,6 +18,7 @@ import {
 } from "@/lib/agents/actions";
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
 import { postBoardEntry } from "./board";
+import { commentOnBoard, voteOnBoard } from "./discussion";
 import { proposeChange, reviewChange } from "./changes";
 import { readSourceFile } from "@/lib/source";
 import { assertPublicHost } from "./guard";
@@ -575,6 +576,32 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const r = await proposeHypothesis(sb, agent, { claim: plan.claim, supporting_facts: plan.factIds });
       await remember(sb, agent.id, "note", `asked:${scope}`, { at: obs.now, signature: plan.signature, hypothesis: r.id }, 3);
       return `asked the vaults: ${plan.claim.slice(0, 80)}`;
+    }
+
+    // THE CONVERSATION. Both of these go out through the same functions the MCP
+    // doors call, so a resident answering on its own and a visiting agent answering
+    // over a token write the identical rows. What is different is provenance: this
+    // path is the platform's runtime acting for a hosted agent, which `appendEvent`
+    // records as 'runtime' rather than as a verified key.
+    //
+    // The plan's `post` is a SEQ the planner took from the observation, and it is
+    // resolved here to the event id the door needs. Resolved rather than passed
+    // through, because the two readings disagree in the one case that matters: an
+    // entry posted since the observation exists but was not in it, and a model that
+    // named its number out of order must not be able to reach it.
+    case "comment_on_board": {
+      const root = obs.board.items.find((b) => b.seq === plan.post);
+      if (!root) return `nothing at seq ${plan.post} on the board I was shown`;
+      const c = await commentOnBoard(sb, agent, { post: root.id, parent: plan.parent, body: plan.body }, null, "runtime");
+      return `answered "${root.title.slice(0, 50)}" as #${c.seq}`;
+    }
+
+    case "vote_on_board": {
+      const subject = obs.board.items.find((b) => b.seq === plan.subject);
+      if (!subject) return `nothing at seq ${plan.subject} on the board I was shown`;
+      const r = await voteOnBoard(sb, agent, { subject: subject.id, value: plan.value });
+      const verdict = r.mine === 0 ? "withdrew from" : r.mine > 0 ? "agreed with" : "disagreed with";
+      return `${verdict} "${subject.title.slice(0, 50)}" (score now ${r.score})`;
     }
 
     // r21, ground. Written through the same `agentProposeZone` an agent driving

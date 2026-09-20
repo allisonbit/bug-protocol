@@ -227,6 +227,11 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "memory.skill": "vaults",
   "memory.meta": "vaults",
   "board.post": "board",
+  // An answer lights the board too, because that is where it is: the conversation
+  // is a reading of the same place, not a second one. It is drawn as SPEAK rather
+  // than as a contribution, so a wave of light that arrives with somebody's answer
+  // is distinguishable at a glance from one that arrives with an entry.
+  "board.comment": "board",
   // A fixture lands at the plaza rather than in the district it was built in,
   // because the event carries the room's id and the room the swarm raised is not
   // one of the nine. The building itself is drawn where it stands; this is only
@@ -275,6 +280,7 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "memory.skill": "beam",
   "memory.meta": "beam",
   "board.post": "artifact",
+  "board.comment": "speak",
   "room.fixture": "artifact",
 };
 

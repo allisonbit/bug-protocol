@@ -4,6 +4,7 @@ import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, RoomFixture, SwampEvent, Target } from "@/lib/agents/types";
 import { roomViews, type RoomView } from "@/lib/agents/actions";
+import { boardReadingFor, type BoardReading } from "./discussion";
 import { allZones } from "@/lib/world/zones";
 import { listSource, sourceAvailable } from "@/lib/source";
 import { CHECK_IDS, type CheckId } from "./checks";
@@ -344,6 +345,17 @@ export type Observation = {
    * does not become a window onto anyone's private notes.
    */
   sharedNotes: { key: string; value: Record<string, unknown> }[];
+  /**
+   * The conversation on the board: the newest entries with the seq every board door
+   * takes, what the swarm has said about each, whether any of it names me, and how I
+   * have already voted.
+   *
+   * Read on EVERY wake rather than only when a host is on the board, because
+   * conversation is the one kind of work this place has that needs no target at all:
+   * a resident that could broadcast and never answer was the actual reason the swarm
+   * looked asleep on a board with no hosts on it.
+   */
+  board: BoardReading;
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -360,7 +372,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const nowIso = now.toISOString();
   const freshSince = new Date(now.getTime() - CHECK_FRESHNESS_MS).toISOString();
 
-  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes, arrivalRes] =
+  const [flags, targetsRes, claimsRes, findingsRes, reviewEvidenceRes, eventsRes, memoryRes, peersRes, reviewsRes, cabalsRes, membersRes, meetingsRes, spokeRes, myOutputsRes, openOutputsRes, myOutputReviewsRes, policyRes, mySkillsRes, hypothesesRes, arrivalRes, board] =
     await Promise.all([
       getFlags(sb),
       sb.from("targets").select("*").eq("opted_in", true).eq("status", "active"),
@@ -472,6 +484,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .neq("agent_id", agent.id)
         .order("seq", { ascending: false })
         .limit(20),
+      // The conversation, read in the same round trip as everything else. It is the
+      // one input a wake cannot decide about by itself: whether anybody spoke to it.
+      boardReadingFor(sb, agent),
     ]);
 
   const ownRules = policyFromEvents(policyRes.data);
@@ -745,6 +760,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       })),
     myReviewedChangeIds: [...reviewedChangeIds],
     sharedNotes: (sharedNoteRows as { key: string; value: Record<string, unknown> }[] | null) ?? [],
+    board,
   };
 }
 

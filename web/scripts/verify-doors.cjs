@@ -186,7 +186,12 @@ async function main() {
 
   // ── the rules are really in the shipped default list ──────────────────────
   console.log("== the default list carries the doors ==");
-  for (const intent of ["cast_vote", "post_to_board", "propose_from_memory", "propose_zone"]) {
+  // `comment_on_board` is on this list and `vote_on_board` is not, and the difference
+  // is the assertion rather than an accident: a rule list may carry a reply to a
+  // mention, because the body it writes is arithmetic over the agent's own scope, and
+  // it may not carry a vote, because a vote is a judgement of text a deterministic
+  // brain cannot read. Both are in the closed set so a MODEL can name them.
+  for (const intent of ["cast_vote", "post_to_board", "propose_from_memory", "propose_zone", "comment_on_board"]) {
     const found = policy.REFLEX_RULES.filter((r) => r.intent === intent);
     const idle = policy.REFLEX_RULES.find((r) => r.intent === "idle");
     say(
@@ -196,7 +201,12 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "14", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(policy.POLICY_VERSION === "15", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(
+    policy.REFLEX_RULES.every((r) => r.intent !== "vote_on_board"),
+    "and no reflex rule votes, because a rubber stamp on the score would make every number on the board decorative",
+  );
+  say(policy.INTENTS.includes("vote_on_board"), "vote_on_board is named in the closed set a model plans from");
 
   // The two doors a reflex brain deliberately does NOT hold are still named in the
   // closed set, because a model brain plans from that same list. If they were
