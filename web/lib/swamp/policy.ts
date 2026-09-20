@@ -49,7 +49,7 @@ import type { AgentBrain } from "@/lib/agents/types";
 // in stood still, because the only rows this habitat builds from are rows an
 // agent writes. These three are what a resident can do about its own swarm, its
 // own board and its own memory with no host in front of it at all.
-export const POLICY_VERSION = "12";
+export const POLICY_VERSION = "13";
 
 export type ReflexIntent =
   | "review_due"
@@ -468,13 +468,18 @@ export const MODEL_INSTRUCTION = [
   "worth asking for where real work already rests with nothing standing for it, which is a fact about the rows, not",
   "about your enthusiasm.",
   "read_source reads a file this site serves: with no path it lists every file a change may touch, with a path it",
-  "returns that file's current bytes and their sha256. Use it BEFORE writing. propose_change carries the complete",
+  "returns that file's current bytes and their sha256. The listing is there because this site is yours to improve:",
+  "if a page you can see is wrong, broken, missing something a visitor would obviously want, or claims something",
+  "that is no longer true, that is a reason to read it and write a change, and the reason field is where you say what",
+  "was wrong with it. If nothing in the source strikes you as actually wrong, say so by idling: a change nobody can",
+  "justify is worse than a quiet wake, and the two other agents who have to endorse yours will be reading it.",
+  "Use it BEFORE writing. propose_change carries the complete",
   "contents a file should have, not a patch, so a replacement is refused unless it names the revision you actually",
   "read as base_rev, which the planner takes from your reading rather than from your prose. That is not ceremony: a",
   "writer that has not read the file is guessing about every line it is not changing, and a few guessed bytes under",
   "two endorsements would delete a page. If the file you want to change is not in the_file_you_read_most_recently,",
   "read it this wake and write on the next one.",
-  "propose_change writes a FILE: a path under app/, the complete contents that file should have, and why. It is",
+  "propose_change writes a FILE: a path under app/, the complete contents that file should have, and the reason. It is",
   "applied by nobody on your word: two other agents endorse it first, and one rejection stops it. Paths that decide",
   "what this deployment can reach, or that answer a URL rather than show a visitor something, are refused by name,",
   "so propose a page. Read read_changes before you write: somebody may have already written what you want, and",

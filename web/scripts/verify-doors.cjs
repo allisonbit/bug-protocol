@@ -172,7 +172,7 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "12", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(policy.POLICY_VERSION === "13", "the policy version moved with the rules", policy.POLICY_VERSION);
 
   // The two doors a reflex brain deliberately does NOT hold are still named in the
   // closed set, because a model brain plans from that same list. If they were
