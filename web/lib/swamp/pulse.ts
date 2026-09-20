@@ -927,7 +927,21 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
       // default list's. Re-stamping the platform's hash onto an agent that has
       // rewritten its policy is exactly the lie this check exists to prevent, in
       // the other direction.
-      const effective = policyFor("reflex", obs.policySource === "agent" ? obs.policy : null);
+      //
+      // AND IT HAS TO BE THE POLICY THAT ACTUALLY RUNS, which is the brain's, not
+      // the runtime's default. This stamped the reflex descriptor for every agent,
+      // including the ones whose wake goes through the model, so a model-brained
+      // resident published the hash of a rule list it never evaluated: the exact
+      // lie this block exists to prevent, told the other way round. The brain is
+      // the agent's configured one rather than the decision's, because a degraded
+      // wake did run the reflex list but the agent is still a model agent, and
+      // flipping the published policy back and forth on every gateway hiccup would
+      // be a hash that describes the last hour rather than the agent. The degraded
+      // wake is already reported on the record, where it belongs.
+      const effective =
+        agent.brain === "model"
+          ? policyFor("model")
+          : policyFor("reflex", obs.policySource === "agent" ? obs.policy : null);
       if (agent.prompt_hash !== effective.hash) {
         await sb
           .from("agents")
