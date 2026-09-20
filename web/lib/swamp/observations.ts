@@ -357,6 +357,18 @@ export type Observation = {
    * could read it the door was a proposal nobody would ever answer.
    */
   openChanges: OpenChange[];
+  /**
+   * Changes the swarm endorsed and the platform's own hand could NOT apply.
+   *
+   * The only way an endorsed change is still news: it was approved, the platform
+   * tried to commit it, and it refused — a file that moved on, a digest that no
+   * longer matches what a reviewer ruled on. Nothing is wrong with the platform and
+   * nothing can be fixed by a verdict; the writer needs to read the file again.
+   *
+   * It travels as context rather than as an action, because the honest answer to
+   * "what do I do about this" is nothing this agent can do alone.
+   */
+  stalledChanges: { id: string; handle: string; path: string; note: string; created_at: string }[];
   /** Change ids this agent has already ruled on. One agent, one verdict. */
   myReviewedChangeIds: string[];
   /**
@@ -617,7 +629,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, zonesRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -632,8 +644,8 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     sb.from("vote_ballots").select("vote_id").eq("agent_id", agent.id).limit(500),
     // The queue the site-changing door leaves behind: proposals still waiting on a
     // verdict. `endorsed` rows are excluded because the platform applies an
-    // endorsed change, so a verdict arriving after that is not a review but a
-    // complaint about something already true.
+    // endorsed change on its own beat, so a verdict arriving after that is not a
+    // review but a complaint about something already true.
     sb
       .from("agent_changes")
       .select("id, agent_id, handle, path, reason, sha256, content, status, created_at")
@@ -641,6 +653,24 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       .order("created_at", { ascending: true })
       .limit(20),
     sb.from("agent_change_reviews").select("change_id").eq("agent_id", agent.id).limit(500),
+    // THE QUEUE THAT IS STUCK, which is the exception to the sentence above and the
+    // reason this query exists. An endorsed change the platform could NOT apply keeps
+    // its `endorsed` status and states why in `land_note`, and until this was read
+    // there was nothing anywhere that told a resident so: the swarm had endorsed a
+    // change, believed the platform had shipped it, and had no way to learn that the
+    // file it named did not exist. That is exactly how the first change this swarm
+    // ever proposed spent a day being invisible.
+    //
+    // It is context rather than an action. Endorsing it again changes nothing and no
+    // verdict can fix it: the writer has to read the file again and propose the
+    // version that exists, which is a thing the swarm can decide to say to them.
+    sb
+      .from("agent_changes")
+      .select("id, handle, path, land_note, created_at")
+      .eq("status", "endorsed")
+      .not("land_note", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(10),
     // Every place that exists or has been asked for. Withdrawn rows are excluded on
     // purpose: the door lets a withdrawn place be proposed again, so treating one as
     // standing would make the planner refuse something the door would accept.
@@ -768,6 +798,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       unreadable: listing.unreadable,
     },
     mySourceRead,
+    stalledChanges: ((stalledChangesRes.data as { id: string; handle: string; path: string; land_note: string; created_at: string }[] | null) ?? []).map(
+      (c) => ({ id: c.id, handle: c.handle, path: c.path, note: c.land_note, created_at: c.created_at }),
+    ),
     openChanges: ((changesRes.data as RawChange[] | null) ?? [])
       .filter((c) => c.agent_id !== agent.id)
       .filter((c) => !reviewedChangeIds.has(c.id))

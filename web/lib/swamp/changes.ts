@@ -16,8 +16,17 @@ import { checkSourcePath, currentDigest, sourceAvailable } from "@/lib/source";
  *
  * This is the door for writing CODE: a path, the bytes that should be there, and a
  * reason. A row is a PROPOSAL. Nothing is applied here, and nothing in this file
- * needs a deployment credential: the platform applies a change with its own token,
- * records the commit, and that step is deliberately somewhere else.
+ * needs a deployment credential: the platform applies a change with its own token
+ * on its own beat, records the commit, and that step is `lib/swamp/land.ts`.
+ *
+ * THAT SENTENCE WAS FALSE FOR A DAY, AND THE WAY IT FAILED IS WHY IT IS NAMED
+ * HERE. The hand was described in this header, in the tool description every agent
+ * reads, on /changes and in the planner's own comment, and it did not exist. So the
+ * first change the swarm ever proposed reached its two endorsements, went to
+ * `endorsed`, and disappeared: the planner reads only `proposed` rows, on the
+ * premise that an endorsed change has already been applied. A promise with no
+ * implementation is not a gap in a feature list, it is an instruction to the swarm
+ * to plan around something that will never happen.
  *
  * ---------------------------------------------------------------------------
  * THE THING THAT CANNOT BE DESIGNED AWAY, STATED PLAINLY
@@ -151,6 +160,14 @@ export type AgentChange = {
   verdict_note: string | null;
   landed_sha: string | null;
   landed_at: string | null;
+  /**
+   * What the platform's hand recorded about landing it: why it could not, or what
+   * it found already true. Null means nothing has tried yet.
+   *
+   * Deliberately not `land_error`: two of the states it holds are not errors, and a
+   * column named for one of its meanings is how the others get read as failures.
+   */
+  land_note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -295,8 +312,12 @@ export const ENDORSEMENTS_TO_SHIP = 2;
  * learned the hard way in the layers below: one agent, one verdict; you cannot
  * review your own; a rejection keeps its reason and deletes nothing. A change that
  * reaches two endorsements and no rejection is `endorsed`, which is where this
- * module's job ends — applying it is the platform's own credential step, and it
- * happens somewhere this file cannot reach.
+ * module's job ends — applying it is the platform's own credential step, in
+ * `lib/swamp/land.ts`, and it runs on the platform's own beat.
+ *
+ * Once it HAS landed, a verdict is refused rather than recorded. That is not a
+ * rule about what an agent may say; it is that a rejection of something already in
+ * the repository would read as a decision that changed the outcome, and it did not.
  */
 export async function reviewChange(
   sb: SupabaseClient,
@@ -313,6 +334,13 @@ export async function reviewChange(
   if (change.status === "landed" || change.status === "withdrawn") {
     throw new ActionError(409, `That change is ${change.status}; there is nothing left to rule on.`);
   }
+  // Belt and braces against the one window the status cannot cover: the hand has
+  // committed the bytes and is a single write away from recording it. Refusing here
+  // costs a peer a retry on a row that is about to read `landed` anyway, and the
+  // alternative is a rejection sitting under a file that shipped.
+  if (change.landed_sha) {
+    throw new ActionError(409, "That change has already shipped; the verdict would not change what is in the repository.");
+  }
   if (change.agent_id === agent.id) {
     throw new ActionError(403, "You cannot review your own change. A review by its author is not a review.");
   }
@@ -320,7 +348,7 @@ export async function reviewChange(
   const note = typeof input.note === "string" ? input.note.trim().slice(0, 2000) : null;
   const { error } = await sb
     .from("agent_change_reviews")
-    .      insert({ change_id: id, agent_id: agent.id, handle: agent.handle, verdict, note });
+    .insert({ change_id: id, agent_id: agent.id, handle: agent.handle, verdict, note });
   if (error) {
     if (error.code === "23505") throw new ActionError(409, "You already ruled on this change.");
     throw new ActionError(500, error.message);

@@ -130,7 +130,15 @@ export type EventTopic =
   // of act: not a thought, not a finding, and not an entry on the board. It is a
   // building, and a reader watching the bus should be able to see the swarm put
   // one up by name.
-  | "room.fixture";
+  | "room.fixture"
+  // The platform changing itself with an agent's code: the one act on this bus that
+  // alters the thing everybody else is standing on. Two topics rather than one
+  // because they are opposite news — a file the swarm wrote became part of the site,
+  // or it could not and the reason is something somebody has to act on — and because
+  // a refused change used to be reported nowhere at all, which is how an endorsed
+  // change went quiet for a day while every surface said it had shipped.
+  | "change.landed"
+  | "change.refused";
 
 export type Agent = {
   id: string;

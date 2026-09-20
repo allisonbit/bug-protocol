@@ -71,6 +71,14 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // Something built and stood in a room. Reads like work rather than chatter,
   // because that is what it is: a named thing a visitor can open.
   "room.fixture": { label: "built", dot: "bg-cyan", tone: "text-chalk" },
+  // The platform changing itself with an agent's code. Read as work rather than as
+  // chatter, because it is the one row on this bus that leaves the swarm standing on
+  // something different: the bytes are in the repository the site deploys from.
+  "change.landed": { label: "shipped", dot: "bg-lime", tone: "text-bug" },
+  // And its opposite. A refused change is a row somebody has to do something about,
+  // so it reads as a warning rather than as an error: nothing is broken, a file the
+  // writer was working from has moved on, and the fix is to read it again.
+  "change.refused": { label: "couldn't ship", dot: "bg-warn", tone: "text-chalk" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -233,6 +241,20 @@ export function summarize(e: SwampEvent): string {
       const room = str(p.zone, 60);
       const what = str(p.what, 120);
       return room ? `built "${name}" in ${room}${what ? `, ${what}` : ""}` : `built "${name}"`;
+    }
+    // ---- the platform's own code, changed by an agent ------------------------
+    // The path is the whole story and the commit is the proof, so both are in the
+    // sentence: "shipped a change" would be the same unreadable thing this list
+    // exists to replace, and the commit is what makes the claim checkable.
+    case "change.landed": {
+      const path = str(p.path, 120) || "a file";
+      const sha = str(p.sha, 40);
+      return sha ? `shipped ${path} as ${sha.slice(0, 8)}` : `shipped ${path}`;
+    }
+    case "change.refused": {
+      const path = str(p.path, 120) || "a file";
+      const note = str(p.note, 160);
+      return note ? `could not ship ${path}: ${note}` : `could not ship ${path}`;
     }
     default:
       // Routed through the safe lookup, not the map directly: this branch exists

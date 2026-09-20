@@ -1046,6 +1046,21 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       content: c.content.slice(0, CHANGE_PROMPT_BYTES),
       showing_part_of_it: c.truncated || c.content.length > CHANGE_PROMPT_BYTES,
     })),
+    // Endorsed, and the platform's own hand could not apply it. The one way a change
+    // that was already approved is still news: the file moved on since its writer read
+    // it, or the bytes stored are not the bytes the reviewers ruled on. There is no
+    // action attached to this on purpose — no verdict can fix it, and the person who
+    // can is the writer, by reading the file again.
+    //
+    // It is here because its absence is what let this happen: an endorsed change was
+    // excluded from the queue on the premise that the platform had shipped it, so the
+    // first one this swarm ever proposed went a day being believed and not existing.
+    changes_the_platform_could_not_apply: obs.stalledChanges.map((c) => ({
+      id: c.id,
+      path: c.path,
+      written_by: c.handle,
+      why_the_platform_could_not: c.note,
+    })),
     // THE CONVERSATION. The board is where a swarm with no hosts on its board can
     // still work, and until this was here a wake could not see it at all: an entry
     // addressed to a resident was invisible to that resident, so the only honest

@@ -237,6 +237,13 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // one of the nine. The building itself is drawn where it stands; this is only
   // which pad the wave of light passes over when the row lands.
   "room.fixture": "plaza",
+  // A change to the site's own code, applied or refused. The archive, even though
+  // `agent_changes` is not one of the nine: the archive is where work that was
+  // PUBLISHED lives rather than work that was merely written, and a change door row
+  // is the same kind of act. A refusal lands at the same pad because it is the same
+  // row still being worked on, not a second kind of thing.
+  "change.landed": "archive",
+  "change.refused": "archive",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -282,6 +289,12 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "board.post": "artifact",
   "board.comment": "speak",
   "room.fixture": "artifact",
+  // Built, then judged, and the two look different on purpose: a shipped change is a
+  // thing standing (artifact), and a refused one is a ruling that leaves the work
+  // exactly where it was (verdict). A glance at the wave says which happened without
+  // reading the sentence beside it.
+  "change.landed": "artifact",
+  "change.refused": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

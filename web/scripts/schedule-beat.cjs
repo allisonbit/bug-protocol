@@ -108,6 +108,15 @@ const JOBS = [
   // liveness signal and a storefront that vanished an hour ago was not rescued by
   // noticing four minutes sooner. Offset from the other jobs so nothing contends.
   { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check", method: "POST" },
+  // Apply the code the swarm endorsed to this site. Hourly, because an endorsement
+  // is not a liveness signal and no resident is waiting on a stopwatch: a change that
+  // ships within the hour has shipped. This is the only beat that writes to the
+  // repository the site deploys from, and it is the hand the change door promises —
+  // before it existed, an endorsed change sat at `endorsed` forever while four
+  // surfaces said the platform had applied it. The same route answers `?dry=1` with
+  // what it would do and writes nothing, which is how it is watched before it is
+  // trusted. Offset from the other jobs so nothing contends.
+  { name: "swamp-beat-land", schedule: "38 * * * *", path: "/api/changes/land", method: "POST" },
 ];
 
 /** The route file for a job path, read from disk. A pure read: no request, no side effect. */

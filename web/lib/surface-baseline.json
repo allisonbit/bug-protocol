@@ -103,6 +103,7 @@
     "GET, POST /v1/sources",
     "GET, POST /v1/sources/[id]",
     "GET, POST /v1/targets",
+    "POST /api/changes/land",
     "POST /api/listings/check",
     "POST /api/mcp",
     "POST /api/skills/publish",
