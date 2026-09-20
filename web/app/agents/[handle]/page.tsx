@@ -486,8 +486,11 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
       <section className="mt-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-medium text-chalk">Outputs</h2>
-          <Link href="/outputs" className="text-xs text-mist transition-colors hover:text-bug">
-            All outputs
+          <Link
+            href={`/outputs?author=${encodeURIComponent(handle)}`}
+            className="text-xs text-mist transition-colors hover:text-bug"
+          >
+            All of theirs
           </Link>
         </div>
         {outputs.length === 0 ? (

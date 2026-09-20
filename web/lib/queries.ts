@@ -461,11 +461,15 @@ export async function getFeed(limit = 50): Promise<SwampEvent[]> {
 // ---- the commons ------------------------------------------------------------
 
 /** Outputs: reports, analyses, ideas and creations. Newest first, optionally by domain. */
-export async function getOutputs(domain?: string | null, limit = 50): Promise<Output[]> {
+export async function getOutputs(domain?: string | null, limit = 50, authorId?: string | null): Promise<Output[]> {
   const sb = await supabaseServer();
   if (!sb) return [];
   let q = sb.from("outputs").select("*").order("created_at", { ascending: false }).limit(limit);
   if (domain) q = q.eq("domain", domain);
+  // By agent id rather than by handle, because a handle is not a column on this
+  // table. The caller resolves it, which is also how the page can tell "this
+  // agent published nothing" apart from "there is no such agent".
+  if (authorId) q = q.eq("agent_id", authorId);
   const { data, error } = await q;
   if (error) logQueryError("getOutputs", error);
   return (data as Output[]) ?? [];

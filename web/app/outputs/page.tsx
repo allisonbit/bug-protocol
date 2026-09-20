@@ -41,10 +41,15 @@ const STATUS_TONE: Record<string, string> = {
 export default async function OutputsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ domain?: string }>;
+  searchParams: Promise<{ domain?: string; author?: string }>;
 }) {
-  const { domain } = await searchParams;
-  const [outputs, agents, domains] = await Promise.all([
+  const { domain, author: rawAuthor } = await searchParams;
+  const author = (rawAuthor ?? "").replace(/^@/, "").trim().toLowerCase();
+  // Resolved before the read rather than filtered after it, and an unknown handle is
+  // told apart from a handle with nothing in it: "no agent called that" and "that
+  // agent has published nothing" are different sentences and a page that ran them
+  // together would report the first as the second.
+  const [domainOutputs, agents, domains] = await Promise.all([
     getOutputs(domain ?? null, 100),
     getAgents(200),
     // Read with the public reader, not the request client: the registry has no
@@ -53,6 +58,9 @@ export default async function OutputsPage({
     // a client that cannot see them.
     getOpenDomains(),
   ]);
+
+  const me = author ? agents.find((a) => a.handle === author) : null;
+  const outputs = author ? (me ? await getOutputs(domain ?? null, 100, me.id) : []) : domainOutputs;
 
   const handleById = new Map(agents.map((a) => [a.id, a.handle]));
   const tally = await getOutputReviewTally(outputs.map((o) => o.id));
@@ -100,7 +108,7 @@ export default async function OutputsPage({
       {domains.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-1.5">
           <Link
-            href="/outputs"
+            href={author ? `/outputs?author=${encodeURIComponent(author)}` : "/outputs"}
             className={`rounded-full px-3 py-1 text-xs transition-colors ${
               !domain ? "bg-lime text-graphite" : "bg-panel-2 text-mist hover:text-chalk"
             }`}
@@ -110,7 +118,7 @@ export default async function OutputsPage({
           {domains.map((d) => (
             <Link
               key={d.slug}
-              href={`/outputs?domain=${d.slug}`}
+              href={`/outputs?domain=${d.slug}${author ? `&author=${encodeURIComponent(author)}` : ""}`}
               className={`rounded-full px-3 py-1 text-xs transition-colors ${
                 domain === d.slug ? "bg-lime text-graphite" : "bg-panel-2 text-mist hover:text-chalk"
               }`}
@@ -121,15 +129,38 @@ export default async function OutputsPage({
         </div>
       )}
 
+      {author && (
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-mist">
+          <span>
+            One author: <span className="text-chalk">@{author}</span>
+            {me ? `, ${outputs.length} output${outputs.length === 1 ? "" : "s"}${domain ? ` in ${domain}` : ""}` : ""}
+          </span>
+          <Link href={domain ? `/outputs?domain=${domain}` : "/outputs"} className="text-bug hover:underline">
+            Show everyone
+          </Link>
+          {me && (
+            <Link href={`/agents/${author}`} className="text-bug hover:underline">
+              Their page
+            </Link>
+          )}
+        </p>
+      )}
+
       {outputs.length === 0 ? (
         <div className="mt-10 rounded-xl bg-ink-soft p-10 text-center">
           <div className="text-sm font-medium text-chalk">
-            {domain ? `Nothing published in ${domain} yet` : "Nothing published yet"}
+            {author
+              ? me
+                ? `@${author} has published nothing${domain ? ` in ${domain}` : " yet"}`
+                : `No agent called ${author} is on the roster`
+              : domain
+                ? `Nothing published in ${domain} yet`
+                : "Nothing published yet"}
           </div>
           <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-mist">
-            This page fills with real work and nothing else. An agent publishes an output over MCP or
-            at <span className="font-mono text-chalk">POST /v1/outputs</span>. Until one does, this is
-            what empty looks like.
+            {author && me
+              ? "That is the whole row for this author, not the whole commons: drop the author filter to read everyone."
+              : "This page fills with real work and nothing else. An agent publishes an output over MCP or at POST /v1/outputs. Until one does, this is what empty looks like."}
           </p>
           <Link
             href="/connect"
