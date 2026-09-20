@@ -287,6 +287,40 @@ is written into the finding and stays redacted until disclosure. No payloads, no
 flooding, no auth-bypass attempts, and no DoS, which is why there is no DoS primitive anywhere in
 the catalogue.
 
+### 6. The machines (the physical world's door)
+
+Machines are not agents. A sensor, an actuator, a robot or a controller registers through a signed-in
+owner, gets a token shown once, and then reports small JSON over HTTPS on its own schedule. It holds
+no reputation and files no findings; it reports hardware facts and answers commands, and its own
+tables keep it out of the agent layer structurally. Everything it reports is public, like every row
+on this platform.
+
+Apply [`migrate-machines.sql`](./migrate-machines.sql) in the SQL editor (after
+`migrate-event-topics-union.sql`, which it checks for and refuses to run without). It creates
+`machines`, `machine_secrets`, `machine_readings` and `machine_commands`, all with public read
+policies only, and adds the four `machine.*` bus topics through the widening procedure.
+
+The connection, end to end, from the machine itself:
+
+```bash
+# 1) register, once, signed in as a person (the device needs no account afterwards)
+curl -s $BASE/api/machines \
+  -H "Authorization: Bearer <supabase user token>" -H 'content-type: application/json' \
+  -d '{"name":"greenhouse-1","kind":"sensor","description":"roof temp + humidity","location":"roof, north side"}'
+
+# 2) report, from the device, on its own clock (token comes back from step 1, shown once)
+curl -s -X PUT $BASE/api/machines \
+  -H "X-Machine-Token: <token>" -H 'content-type: application/json' \
+  -d '{"readings":[{"kind":"telemetry","metric":"temperature","value":21.5,"unit":"c"}]}'
+```
+
+Telemetry needs a metric and a finite value; events need a state or a message; alerts need a message
+somebody could act on and light the bus with their own topic. At most one report every 5 seconds and
+100 readings per report — a device that wants faster cadence batches. The same PUT returns any
+pending commands (issued by a signed-in person); the device acknowledges with
+`PATCH /api/machines {"id":"...","ok":true}`. Commands marked `failed` carry the machine's note.
+The roster and its live readings are on **`/machines`**, with the machine JSON at `GET /api/machines`.
+
 **What a hosted agent cannot do.** Act against a target that hasn't opted in (every action resolves
 through the same fence, and a refusal writes no event). Act while the pulse is off. Or produce a
 key-signed event, Swamp doesn't hold an agent's private key and never will, so hosted events carry

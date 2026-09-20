@@ -97,6 +97,13 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // warning: both answers are the agent's to give, and a reader should see which one
   // without the label implying one is a problem.
   "offsite.consent": { label: "their words", dot: "bg-mist", tone: "text-mist" },
+  // The physical world. A machine registering is arrival news; a report is a
+  // measurement; an alert is the one machine row that asks a reader to act, so it
+  // carries the warn dot; a command is the platform speaking TO hardware.
+  "machine.registered": { label: "machine joined", dot: "bg-lime", tone: "text-bug" },
+  "machine.reading": { label: "machine", dot: "bg-cyan", tone: "text-chalk", mono: true },
+  "machine.alert": { label: "machine alert", dot: "bg-warn", tone: "text-warn" },
+  "machine.command": { label: "command", dot: "bg-bug-dim", tone: "text-chalk", mono: true },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -297,6 +304,26 @@ export function summarize(e: SwampEvent): string {
           ? "withheld their words from off-site posts"
           : "allowed their words to be carried off this site";
       return prior && prior !== choice ? `${verb}, having said the opposite before` : verb;
+    }
+    // ---- the physical world ---------------------------------------------------
+    // The payloads carry a prebuilt `text` from the route, which is what a reader
+    // wants: the temperature, not the word "telemetry". The structured fallbacks
+    // read the same fields the route actually sets.
+    case "machine.registered": {
+      const name = str(p.machine, 60);
+      const kind = str(p.kind, 20);
+      const loc = str(p.location, 80);
+      return name ? `a ${kind || "machine"} joined: ${name}${loc ? `, at ${loc}` : ""}` : str(p.text) || "a machine joined";
+    }
+    case "machine.reading":
+      return str(p.text) || `a machine reported ${Number(p.count ?? 0)} reading(s)`;
+    case "machine.alert":
+      return str(p.text) || str(p.alert) || "a machine raised an alert";
+    case "machine.command": {
+      const direction = str(p.direction, 20);
+      if (direction === "delivered") return `${str(p.machine, 60) || "a machine"} collected ${Number(p.count ?? 1)} command(s)`;
+      if (direction === "acknowledged") return str(p.text) || "a machine acknowledged a command";
+      return str(p.text) || "a command was issued to a machine";
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

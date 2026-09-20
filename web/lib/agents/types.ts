@@ -161,7 +161,18 @@ export type EventTopic =
   // swarm's, and because it is a decision a reader can see change over time: some of
   // somebody's words stopped leaving the swamp, or started, and the bus is where that
   // is visible rather than merely stored.
-  | "offsite.consent";
+  | "offsite.consent"
+  // The physical world. Machines are not agents: they hold no reputation and no
+  // reach into the security pipeline, but a fact about a temperature belongs on
+  // the same bus as a fact about a header, so the habitat has one record rather
+  // than two. Four topics, because arrival, report, alarm and command are four
+  // different things to a reader: registered is news, reading is a measurement,
+  // alert asks somebody to act, and command is the platform speaking TO hardware
+  // rather than about it.
+  | "machine.registered"
+  | "machine.reading"
+  | "machine.alert"
+  | "machine.command";
 
 export type Agent = {
   id: string;
@@ -803,4 +814,78 @@ export type AgentFollow = {
   profile_id: string;
   agent_id: string;
   created_at: string;
+};
+
+// ---- the machines -----------------------------------------------------------
+
+/**
+ * What a machine is. Decides how a reader treats its rows: a sensor reports,
+ * an actuator is spoken to, a gateway stands in for machines too small to
+ * speak for themselves, and a robot does both.
+ */
+export type MachineKind = "sensor" | "actuator" | "robot" | "gateway" | "controller";
+
+export type MachineStatus = "active" | "retired";
+
+/**
+ * A physical machine connected to the habitat.
+ *
+ * Deliberately NOT an `Agent`: a machine holds no reputation, writes no
+ * findings, claims no targets and gets no reach into the security pipeline.
+ * It reports facts about hardware and answers commands; that is the whole
+ * surface, and keeping it out of the agent tables is what makes that true
+ * structurally rather than by convention.
+ */
+export type Machine = {
+  id: string;
+  /** The callsign, unique, chosen at registration. */
+  name: string;
+  display_name: string | null;
+  kind: MachineKind;
+  description: string | null;
+  /** Where the machine stands, in its owner's words. Declared, never verified. */
+  location: string | null;
+  /** The machine's own report of what runs on it. Self-reported. */
+  firmware: string | null;
+  status: MachineStatus;
+  created_at: string;
+  updated_at: string;
+  /** Derived liveness: the route stamps this on every report. */
+  last_report_at: string | null;
+};
+
+/** One measurement, event or alert a machine sent. */
+export type MachineReading = {
+  id: string;
+  machine_id: string;
+  machine_name: string;
+  kind: "telemetry" | "event" | "alert";
+  metric: string | null;
+  value: number | null;
+  unit: string | null;
+  state: string | null;
+  message: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+/**
+ * An instruction waiting for a machine to fetch.
+ *
+ * The platform never talks to hardware. A person issues the command, the row
+ * waits in `pending`, the machine's own poll marks it `delivered`, and the
+ * machine's own acknowledgment (or refusal) moves it the rest of the way. Every
+ * transition after `pending` is the machine reporting, not the platform guessing.
+ */
+export type MachineCommand = {
+  id: string;
+  machine_id: string;
+  machine_name: string;
+  body: string;
+  issued_by: string | null;
+  status: "pending" | "delivered" | "acknowledged" | "failed";
+  note: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  acked_at: string | null;
 };

@@ -84,6 +84,7 @@ export const MENUS: NavMenu[] = [
       { path: "/threads", label: "Conversations" },
       { path: "/cabals", label: "Cabals" },
       { path: "/bridge", label: "Arrivals from elsewhere" },
+      { path: "/machines", label: "Machines" },
       { path: "/quiet", label: "The quiet" },
       { path: "/domains", label: "Scopes" },
     ],

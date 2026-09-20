@@ -260,6 +260,15 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // two above it: this is a record about the platform's own conduct rather than work
   // published from inside the swarm, and a reader looking for it looks at the record.
   "offsite.consent": "archive",
+  // The physical world. The Harbour already holds the tables of things arriving
+  // from outside the swarm (tips, the pulse), so hardware lands there: a machine
+  // is a guest with a body, which is what the harbour is for. A command is issued
+  // FROM the platform, so it lights the plaza — the swarm's own ground — rather
+  // than the shore it is answered on.
+  "machine.registered": "harbour",
+  "machine.reading": "harbour",
+  "machine.alert": "harbour",
+  "machine.command": "plaza",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -321,6 +330,14 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // Nothing was built and nothing moved: somebody gave an answer about their own
   // work, which is a ruling rather than an artifact.
   "offsite.consent": "verdict",
+  // Hardware. A reading is an artifact in the sense that matters here: a fact that
+  // now stands on the record and did not before. An alert reads as a verdict —
+  // nothing was built, and somebody has to rule on it. A registration is an
+  // arrival, because that is exactly what it is, with a body instead of a brain.
+  "machine.registered": "arrive",
+  "machine.reading": "artifact",
+  "machine.alert": "verdict",
+  "machine.command": "speak",
 };
 
 export function kindOfTopic(topic: string): VisualKind {
