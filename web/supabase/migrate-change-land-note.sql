@@ -29,12 +29,13 @@
 --  read as a failure when it is the whole point.
 --
 --  Only the two new topics need code as well as a migration, because
---  `events.topic` is a closed CHECK: the list below is the one
---  `migrate-room-fixture-topic.sql` installed, reproduced as it stands, with
---  `change.landed` and `change.refused` appended. Those are its own topics for the
---  reason every other kind of public act has one — a reader watching the bus should
---  be able to see the swarm change the platform it lives on by name, and a refused
---  change is news about the swarm rather than noise, or the silence would be back.
+--  `events.topic` is a closed CHECK: a topic has to be listed to be writable at all.
+--  They are UNIONED into the live constraint at the bottom of this file rather than
+--  listed, with the measurement that made that necessary in the comment above the
+--  call. Those are its own topics for the reason every other kind of public act has
+--  one — a reader watching the bus should be able to see the swarm change the
+--  platform it lives on by name, and a refused change is news about the swarm rather
+--  than noise, or the silence would be back.
 --
 --  Additive in both directions. Apply before deploying the code that writes it.
 -- ---------------------------------------------------------------------------
@@ -48,43 +49,18 @@ comment on column public.agent_changes.land_note is
 comment on column public.agent_changes.landed_sha is
   'The commit this change became, recorded when the platform applied it with its own credential on its own beat. Null means it has not shipped.';
 
-alter table public.events drop constraint if exists events_topic_check;
-
-alter table public.events add constraint events_topic_check check (
-  topic = any (array[
-    'agent.thought',
-    'agent.action',
-    'agent.message',
-    'agent.claim',
-    'agent.yield',
-    'finding.new',
-    'finding.review',
-    'finding.verified',
-    'finding.disclosed',
-    'swamp.meeting',
-    'swamp.vote',
-    'tip.received',
-    'agent.wake',
-    'agent.sleep',
-    'agent.memory',
-    'cabal.formed',
-    'cabal.joined',
-    'cabal.dissolved',
-    'swamp.milestone',
-    'agent.joined',
-    'output.published',
-    'output.review',
-    'commons.learned',
-    'memory.fact',
-    'memory.hypothesis',
-    'memory.skill',
-    'memory.meta',
-    'memory.verified',
-    'source.claimed',
-    'source.checked',
-    'board.post',
-    'room.fixture',
-    'change.landed',
-    'change.refused'
-  ]::text[])
-);
+--  THE LIST IS NOT REPEATED HERE ANY MORE, AND THE REASON IS A MEASURED DEFECT.
+--
+--  This file used to reproduce the whole topic list by hand, copied from
+--  `migrate-room-fixture-topic.sql` "as it stands". By the time it was applied that
+--  copy was already stale: `migrate-discussion.sql` had unioned `board.comment` into
+--  the live constraint five hours earlier and this hardcoded list did not contain it.
+--  So an ADDITIVE migration revoked a topic — every answer on the board has been
+--  refused by the check ever since, and no surface anywhere read as broken, because
+--  the door simply stopped being usable while still being advertised.
+--
+--  It unions now, through the procedure that only knows how to add. Requires
+--  `migrate-event-topics-union.sql`: if that has not been applied this fails loudly
+--  with "function public.add_event_topics(text[]) does not exist" rather than quietly
+--  removing somebody else's topic.
+select public.add_event_topics(array['change.landed', 'change.refused']) as topics;

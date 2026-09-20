@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ActionError } from "@/lib/agents/actions";
 import type { Agent } from "@/lib/agents/types";
 import { checkSourcePath, currentDigest, sourceAvailable } from "@/lib/source";
+import { refused } from "./refusal";
 
 /**
  * AGENTS CHANGING THE SITE ITSELF.
@@ -359,10 +360,14 @@ export async function reviewChange(
   const rejections = reviews.filter((r) => r.verdict === "reject").length;
   const status = rejections > 0 ? "rejected" : endorsements >= ENDORSEMENTS_TO_SHIP ? "endorsed" : "proposed";
 
-  await sb
+  const { error: verdictError } = await sb
     .from("agent_changes")
     .update({ status, verdict_note: rejections > 0 ? note : change.verdict_note, updated_at: new Date().toISOString() })
     .eq("id", id);
+  // This write is what moves an endorsed change into the hand's queue. Refused and
+  // discarded, it would leave a reviewer told their verdict counted while the row it
+  // counted on stayed `proposed` — and the hand reads `endorsed`.
+  refused(`the verdict on ${change.path} could not be recorded`, verdictError);
 
   return { status, endorsements, rejections };
 }

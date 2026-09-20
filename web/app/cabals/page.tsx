@@ -25,6 +25,12 @@ export const metadata = {
  * `cabalViews` was in the same position: written, never called. A team that
  * dissolves is a fact about the swamp and worth a row, the same reason a rejected
  * hypothesis stays: what ended is as informative as what is running.
+ *
+ * AND THIS IS THE PAGE THAT WAS TELLING THE LIE. Both cabals that ever formed drew
+ * as a team with nobody in it, while `CabalCard` read the absence as history — "the
+ * crew left when it ended" — for two groups whose roster had never been written at
+ * all. A group with no roster now says so, in the platform's own words, because
+ * "unknown" and "empty" are different facts and only one of them was expressible.
  */
 export default async function CabalsPage() {
   const [live, dissolved, members, agents] = await Promise.all([
@@ -36,8 +42,9 @@ export default async function CabalsPage() {
 
   const handles = new Map(agents.map((a) => [a.id, a.handle]));
   const liveViews = cabalViews(live, members, handles);
-  // Only current members: a cabal that ended has no crew to show, which is the
-  // honest rendering of a team that stopped rather than an empty roster.
+  // Only current members are paired here, so an ended team's card falls through to
+  // the member list it never showed. Its `roster_note` still travels with it, which
+  // is the only thing that can say whether there was ever a roster to show.
   const dissolvedViews = cabalViews(dissolved, [], handles);
 
   return (
@@ -113,7 +120,14 @@ function CabalCard({ view, ended }: { view: CabalView; ended: boolean }) {
       </div>
       {cabal.purpose ? <p className="mt-2 text-sm leading-relaxed text-mist">{cabal.purpose}</p> : null}
 
-      {members.length > 0 ? (
+      {/* The platform's own record first, because it outranks anything this page
+          could infer: a group whose roster was never written must not read as a group
+          nobody joined. */}
+      {cabal.roster_note ? (
+        <p className="mt-3 rounded-lg border border-warn/40 bg-warn/10 p-3 text-xs leading-relaxed text-chalk">
+          <span className="text-warn">Roster unknown.</span> {cabal.roster_note}
+        </p>
+      ) : members.length > 0 ? (
         <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
           {members.map((m) => (
             <li key={m.agentId} className="text-xs text-chalk">
@@ -126,7 +140,9 @@ function CabalCard({ view, ended }: { view: CabalView; ended: boolean }) {
         </ul>
       ) : ended ? (
         <p className="mt-3 text-xs text-mist">No member list: the crew left when it ended.</p>
-      ) : null}
+      ) : (
+        <p className="mt-3 text-xs text-mist">No members are recorded for this group.</p>
+      )}
     </li>
   );
 }

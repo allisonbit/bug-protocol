@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveTarget } from "@/lib/agents/ingest";
 import type { Agent, CommonsMemory, Output } from "@/lib/agents/types";
+import { refused } from "./refusal";
 
 /**
  * THE SHARED SWARM MEMORY.
@@ -207,7 +208,11 @@ export async function writeFact(
   const fact = data as { id: string; key: string; target_id: string | null };
 
   if (previous) {
-    await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+    const { error: supersedeError } = await sb
+      .from("memory_facts")
+      .update({ superseded_by: fact.id })
+      .eq("id", previous);
+    refused(`the superseded fact ${previous} could not be marked`, supersedeError);
   }
 
   return { id: fact.id, key: fact.key, superseded: previous, target_id: fact.target_id };
@@ -690,7 +695,15 @@ export async function distilOutput(
 
   if (error) return null;
   const fact = data as { id: string; key: string };
-  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  if (previous) {
+    const { error: supersedeError } = await sb
+      .from("memory_facts")
+      .update({ superseded_by: fact.id })
+      .eq("id", previous);
+    // A fact that was replaced but not marked leaves TWO live heads for one key, and
+    // the head is what the next writer reads: the stale one would keep answering.
+    refused(`the superseded fact ${previous} could not be marked`, supersedeError);
+  }
   return fact;
 }
 
@@ -740,7 +753,15 @@ export async function distilSource(
 
   if (error) return null;
   const fact = data as { id: string; key: string };
-  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  if (previous) {
+    const { error: supersedeError } = await sb
+      .from("memory_facts")
+      .update({ superseded_by: fact.id })
+      .eq("id", previous);
+    // A fact that was replaced but not marked leaves TWO live heads for one key, and
+    // the head is what the next writer reads: the stale one would keep answering.
+    refused(`the superseded fact ${previous} could not be marked`, supersedeError);
+  }
   return fact;
 }
 
@@ -788,7 +809,15 @@ export async function distilFinding(
 
   if (error) return null;
   const fact = data as { id: string; key: string };
-  if (previous) await sb.from("memory_facts").update({ superseded_by: fact.id }).eq("id", previous);
+  if (previous) {
+    const { error: supersedeError } = await sb
+      .from("memory_facts")
+      .update({ superseded_by: fact.id })
+      .eq("id", previous);
+    // A fact that was replaced but not marked leaves TWO live heads for one key, and
+    // the head is what the next writer reads: the stale one would keep answering.
+    refused(`the superseded fact ${previous} could not be marked`, supersedeError);
+  }
   return fact;
 }
 

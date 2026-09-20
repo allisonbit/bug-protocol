@@ -27,6 +27,8 @@ import { decide, type PlannedAction } from "./brain";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
 import { declareSkill, proposeHypothesis } from "./memory";
 import { policyFor } from "./policy";
+import { distinctMembers } from "./roster";
+import { refused } from "./refusal";
 
 /**
  * THE PULSE: one beat of the habitat.
@@ -123,13 +125,14 @@ async function remember(
   salience: number,
 ): Promise<void> {
   const nowIso = new Date().toISOString();
-  const { data: updated } = await sb
+  const { data: updated, error: updateError } = await sb
     .from("agent_memory")
     .update({ value, salience, updated_at: nowIso })
     .eq("agent_id", agentId)
     .eq("kind", kind)
     .eq("key", key)
     .select("id");
+  refused(`memory slot ${kind}:${key} could not be updated`, updateError);
   if (updated && updated.length > 0) return;
   const { error } = await sb
     .from("agent_memory")
@@ -286,9 +289,59 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         throw new Error(error.message);
       }
       const cabal = data as Cabal;
-      await sb.from("cabal_members").insert(
-        plan.members.map((m) => ({ cabal_id: cabal.id, agent_id: m.agentId, role: m.role })),
-      );
+      // THE ROSTER IS CHECKED, BECAUSE IT WAS THE ONE WRITE HERE THAT WAS SILENTLY
+      // REFUSED. `cabal_members` is keyed `(cabal_id, agent_id)`, the roster used to
+      // be built from claims rather than from agents, and on the one target that ever
+      // formed a cabal an agent appeared three times: the composite key refused the
+      // whole insert, the result was discarded, and both cabals this swarm has ever
+      // had were formed and dissolved with an empty roster while their own purpose
+      // line announced five agents. See `roster.ts` for the measurement.
+      //
+      // So: dedupe here as well as in the planner, because this is the last place a
+      // duplicate can pass, and a refusal is written down rather than swallowed. A
+      // group whose roster could not be recorded is a fact about the platform that
+      // somebody can act on, and it reads as one on its own row and on the bus.
+      const members = distinctMembers(plan.members);
+      let rosterError: { message: string } | null = null;
+      if (members.length > 0) {
+        const { error } = await sb
+          .from("cabal_members")
+          .insert(members.map((m) => ({ cabal_id: cabal.id, agent_id: m.agentId, role: m.role })));
+        rosterError = error;
+      }
+      if (members.length === 0 || rosterError) {
+        const note = (
+          members.length === 0
+            ? "no roster was written: the plan named nobody"
+            : `the roster was refused: ${rosterError?.message ?? "the database gave no reason"}`
+        ).slice(0, 500);
+        const { error: noteError } = await sb
+          .from("cabals")
+          .update({ roster_note: note })
+          .eq("id", cabal.id);
+        if (noteError) console.error(`cabal roster note could not be written: ${noteError.message}`);
+        await appendEvent(sb, {
+          topic: "cabal.roster_failed",
+          agent,
+          target,
+          payload: {
+            text: `${plan.name} stands with no recorded roster — ${note}`,
+            cabal: slug,
+            name: plan.name,
+            members: members.map((m) => ({ handle: m.handle, role: m.role })),
+          },
+          signature: null,
+          provenance: "runtime",
+        }).catch((e: unknown) => {
+          // Not fatal, and not silent: the row above is the record, and this is the
+          // second attempt at making the refusal visible. If the topic is missing
+          // from the database's own constraint, that is a defect for /faults to name,
+          // not a reason to throw away the cabal that already exists.
+          console.error(
+            `cabal.roster_failed could not be published: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        });
+      }
       await enforceRateLimit(sb, agent.id);
       // Declared by the agent that is itself on the target, but recorded as
       // `runtime`: the claim that a team exists is the platform's observation of
@@ -303,12 +356,15 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           // display name, so a renderer reads one shape rather than three.
           cabal: slug,
           name: plan.name,
-          members: plan.members.map((m) => ({ handle: m.handle, role: m.role })),
+          // What was actually written, rather than what was planned: the two are the
+          // same on the happy path and the difference is the whole defect when they
+          // are not.
+          members: members.map((m) => ({ handle: m.handle, role: m.role })),
         },
         signature: null,
         provenance: "runtime",
       });
-      for (const m of plan.members.filter((x) => x.agentId !== agent.id)) {
+      for (const m of members.filter((x) => x.agentId !== agent.id)) {
         await appendEvent(sb, {
           topic: "cabal.joined",
           agent,
@@ -324,7 +380,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           provenance: "runtime",
         }).catch(() => null);
       }
-      return `formed ${slug} with ${plan.members.length} agents`;
+      return `formed ${slug} with ${members.length} agents`;
     }
 
     case "convene": {
@@ -859,34 +915,43 @@ async function reconcileCabals(sb: SupabaseClient, obs: Observation): Promise<{ 
   if (toDissolve.length === 0) return { dissolved: 0, slugs: [] };
 
   const nowIso = new Date().toISOString();
-  await sb
+  const { error: dissolveError } = await sb
     .from("cabals")
     .update({ status: "dissolved", dissolved_at: nowIso, updated_at: nowIso })
     .in("id", toDissolve.map((c) => c.id));
-  await sb
+  if (dissolveError) {
+    refused("the cabals could not be dissolved", dissolveError);
+    // Nothing was written, so nothing is announced. A disbanding that did not reach
+    // the table must not reach the bus, or the swarm reads a dissolution that never
+    // happened and the cabals stay live on every page while the feed says otherwise.
+    return { dissolved: 0, slugs: [] };
+  }
+  const { error: leaveError } = await sb
     .from("cabal_members")
     .update({ left_at: nowIso })
     .in("cabal_id", toDissolve.map((c) => c.id))
     .is("left_at", null);
+  refused("a departing member could not be marked as having left", leaveError);
 
   // The announcement is the platform's: no single member can sign for a team
   // disbanding, and the reason is the claim board, which only the platform sees
   // whole.
   for (const c of toDissolve) {
     const target = obs.targets.find((t) => t.id === c.target_id) ?? null;
-    await sb.from("events").insert({
+    const { error: announcementError } = await sb.from("events").insert({
       topic: "cabal.dissolved",
       agent_id: null,
       agent_handle: null,
       target_id: c.target_id,
       target_slug: target?.slug ?? null,
       finding_id: null,
-      payload: { text: `${c.name} dissolved: the live claims it formed around have ended.`, cabal: c.slug, name: c.name },
-      signature: null,
+      payload: { text: `${c.name} dissolved: the live claims it formed around have ended.`, cabal: c.slug, name: c.name },      signature: null,
       signed_ok: false,
       provenance: "system",
     });
+    refused(`the disbanding of ${c.slug} could not be announced`, announcementError);
   }
+
   return { dissolved: toDissolve.length, slugs: toDissolve.map((c) => c.slug) };
 }
 
@@ -1067,17 +1132,24 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
           ? policyFor("model")
           : policyFor("reflex", obs.policySource === "agent" ? obs.policy : null);
       if (agent.prompt_hash !== effective.hash) {
-        await sb
+        const { error: stampError } = await sb
           .from("agents")
           .update({ prompt_hash: effective.hash, model_name: effective.name, updated_at: at })
           .eq("id", agent.id);
+        // The published hash is the agent's own claim about the rules it follows, so a
+        // refused write here leaves that claim describing a rule list nobody evaluated.
+        refused(`the published policy hash for ${agent.handle} could not be updated`, stampError);
       }
 
       // Waking is a real transition, and it is recorded after the work so the
       // agent's status reflects a beat that actually happened.
       if (agent.status !== "active") {
-        await sb.from("agents").update({ status: "active", last_heartbeat_at: at, updated_at: at }).eq("id", agent.id);
-        await sb.from("events").insert({
+        const { error: wakeError } = await sb
+          .from("agents")
+          .update({ status: "active", last_heartbeat_at: at, updated_at: at })
+          .eq("id", agent.id);
+        refused(`${agent.handle} could not be marked awake`, wakeError);
+        const { error: wakeEventError } = await sb.from("events").insert({
           topic: "agent.wake",
           agent_id: agent.id,
           agent_handle: agent.handle,
@@ -1089,9 +1161,14 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
           signed_ok: false,
           provenance: "system",
         });
+        refused(`the wake of ${agent.handle} could not be announced`, wakeEventError);
         report.agents_awoke++;
       } else {
-        await sb.from("agents").update({ last_heartbeat_at: at }).eq("id", agent.id);
+        // Telemetry, and the reason it is only logged rather than thrown: a beat that
+        // did real work must not fail over a heartbeat timestamp, and a heartbeat that
+        // silently stopped being written would read as an idle swarm.
+        const { error: beatError } = await sb.from("agents").update({ last_heartbeat_at: at }).eq("id", agent.id);
+        refused(`the heartbeat for ${agent.handle} could not be written`, beatError);
       }
     } catch (e) {
       report.errors.push(`${agent.handle}: ${e instanceof Error ? e.message : "unknown error"}`);
@@ -1127,11 +1204,15 @@ async function readCursor(sb: SupabaseClient): Promise<number> {
 async function writeCursor(sb: SupabaseClient, cursor: number, at: string): Promise<void> {
   const { data } = await sb.from("swamp_pulse").select("ticks").eq("id", 1).maybeSingle();
   if (!data) {
-    await sb.from("swamp_pulse").insert({ id: 1, last_tick_at: at, cursor, ticks: 1 });
+    const { error } = await sb.from("swamp_pulse").insert({ id: 1, last_tick_at: at, cursor, ticks: 1 });
+    refused("the pulse row could not be created", error);
     return;
   }
-  await sb
+  const { error } = await sb
     .from("swamp_pulse")
     .update({ last_tick_at: at, cursor, ticks: Number((data as { ticks: number }).ticks ?? 0) + 1 })
     .eq("id", 1);
+  // The cursor is how the round-robin reaches everybody. A refused write means the
+  // next beat wakes the same agents again, which is invisible from the outside.
+  refused("the pulse cursor could not be advanced", error);
 }

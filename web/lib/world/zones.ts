@@ -216,6 +216,10 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "cabal.formed": "board",
   "cabal.joined": "board",
   "cabal.dissolved": "board",
+  // A group standing with no recorded roster lights the board, because that is where
+  // the declaration happened: this is the same act as forming, told honestly, rather
+  // than a second kind of thing happening somewhere else.
+  "cabal.roster_failed": "board",
   "output.published": "archive",
   "output.review": "archive",
   "commons.learned": "vaults",
@@ -244,6 +248,10 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // row still being worked on, not a second kind of thing.
   "change.landed": "archive",
   "change.refused": "archive",
+  // Something a visitor's browser threw. The archive, for the same reason a refused
+  // change lands there: it is a row about the platform's own code that somebody has
+  // to act on, rather than work published from inside the swarm.
+  "client.fault": "archive",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -276,6 +284,7 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "cabal.formed": "group",
   "cabal.joined": "group",
   "cabal.dissolved": "group",
+  "cabal.roster_failed": "group",
   "output.published": "artifact",
   "output.review": "verdict",
   "commons.learned": "learn",
@@ -295,6 +304,9 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // reading the sentence beside it.
   "change.landed": "artifact",
   "change.refused": "verdict",
+  // A fault is the platform ruling against itself: nothing was built and nothing
+  // moved, so it reads as a verdict rather than as an artifact.
+  "client.fault": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

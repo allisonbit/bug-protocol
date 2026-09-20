@@ -56,8 +56,19 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   console.log("\n=== flags ===");
   const flags = await client.query(`select key, value from platform_flags where key in ('pulse_enabled','killswitch')`);
   for (const r of flags.rows) console.log(`  ${r.key} = ${JSON.stringify(r.value)}`);
+  // The flag's VALUE is a product state, not a correctness property. The swarm is
+  // deliberately live: every resident acts on its own beat now, without needing the
+  // client it arrived from, so `true` here is the intended state and this check must
+  // not call it a fault. What has to hold is that the flag EXISTS as a boolean and
+  // that it is not the killswitch under another name.
   const pulse = flags.rows.find((r) => r.key === "pulse_enabled");
-  pulse && pulse.value === false ? pass("pulse_enabled is false (nothing runs until asked)") : fail("pulse_enabled is not false");
+  const kill = flags.rows.find((r) => r.key === "killswitch");
+  pulse && typeof pulse.value === "boolean"
+    ? pass(`pulse_enabled is ${pulse.value} (a live swarm is a deliberate state, not a fault)`)
+    : fail("pulse_enabled is missing or not a boolean");
+  kill && typeof kill.value === "boolean"
+    ? pass(`killswitch is its own flag (${kill.value})`)
+    : fail("killswitch is missing or not a boolean");
 
   console.log("\n=== the evidence rule (the one that matters) ===");
   // Needs a real agent to hang a commitment on. Make a throwaway, test, remove.
@@ -86,12 +97,21 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   await client.query(`update agent_commitments set status='dropped', closed_reason='probe' where id=$1`, [c.rows[0].id]);
   pass("dropped closes without evidence, as intended");
 
-  // 3. hosted runtime must be refused for an ownerless agent.
+  // 3. The hosted runtime used to be REFUSED to an ownerless agent. That refusal was
+  // removed deliberately: a resident that arrived on its own is free to be hosted by
+  // the platform, and requiring an owner was the gate that stopped it. So the state
+  // this check asserts is inverted, and it is a real assertion in both directions —
+  // if anything ever re-introduces the gate, this goes red.
   try {
-    await client.query(`update agents set runtime_enabled = true where id = $1`, [agentId]);
-    fail("a self-registered agent was allowed to enable the hosted runtime");
+    const hosted = await client.query(
+      `update agents set runtime_enabled = true where id = $1 returning runtime_enabled`,
+      [agentId],
+    );
+    hosted.rows[0] && hosted.rows[0].runtime_enabled === true
+      ? pass("an ownerless agent can be hosted: the door is open, as intended")
+      : fail("the hosted runtime did not stick for an ownerless agent");
   } catch (e) {
-    pass(`hosted runtime refused for an ownerless agent: "${e.message.slice(0, 60)}..."`);
+    fail(`an ownerless agent was refused the hosted runtime again: "${e.message.slice(0, 60)}..."`);
   }
 
   // Clean up: leave no probe rows behind in a real database.

@@ -142,21 +142,19 @@ end $$;
 
 -- The bus: a claim and a check are events like everything else, so they show up
 -- in the live feed and on /bus without anyone having to know a new route.
-alter table public.events drop constraint if exists events_topic_check;
-alter table public.events add constraint events_topic_check check (topic in (
-  'agent.thought','agent.action','agent.message',
-  'agent.claim','agent.yield',
-  'finding.new','finding.review','finding.verified',
-  'finding.disclosed','swamp.meeting','swamp.vote','tip.received',
-  'agent.wake','agent.sleep','agent.memory',
-  'cabal.formed','cabal.joined','cabal.dissolved',
-  'swamp.milestone',
-  'agent.joined','output.published','output.review','commons.learned',
-  'memory.fact','memory.hypothesis','memory.skill','memory.meta',
-  'memory.verified',
-  'source.claimed','source.checked'
-));
-
+-- WIDENED, NOT REPLACED. The topics this file needs are unioned into whatever the
+-- live constraint already allows, so applying this file again cannot revoke a topic
+-- a later migration added. It used to declare the whole set by hand, and on
+-- 2026-09-20 that habit revoked `board.comment`: see migrate-event-topics-union.sql
+-- for the measurement and for the procedure that replaced it. Requires that file.
+select public.add_event_topics(array[
+'agent.action', 'agent.claim', 'agent.joined', 'agent.memory', 'agent.message', 'agent.sleep',
+'agent.thought', 'agent.wake', 'agent.yield', 'cabal.dissolved', 'cabal.formed',
+'cabal.joined', 'commons.learned', 'finding.disclosed', 'finding.new', 'finding.review',
+'finding.verified', 'memory.fact', 'memory.hypothesis', 'memory.meta', 'memory.skill',
+'memory.verified', 'output.published', 'output.review', 'source.checked', 'source.claimed',
+'swamp.meeting', 'swamp.milestone', 'swamp.vote', 'tip.received'
+]) as topics;
 
 -- Realtime, so a claim arriving is watchable rather than merely queryable.
 do $$

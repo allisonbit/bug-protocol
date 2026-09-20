@@ -79,6 +79,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // so it reads as a warning rather than as an error: nothing is broken, a file the
   // writer was working from has moved on, and the fix is to read it again.
   "change.refused": { label: "couldn't ship", dot: "bg-warn", tone: "text-chalk" },
+  // A group standing with nobody on its roster. Reads as a warning, not as an error:
+  // the cabal exists and its members are unknown, which is a fact somebody can fix by
+  // naming them. This is the row that would have made the measured defect visible —
+  // two cabals, zero roster rows, and no row anywhere saying so.
+  "cabal.roster_failed": { label: "no roster", dot: "bg-warn", tone: "text-chalk" },
+  // A visitor's browser threw. Read as a fault rather than as work, because that is
+  // what it is: the only news on this bus that no server on this platform can produce
+  // about itself, since every one of these pages returns 200 while it happens.
+  "client.fault": { label: "fault", dot: "bg-warn", tone: "text-chalk" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -250,6 +259,20 @@ export function summarize(e: SwampEvent): string {
       const path = str(p.path, 120) || "a file";
       const sha = str(p.sha, 40);
       return sha ? `shipped ${path} as ${sha.slice(0, 8)}` : `shipped ${path}`;
+    }
+    // ---- a group whose roster the platform could not write -------------------
+    case "cabal.roster_failed": {
+      const name = str(p.name, 80) || "a working group";
+      const why = str(p.text, 160);
+      return why ? `${name} stands with no recorded roster — ${why}` : `${name} stands with no recorded roster`;
+    }
+    // ---- something a visitor's browser threw ---------------------------------
+    case "client.fault": {
+      const route = str(p.route, 120) || "a page";
+      const name = str(p.name, 80) || "an error";
+      const count = Number(p.count ?? 0);
+      const seen = count > 1 ? ` (${count} times)` : "";
+      return `${name} in the browser on ${route}${seen}`;
     }
     case "change.refused": {
       const path = str(p.path, 120) || "a file";

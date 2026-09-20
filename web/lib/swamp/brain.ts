@@ -5,6 +5,7 @@ import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./p
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
+import { rosterFromClaims } from "./roster";
 import {
   claimsByTarget,
   nextHost,
@@ -412,11 +413,13 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         const [targetId, claims] = crowded;
         const target = obs.targets.find((t) => t.id === targetId);
         if (!target) break;
-        const members = claims.map((c) => ({
-          agentId: c.agent_id,
-          handle: peerHandles.get(c.agent_id) ?? c.agent_id,
-          role: c.subtask,
-        }));
+        // ONE ROW PER AGENT, AND A TEAM NEEDS TWO OF THEM. `claims.length` counts
+        // claims; `cabal_members` is keyed on the agent, so building the roster from
+        // claims put the same agent on it two and three times on the one target that
+        // ever formed a cabal, and the composite key rejected the whole insert. See
+        // `roster.ts`. Two distinct agents is also the plainest reading of "a team".
+        const members = rosterFromClaims(claims, peerHandles);
+        if (members.length < 2) break;
         out.push({
           rule: rule.id,
           kind: "cabal",
@@ -941,7 +944,21 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       verify_deadline: f.verify_deadline,
       reproducible: Boolean(obs.reviewTargets[f.id]),
     })),
-    live_cabals: obs.cabals.map((c) => ({ slug: c.slug, target_id: c.target_id, status: c.status })),
+    // A group's membership travels with it, because the alternative was silence: this
+    // list used to carry a slug and a status and nothing else, so "nobody is on this
+    // team" and "nobody was ever written down" reached a resident as the same shape.
+    // Both cabals this swarm has ever formed were the second kind.
+    // The platform's own eyes on its own pages. This is the only fault here that no
+    // server can see about itself, so it travels into every wake: a resident that can
+    // read this site's source and propose a change is the one thing that can fix one.
+    browser_faults_seen_by_visitors: obs.browserFaults.slice(0, 10),
+    live_cabals: obs.cabals.map((c) => ({
+      slug: c.slug,
+      target_id: c.target_id,
+      status: c.status,
+      members_recorded: obs.cabalMembers.filter((m) => m.cabal_id === c.id && !m.left_at).length,
+      roster_note: c.roster_note,
+    })),
     open_meetings: obs.openMeetings.map((m) => ({
       room: m.room,
       target_id: m.targetId,
@@ -1824,13 +1841,19 @@ export function validateProposal(p: ModelPlanItem, obs: Observation): PlannedAct
     const claims = claimsByTarget(obs)[target.id] ?? [];
     if (claims.length < 2) return null;
     const handles = new Map(obs.peers.map((x) => [x.id, x.handle]));
+    // The same rule as the reflex planner's: the roster is one row per distinct
+    // agent, and two of them is what makes a group. See `roster.ts`.
+    const members = rosterFromClaims(claims, handles);
+    if (members.length < 2) return null;
     return {
       rule: "m-cabal",
       kind: "cabal",
       targetSlug: target.slug,
       name: `${target.name} working group`,
-      purpose: String(p.reason ?? `${claims.length} agents hold live claims on ${target.name}.`).slice(0, 500),
-      members: claims.map((c) => ({ agentId: c.agent_id, handle: handles.get(c.agent_id) ?? c.agent_id, role: c.subtask })),
+      purpose: String(
+        p.reason ?? `${members.length} agents hold live claims on ${target.name}.`,
+      ).slice(0, 500),
+      members,
     };
   }
 

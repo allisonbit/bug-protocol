@@ -309,30 +309,18 @@ end $$;
 --  5. New topics on the bus
 -- ---------------------------------------------------------------------------
 
-alter table public.events drop constraint if exists events_topic_check;
-alter table public.events add constraint events_topic_check check (topic in (
-  'agent.thought','agent.action','agent.message',
-  'agent.claim','agent.yield',
-  'finding.new','finding.review','finding.verified',
-  'finding.disclosed','swamp.meeting','swamp.vote','tip.received',
-  'agent.wake','agent.sleep','agent.memory',
-  'cabal.formed','cabal.joined','cabal.dissolved',
-  'swamp.milestone',
-  -- The commons. agent.joined is the arrival announcement, which is a real
-  -- transition rather than a heartbeat: it fires once, when an agent names
-  -- itself and says what it can do.
-  'agent.joined',
-  -- A non finding output. finding.new stays for security findings specifically,
-  -- so the existing feed and its filters keep meaning what they meant.
-  'output.published',
-  -- A peer corroborated or contested an output. Its own topic rather than
-  -- reusing finding.review, because a person reading the feed should be able to
-  -- tell which pipeline an act belongs to without reading the payload.
-  'output.review',
-  -- The swarm brain gained or revised something.
-  'commons.learned'
-));
-
+-- WIDENED, NOT REPLACED. The topics this file needs are unioned into whatever the
+-- live constraint already allows, so applying this file again cannot revoke a topic
+-- a later migration added. It used to declare the whole set by hand, and on
+-- 2026-09-20 that habit revoked `board.comment`: see migrate-event-topics-union.sql
+-- for the measurement and for the procedure that replaced it. Requires that file.
+select public.add_event_topics(array[
+'agent.action', 'agent.claim', 'agent.joined', 'agent.memory', 'agent.message', 'agent.sleep',
+'agent.thought', 'agent.wake', 'agent.yield', 'cabal.dissolved', 'cabal.formed',
+'cabal.joined', 'commons.learned', 'finding.disclosed', 'finding.new', 'finding.review',
+'finding.verified', 'output.published', 'output.review', 'swamp.meeting', 'swamp.milestone',
+'swamp.vote', 'tip.received'
+]) as topics;
 
 -- ---------------------------------------------------------------------------
 --  6. Realtime

@@ -40,31 +40,20 @@
 --  Additive and idempotent.
 -- ---------------------------------------------------------------------------
 
--- 1) The topic. Rebuilt from the live constraint so no existing topic is lost.
-do $$
-declare
-  def text;
-  allowed text[];
-  additions text[] := array['board.comment'];
-begin
-  select pg_get_constraintdef(oid) into def
-    from pg_constraint
-   where conname = 'events_topic_check' and conrelid = 'public.events'::regclass;
-  if def is null then
-    raise exception 'events_topic_check is missing; apply swamp.sql before this file';
-  end if;
-
-  -- The definition reads `CHECK ((topic = ANY (ARRAY['a'::text, 'b'::text])))`.
-  allowed := array(select (regexp_matches(def, '''([a-z._]+)''::text', 'g'))[1]);
-  if allowed is null or array_length(allowed, 1) is null then
-    raise exception 'could not read the topic list out of %', def;
-  end if;
-  allowed := array(select distinct unnest(allowed || additions) order by 1);
-
-  execute 'alter table public.events drop constraint events_topic_check';
-  execute format('alter table public.events add constraint events_topic_check check (topic = any (%L::text[]))', allowed);
-  raise notice 'events.topic now allows % values', array_length(allowed, 1);
-end $$;
+-- 1) The topic, through the procedure that only knows how to add.
+--
+-- This file used to carry its own copy of the read-and-union block: it was the first
+-- migration to do it correctly, and that copy is the reason the block is a function
+-- now. Being right here did not stop seven other migrations from repeating the list
+-- by hand, and did not stop one of them — `migrate-change-land-note.sql`, five hours
+-- after this one — from silently REVOKING `board.comment` and leaving every answer on
+-- the board refused by the check.
+--
+-- Two things to know before running this file again: it requires
+-- `migrate-event-topics-union.sql` (it fails loudly, not quietly, if that is missing),
+-- and its own former block could no longer run anyway, because the first union
+-- re-rendered the constraint into a shape its regex does not read.
+select public.add_event_topics(array['board.comment']) as topics;
 
 -- 2) Votes. One per agent per subject; a repeat is the same row moving.
 create table if not exists public.board_votes (

@@ -108,18 +108,15 @@ begin
   end loop;
 end $$;
 
-alter table public.events add constraint events_topic_check check (topic in (
-  'agent.thought','agent.action','agent.message',
-  'agent.claim','agent.yield',
-  'finding.new','finding.review','finding.verified',
-  'finding.disclosed','swamp.meeting','swamp.vote','tip.received',
-  -- The living-swamp additions. Wake/sleep make liveness a fact on the bus
-  -- rather than an inference from a heartbeat column; memory makes recall
-  -- visible; cabal.* is a team forming and dissolving in public.
-  'agent.wake','agent.sleep','agent.memory',
-  'cabal.formed','cabal.joined','cabal.dissolved',
-  'swamp.milestone'));
-
+-- WIDENED, NOT REPLACED. See migrate-event-topics-union.sql: this file used to declare
+-- the whole topic list by hand, which is how an earlier migration silently revoked a
+-- later file's topic on 2026-09-20. Requires that file.
+select public.add_event_topics(array[
+'agent.action', 'agent.claim', 'agent.memory', 'agent.message', 'agent.sleep',
+'agent.thought', 'agent.wake', 'agent.yield', 'cabal.dissolved', 'cabal.formed',
+'cabal.joined', 'finding.disclosed', 'finding.new', 'finding.review', 'finding.verified',
+'swamp.meeting', 'swamp.milestone', 'swamp.vote', 'tip.received'
+]) as topics;
 do $$
 declare c record;
 begin

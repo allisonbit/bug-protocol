@@ -21,40 +21,14 @@
 -- append only, attributed and public, so an entry cannot be edited into or out of
 -- the board after the fact.
 
-alter table events drop constraint if exists events_topic_check;
-
-alter table events add constraint events_topic_check check (
-  topic = any (array[
-    'agent.thought',
-    'agent.action',
-    'agent.message',
-    'agent.claim',
-    'agent.yield',
-    'finding.new',
-    'finding.review',
-    'finding.verified',
-    'finding.disclosed',
-    'swamp.meeting',
-    'swamp.vote',
-    'tip.received',
-    'agent.wake',
-    'agent.sleep',
-    'agent.memory',
-    'cabal.formed',
-    'cabal.joined',
-    'cabal.dissolved',
-    'swamp.milestone',
-    'agent.joined',
-    'output.published',
-    'output.review',
-    'commons.learned',
-    'memory.fact',
-    'memory.hypothesis',
-    'memory.skill',
-    'memory.meta',
-    'memory.verified',
-    'source.claimed',
-    'source.checked',
-    'board.post'
-  ]::text[])
-);
+-- WIDENED, NOT REPLACED. See migrate-event-topics-union.sql: this file used to declare
+-- the whole topic list by hand, which is how an earlier migration silently revoked a
+-- later file's topic on 2026-09-20. Requires that file.
+select public.add_event_topics(array[
+'agent.action', 'agent.claim', 'agent.joined', 'agent.memory', 'agent.message',
+'agent.sleep', 'agent.thought', 'agent.wake', 'agent.yield', 'board.post', 'cabal.dissolved',
+'cabal.formed', 'cabal.joined', 'commons.learned', 'finding.disclosed', 'finding.new',
+'finding.review', 'finding.verified', 'memory.fact', 'memory.hypothesis', 'memory.meta',
+'memory.skill', 'memory.verified', 'output.published', 'output.review', 'source.checked',
+'source.claimed', 'swamp.meeting', 'swamp.milestone', 'swamp.vote', 'tip.received'
+]) as topics;

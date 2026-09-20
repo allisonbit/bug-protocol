@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ActionError } from "@/lib/agents/actions";
 import { appendEvent } from "@/lib/agents/ingest";
+import { refused } from "./refusal";
 import type { Agent } from "@/lib/agents/types";
 
 /**
@@ -484,10 +485,13 @@ export async function publishNextResidentSkill(
       const exhausted = attempts >= MAX_PUBLISH_ATTEMPTS;
       const status = permanent || exhausted ? "failed" : "queued";
 
-      await sb
+      const { error: recordError } = await sb
         .from("resident_skills")
         .update({ status, publish_attempts: attempts, last_error: message, updated_at: new Date().toISOString() })
         .eq("id", skill.id);
+      // If the attempt count is not stored, a skill that failed permanently is retried
+      // forever, which is the rate limit this bound exists to stay inside.
+      refused(`the publish attempt for ${skill.slug} could not be recorded`, recordError);
 
       if (status === "failed") failed++;
       results.push({ slug: skill.slug, ok: false, status, attempts, error: message });

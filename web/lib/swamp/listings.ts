@@ -5,6 +5,7 @@ import { SITE_URL } from "@/lib/site";
 import { SKILL_MD, SKILL_NAME } from "@/lib/skill";
 import { skillDigest } from "@/lib/skill-index";
 import { publishDocumentToClawHub } from "@/lib/swamp/skills";
+import { refused } from "./refusal";
 import {
   REGISTRY_SERVER_NAME,
   REGISTRY_VERSION,
@@ -701,7 +702,7 @@ export async function checkListings(sb: SupabaseClient, options: { repair?: bool
     results.push(row);
 
     // Durable: the current state replaces the row, and the run is appended.
-    await sb.from("listing_health").upsert(
+    const { error: healthError } = await sb.from("listing_health").upsert(
       {
         listing: row.listing,
         kind: row.kind,
@@ -724,13 +725,17 @@ export async function checkListings(sb: SupabaseClient, options: { repair?: bool
       },
       { onConflict: "listing" },
     );
-    await sb.from("listing_check_log").insert({
+    // A listing whose state could not be stored is a listing this platform will keep
+    // believing is fine, which is the exact rot this whole feature exists to notice.
+    refused(`the health of ${row.listing} could not be stored`, healthError);
+    const { error: logError } = await sb.from("listing_check_log").insert({
       listing: row.listing,
       state: row.state,
       detail: row.detail.slice(0, 800),
       repaired: row.repaired,
       repair_detail: row.repairDetail ? row.repairDetail.slice(0, 800) : null,
     });
+    refused(`the check of ${row.listing} could not be logged`, logError);
   }
 
   return {

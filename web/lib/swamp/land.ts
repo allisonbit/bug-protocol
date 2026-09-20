@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkPath, digestOf, listChanges, type AgentChange } from "@/lib/swamp/changes";
+import { refused } from "./refusal";
 
 /**
  * THE HAND THAT APPLIES AN ENDORSED CHANGE.
@@ -296,7 +297,7 @@ async function emitChangeEvent(
     ...extra,
     text: `${change.path}`,
   };
-  await sb
+  const { error: eventError } = await sb
     .from("events")
     .insert({
       topic,
@@ -312,11 +313,10 @@ async function emitChangeEvent(
       signature: null,
       signed_ok: false,
       provenance: "system",
-    })
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+    });
+  // Swallowed until now, and the reason this file exists at all is that a swallowed
+  // result here was a day of silence about a change everybody believed had shipped.
+  refused(`the ${topic} event could not be published`, eventError);
 }
 
 /**
@@ -369,14 +369,13 @@ export async function landEndorsed(
       // offered again next beat, and an event every hour saying the same sentence
       // is how a real refusal gets lost in the repeat of an old one.
       if (!dry && change.land_note !== verdict.error) {
-        await sb
+        const { error: noteError } = await sb
           .from("agent_changes")
           .update({ land_note: verdict.error, updated_at: new Date().toISOString() })
-          .eq("id", change.id)
-          .then(
-            () => undefined,
-            () => undefined,
-          );
+          .eq("id", change.id);
+        // The note IS the refusal, so failing to write it is failing to record the one
+        // thing this column was added for.
+        refused(`the refusal of ${change.path} could not be recorded`, noteError);
         await emitChangeEvent(sb, "change.refused", change, { note: verdict.error });
       }
       continue;
@@ -387,15 +386,12 @@ export async function landEndorsed(
       const note = "The bytes this change proposes were already at that path when the platform looked, so nothing was committed: there was nothing to change. That is what a change landed on an earlier pass looks like.";
       report.already.push({ id: change.id, path: change.path, handle: change.handle });
       if (dry) continue;
-      await sb
+      const { error: alreadyError } = await sb
         .from("agent_changes")
         .update({ status: "landed", landed_at: now, updated_at: now, land_note: note })
         .eq("id", change.id)
-        .eq("status", "endorsed")
-        .then(
-          () => undefined,
-          () => undefined,
-        );
+        .eq("status", "endorsed");
+      refused(`${change.path} could not be marked as already present`, alreadyError);
       continue;
     }
 
@@ -421,14 +417,17 @@ export async function landEndorsed(
     // while the bytes were in flight, and what a reader needs to know is that the
     // file is there — which is exactly what the fallback writes.
     const claim = { status: "landed", landed_sha: commit.sha, landed_at: now, updated_at: now, land_note: null };
-    const { data: claimed } = await sb
+    const { data: claimed, error: claimError } = await sb
       .from("agent_changes")
       .update(claim)
       .eq("id", change.id)
       .eq("status", "endorsed")
       .select("id");
+    // A refused claim reads as "somebody else got there first", which would silently
+    // skip a change whose bytes are already in the repository. Worth saying out loud.
+    refused(`${change.path} could not be claimed after landing`, claimError);
     if (!claimed || claimed.length === 0) {
-      await sb
+      const { error: lateError } = await sb
         .from("agent_changes")
         .update({
           status: "landed",
@@ -437,11 +436,8 @@ export async function landEndorsed(
           updated_at: now,
           land_note: `A peer's verdict moved this row while the commit was in flight. The bytes are in the repository as ${commit.sha.slice(0, 12)}; the verdicts on this change are still recorded and still readable.`,
         })
-        .eq("id", change.id)
-        .then(
-          () => undefined,
-          () => undefined,
-        );
+        .eq("id", change.id);
+      refused(`the late verdict on ${change.path} could not be recorded`, lateError);
     }
     report.landed.push({ id: change.id, path: change.path, handle: change.handle, sha: commit.sha, url: commit.url });
     await emitChangeEvent(sb, "change.landed", change, { sha: commit.sha, url: commit.url });

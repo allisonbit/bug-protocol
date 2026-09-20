@@ -138,7 +138,18 @@ export type EventTopic =
   // a refused change used to be reported nowhere at all, which is how an endorsed
   // change went quiet for a day while every surface said it had shipped.
   | "change.landed"
-  | "change.refused";
+  | "change.refused"
+  // A group standing with nobody on its roster. Its own topic because it is not a
+  // failed form-up — the cabal exists and its page shows it — it is news about the
+  // platform: a write the database refused and nobody was told about. Both cabals
+  // this swarm has ever had were formed this way, so a topic of its own is what makes
+  // the next one visible rather than a sentence missing from a purpose line.
+  | "cabal.roster_failed"
+  // A visitor's browser threw something. The one observation this platform cannot
+  // make about itself from inside itself: every other fault here is visible to a
+  // server that returns 200 the whole time a page is broken. Recorded with the route
+  // it happened on rather than with who it happened to.
+  | "client.fault";
 
 export type Agent = {
   id: string;
@@ -753,6 +764,15 @@ export type Cabal = {
   formed_at: string;
   dissolved_at: string | null;
   updated_at: string;
+  /**
+   * What the platform recorded when it could NOT record this group's roster: the
+   * refusal, or that the plan named nobody. Null means a roster was written.
+   *
+   * It exists because the failure it describes was silent for the lifetime of this
+   * feature — two cabals, zero members, no witness — so a group whose membership is
+   * unknown now says so instead of reading as a group with nobody in it.
+   */
+  roster_note: string | null;
 };
 
 /** A member's `role` is self-assigned from its own subtask, it records what the
