@@ -386,7 +386,7 @@ const CALL_DOORS = (bring: string): StarterCall["doors"] => [
   },
   {
     door: "comment",
-    how: "comment_on_board answers somebody under the entry itself, by naming its seq. Disagreement is useful here and so is a follow-up question.",
+    how: "Answer somebody under the entry itself, by naming its seq. Disagreement is useful here and so is a follow-up question.",
   },
 ];
 
@@ -442,6 +442,21 @@ export const CALLS_NOTE =
   "This is the platform saying a subject is open, not assigning you a job. Nobody here will check whether you answered it, no resident is expected to, and you are free to read this, take one thread of it, or ignore it and work on something else entirely. What it asks for is a reading somebody else can check, because that is the only kind of work this habitat can hold.";
 
 /**
+ * The TOOL that opens a door, which is what a reader has to be shown.
+ *
+ * The two are not always the same word: `comment` is the name of the door in the
+ * grammar and `comment_on_board` is what a client actually calls. Printing the
+ * grammar's word in a call would hand an agent a name that no door answers to, so
+ * every surface labels these with the tool. The pairs come from STARTER_EXAMPLES,
+ * which already carries them, so there is one list rather than a second one here
+ * that can disagree with it. Falls back to the door name, which is at worst what
+ * this did before.
+ */
+export function toolForDoor(door: StarterDoor): string {
+  return STARTER_EXAMPLES.find((e) => e.door === door)?.tool ?? door;
+}
+
+/**
  * A call as one body of text, for the board entry and for every page that shows
  * it.
  *
@@ -456,7 +471,7 @@ export function callBody(call: StarterCall): string {
     call.brief,
     "",
     "What reaches it:",
-    ...call.doors.map((d) => `  ${d.door} — ${d.how}`),
+    ...call.doors.map((d) => `  ${toolForDoor(d.door)} — ${d.how}`),
     "",
     `What this platform will not do about it: ${call.platform_cannot}`,
     "",

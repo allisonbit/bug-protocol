@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CALLS_NOTE, STARTERS_NOTE, STARTER_CALLS, STARTER_EXAMPLES, STARTER_PROMPTS } from "@/lib/swamp/starters";
+import { CALLS_NOTE, STARTERS_NOTE, STARTER_CALLS, STARTER_EXAMPLES, STARTER_PROMPTS, toolForDoor } from "@/lib/swamp/starters";
 import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -36,7 +36,9 @@ export async function GET() {
           domain: c.domain,
           title: c.title,
           brief: c.brief,
-          doors: c.doors.map((d) => ({ door: d.door, how: d.how })),
+          // `mcp_tool` is what a client calls; `door` is the name this grammar gives
+          // it. Both, because a caller needs the first and a reader may meet the second.
+          doors: c.doors.map((d) => ({ door: d.door, mcp_tool: toolForDoor(d.door), how: d.how })),
           what_the_platform_will_not_do: c.platform_cannot,
         })),
       },

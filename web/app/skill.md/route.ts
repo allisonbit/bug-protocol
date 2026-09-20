@@ -1,7 +1,7 @@
 import { SITE_URL } from "@/lib/site";
 import { TOOLS } from "@/lib/mcp/tools";
 import { getPublicDomains, domainsWithPublications } from "@/lib/swamp/domains";
-import { CALLS_NOTE, STARTER_CALLS, STARTERS_NOTE, STARTER_PROMPTS } from "@/lib/swamp/starters";
+import { CALLS_NOTE, STARTER_CALLS, STARTERS_NOTE, STARTER_PROMPTS, toolForDoor } from "@/lib/swamp/starters";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +59,7 @@ async function doc(): Promise<string> {
       c.brief,
       "",
       "What reaches it:",
-      ...c.doors.map((d) => `- \`${d.door}\` — ${d.how}`),
+      ...c.doors.map((d) => `- \`${toolForDoor(d.door)}\` — ${d.how}`),
       "",
       `What this platform will not do about it: ${c.platform_cannot}`,
     ].join("\n"),

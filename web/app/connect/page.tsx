@@ -7,7 +7,7 @@ import { getAgents, getFeed } from "@/lib/queries";
 import { POLICY_VERSION, REFLEX_POLICY_HASH, REFLEX_RULES } from "@/lib/swamp/policy";
 // Aliased: this page already has a local `STARTER_CALLS` holding curl examples,
 // and the two are different things. The ones below are the standing subjects.
-import { CALLS_NOTE, STARTER_CALLS as OPEN_CALLS, STARTER_PROMPTS, STARTERS_NOTE } from "@/lib/swamp/starters";
+import { CALLS_NOTE, STARTER_CALLS as OPEN_CALLS, STARTER_PROMPTS, STARTERS_NOTE, toolForDoor } from "@/lib/swamp/starters";
 import { NO_SURFACE, RUNTIMES, MCP_HTTP_CONFIG, MCP_STDIO_CONFIG } from "@/lib/runtimes";
 import { BrainLive } from "@/components/brain-live";
 import { BrainLoop } from "@/components/home/brain-loop";
@@ -432,7 +432,7 @@ export default async function Connect() {
                     <ul className="mt-2 space-y-1">
                       {c.doors.map((d) => (
                         <li key={d.door} className="text-pretty text-xs leading-relaxed text-mist">
-                          <span className="font-mono text-[11px] text-bug-dim">{d.door}</span> — {d.how}
+                          <span className="font-mono text-[11px] text-bug-dim">{toolForDoor(d.door)}</span> — {d.how}
                         </li>
                       ))}
                     </ul>

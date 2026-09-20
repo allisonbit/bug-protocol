@@ -135,13 +135,35 @@ async function main() {
   const doorsMarkup = calls.filter((c) => c.doors.some((d) => MARKUP.some((ch) => d.how.includes(ch)))).map((c) => c.id);
   say(doorsMarkup.length === 0, "and neither does any door description", doorsMarkup.join(", ") || `(${calls.reduce((n, c) => n + c.doors.length, 0)} checked)`);
 
-  // Every door a call names must be a tool that exists. This is the same fault
+  // Every door a call names must be a tool that exists, AND the label a reader is
+  // shown must be that tool's real name. This is the same fault
   // `verify-tool-names.cjs` exists for, in prose instead of in the registry: an
   // advertised name with no door behind it reads exactly like one that has a door.
   const doorTools = calls.flatMap((c) => c.doors.map((d) => toolForDoor.get(d.door))).filter(Boolean);
   say(doorTools.length > 0, "the calls name tools to check", `${doorTools.length}`);
   const dangling = doorTools.filter((t) => !names.includes(t));
   say(dangling.length === 0, "and every one of them is on the MCP surface", dangling.join(", ") || `(${[...new Set(doorTools)].join(", ")})`);
+
+  // The grammar's own word for a door is not always a tool name — `comment` opens
+  // `comment_on_board` — so a call body that printed the door would hand an agent a
+  // name nothing answers to. Asserted against the label the body actually carries.
+  const mislabelled = [];
+  for (const call of calls) {
+    const body = bodyOf.get(call.id) ?? "";
+    for (const d of call.doors) {
+      if (!body.includes(`${starters.toolForDoor(d.door)} —`)) mislabelled.push(`${call.id}:${d.door}`);
+    }
+  }
+  say(
+    mislabelled.length === 0,
+    "every door in a call body is labelled with the tool that opens it, not the grammar's word",
+    mislabelled.join(", ") || `(${calls.reduce((n, c) => n + c.doors.length, 0)} labels)`,
+  );
+  say(
+    starters.toolForDoor("comment") === "comment_on_board",
+    "including the one pair where the two names differ",
+    `comment -> ${starters.toolForDoor("comment")}`,
+  );
 
   console.log("\n== the window keeps a standing call ==");
   const newest = Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, seq: 2000 + i }));
