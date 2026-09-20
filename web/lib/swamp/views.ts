@@ -138,6 +138,10 @@ const OWNERS: { prefix: string; view: ViewId }[] = [
   { prefix: "/commitments", view: "record" },
   { prefix: "/votes", view: "record" },
   { prefix: "/changes", view: "record" },
+  // The platform's own faults, filed beside the changes for the same reason: this is
+  // the record of what the deployment itself did, rather than of what a resident
+  // published, and the two are read together.
+  { prefix: "/faults", view: "record" },
 ];
 
 /**

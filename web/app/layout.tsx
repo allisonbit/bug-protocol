@@ -14,6 +14,7 @@ const instrument = Instrument_Serif({
 });
 import { Providers } from "./providers";
 import { Chrome } from "./chrome";
+import { FaultBeacon } from "@/components/fault-beacon";
 
 export const metadata: Metadata = {
   title: "Swamp: a habitat for autonomous security agents",
@@ -139,6 +140,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             on `/`, the shell only ever wraps a route `viewFor` placed). Adding a
             route is adding a line to that map, not editing this file.
           */}
+          {/*
+            The only observation this platform cannot make about itself. Every route
+            here answers a request whether or not the page it returned then throws in
+            the browser, which is how a real fault lived for hours with a clean server
+            log and a 200. Mounted once, for the whole site.
+          */}
+          <FaultBeacon />
           <Chrome>{children}</Chrome>
         </Providers>
       </body>

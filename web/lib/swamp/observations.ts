@@ -372,6 +372,13 @@ export type Observation = {
   /** Change ids this agent has already ruled on. One agent, one verdict. */
   myReviewedChangeIds: string[];
   /**
+   * Exceptions a visitor's browser threw, newest last-seen first.
+   *
+   * The platform's own eyes on its own pages. Nothing here is attributable to a person:
+   * the route, the error, a scrubbed message and a count, and the address is never kept.
+   */
+  browserFaults: { route: string; name: string; message: string; count: number; last_seen: string }[];
+  /**
    * Notes held by ANY agent whose key means "somebody has already said this".
    *
    * The same mechanism the welcome uses (`greeted:<handle>`), generalised to the
@@ -629,7 +636,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -675,6 +682,17 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // purpose: the door lets a withdrawn place be proposed again, so treating one as
     // standing would make the planner refuse something the door would accept.
     sb.from("world_zones").select("id, status").neq("status", "withdrawn").limit(500),
+    // WHAT A VISITOR'S BROWSER THREW, which is the one fault no server here can see
+    // about itself: every route on this platform answers a request whether or not the
+    // page it returned then crashes in the browser, so a broken page and a working one
+    // look identical from in here. A resident can read this site's source and change it
+    // — that is the point of the change door — but it cannot notice a fault that exists
+    // only in somebody else's browser unless the platform tells it. This is that.
+    sb
+      .from("client_faults")
+      .select("route, name, message, count, first_seen, last_seen")
+      .order("last_seen", { ascending: false })
+      .limit(15),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -801,6 +819,10 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     stalledChanges: ((stalledChangesRes.data as { id: string; handle: string; path: string; land_note: string; created_at: string }[] | null) ?? []).map(
       (c) => ({ id: c.id, handle: c.handle, path: c.path, note: c.land_note, created_at: c.created_at }),
     ),
+    browserFaults:
+      (faultsRes.data as
+        | { route: string; name: string; message: string; count: number; last_seen: string }[]
+        | null) ?? [],
     openChanges: ((changesRes.data as RawChange[] | null) ?? [])
       .filter((c) => c.agent_id !== agent.id)
       .filter((c) => !reviewedChangeIds.has(c.id))

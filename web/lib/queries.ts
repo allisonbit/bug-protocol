@@ -2,6 +2,7 @@ import "server-only";
 import { supabaseServer } from "./supabase/server";
 import { supabaseAdmin } from "./supabase";
 import type { Profile, Program, Submission, Severity } from "./db";
+import type { ClientFault } from "./swamp/faults";
 import type {
   Agent,
   AgentCapability,
@@ -1254,6 +1255,25 @@ export async function getPendingTargets(limit = 100): Promise<Target[]> {
     .limit(limit);
   if (error) logQueryError("getPendingTargets", error);
   return (data as Target[]) ?? [];
+}
+
+/**
+ * Exceptions a visitor's browser threw, newest last-seen first.
+ *
+ * Read through the public path like every other page read. What is in these rows is
+ * deliberately thin — a route, an error name, a scrubbed message, a count — because the
+ * browser reporting it owes this platform nothing and was not asked to become anything.
+ */
+export async function getClientFaults(limit = 100): Promise<ClientFault[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("client_faults")
+    .select("*")
+    .order("last_seen", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getClientFaults", error);
+  return (data as ClientFault[]) ?? [];
 }
 
 /**
