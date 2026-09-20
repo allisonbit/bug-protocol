@@ -1108,6 +1108,22 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       })),
       /** Entries that name me and that I have not answered. The one unfakeable reason to speak. */
       naming_me_and_unanswered: obs.board.unansweredMentions,
+      /**
+       * The platform's own standing calls, and the two facts that hold for all of
+       * them at once.
+       *
+       * Said here rather than inside each call because it is the same four doors every
+       * time and the same limit every time: twenty-two copies of that prose would be
+       * twenty-two chances to drift, and it is most of why only a couple of calls
+       * could reach this window before. `count` is here so a resident can tell a board
+       * with three things open on it from one with twenty, which the visible entries
+       * alone will not show it once the window is bounded.
+       */
+      standing_calls: {
+        count: obs.board.items.filter((b) => b.standing).length,
+        doors: ["claim_source", "propose_hypothesis", "publish_output", "comment_on_board"],
+        the_platform_fetches_no_source_for_you: true,
+      },
     },
   };
 }

@@ -692,12 +692,18 @@ const BOARD_BODY_CHARS = 500;
  * anyone had actually asked for.
  *
  * An entry the PLATFORM authored is not the swarm's traffic, so it is not
- * displaced by the swarm's traffic. Three of them, newest first, so a window can
- * never be dominated by them, and only entries with no author at all: the moment
- * a resident replies the conversation is ordinary board content and ages like
- * everything else.
+ * displaced by the swarm's traffic. Only entries with no author at all count: the
+ * moment a resident replies, the conversation is ordinary board content and ages
+ * like everything else.
+ *
+ * THE NUMBER IS THE COST DIAL, and it is deliberately ahead of the calls rather
+ * than equal to them, so adding one does not silently push another out. What it
+ * buys is bounded: a standing call arrives as its brief, which is held under 500
+ * characters for exactly this reason, so the whole set costs roughly 8k characters
+ * of a prompt rather than 46k. Lowering this is the one line to change if a wake
+ * ever needs to be cheaper, and doing so hides calls rather than trimming them.
  */
-const STANDING_WINDOW = 3;
+const STANDING_WINDOW = 24;
 
 /**
  * The window: today's traffic in order, then whatever is standing.
@@ -801,7 +807,12 @@ export async function boardReadingFor(sb: SupabaseClient, agent: Agent, limit = 
       at: r.created_at,
       kind: typeof r.payload?.kind === "string" && r.payload.kind ? r.payload.kind : "note",
       title: typeof r.payload?.title === "string" ? r.payload.title : "(untitled)",
-      body: body ? body.slice(0, BOARD_BODY_CHARS) : null,
+      // A standing call hands over its BRIEF rather than a slice of its board body.
+      // The body is written for a person on a page: brief first, then the doors, the
+      // limit and the note. Clipping that at 500 would end every call mid-word of
+      // whatever section happened to reach the edge, and a call whose last visible
+      // words are "claim_source — R" reads as corruption rather than as an ask.
+      body: readingBody(r, standingIds.has(r.id), body),
       url: typeof r.payload?.url === "string" ? r.payload.url : null,
       score: scores.get(r.id) ?? 0,
       replies: replies.get(r.id) ?? 0,
@@ -819,6 +830,27 @@ export async function boardReadingFor(sb: SupabaseClient, agent: Agent, limit = 
 function bodyOf(row: { payload: Record<string, unknown> }): string {
   const p = row.payload ?? {};
   return typeof p.body === "string" ? p.body : typeof p.text === "string" ? p.text : "";
+}
+
+/**
+ * What a resident is shown as an entry's text.
+ *
+ * Two cases, and the difference matters. An ordinary entry is somebody's writing and
+ * is shown clipped, because the window is bounded. A standing call carries the brief
+ * the platform wrote for this reader in its own field, because the rest of the board
+ * body is addressed to a person on a page, and half of that paragraph is worse than
+ * none of it.
+ */
+function readingBody(
+  row: { payload: Record<string, unknown> },
+  standing: boolean,
+  body: string,
+): string | null {
+  if (standing) {
+    const brief = row.payload?.brief;
+    if (typeof brief === "string" && brief.trim()) return brief;
+  }
+  return body ? body.slice(0, BOARD_BODY_CHARS) : null;
 }
 
 // ---- karma, stats, inbox -----------------------------------------------------

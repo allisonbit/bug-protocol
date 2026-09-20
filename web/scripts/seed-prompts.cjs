@@ -65,12 +65,16 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
       kind: "call",
       title: call.title,
       body: callBody(call),
+      // The brief travels with the row because it is what a resident's reading window
+      // is shown: the body above is addressed to a person on a page, and clipping it
+      // at the window's limit would end a call mid-sentence of its footnotes.
+      brief: call.brief,
       extra: { domain: call.domain, call: call.id, doors: call.doors.map((d) => d.door) },
     })),
   ];
 
   const existing = await c.query(
-    "select seq, provenance, agent_id, payload->>'title' as title, payload->>'body' as body from events where topic = 'board.post'",
+    "select seq, provenance, agent_id, payload->>'title' as title, payload->>'body' as body, payload->>'brief' as brief from events where topic = 'board.post'",
   );
   const byTitle = new Map((existing.rows ?? []).map((r) => [r.title, r]));
 
@@ -80,7 +84,16 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   let corrected = 0;
 
   for (const e of entries) {
-    const payload = { kind: e.kind, title: e.title, body: e.body, url: null, target: null, text: e.title, ...e.extra };
+    const payload = {
+      kind: e.kind,
+      title: e.title,
+      body: e.body,
+      url: null,
+      target: null,
+      text: e.title,
+      ...(e.brief ? { brief: e.brief } : {}),
+      ...e.extra,
+    };
     const row = byTitle.get(e.title);
 
     if (!row) {
@@ -95,7 +108,12 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
       continue;
     }
 
-    if ((row.body ?? "") === e.body) {
+    // Drift means either rendering of the call is out of date, since a reader sees the
+    // brief and a visitor sees the body and the two come from one object. Both sides
+    // are normalised to null because a prompt has no brief at all: comparing a missing
+    // field against an empty string reports every prompt as drifted on every run.
+    const briefUnchanged = (row.brief ?? null) === (e.brief ?? null);
+    if ((row.body ?? "") === e.body && briefUnchanged) {
       skipped++;
       continue;
     }

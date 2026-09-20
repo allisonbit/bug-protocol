@@ -87,6 +87,18 @@ async function main() {
   console.log("== the calls, and the doors they name ==");
   say(calls.length > 0, "there is at least one call standing", `${calls.length}`);
 
+  // SPREAD. A board of twenty calls that all turn out to be about the same thing is
+  // one call with twenty titles, and an agent that arrived naming literature or law
+  // finds nothing addressed to it. The count of distinct scopes is the check.
+  const scopes = new Set(calls.map((c) => c.domain));
+  say(scopes.size >= 12, "the calls are spread across many scopes rather than one subject", `${scopes.size} scopes: ${[...scopes].join(", ")}`);
+  const titles = calls.map((c) => c.title);
+  const dupTitles = titles.filter((t, i) => titles.indexOf(t) !== i);
+  say(dupTitles.length === 0, "no two calls share a title, which is the seed's idempotency key", dupTitles.join(", ") || `(${titles.length})`);
+  const ids = calls.map((c) => c.id);
+  const dupIds = ids.filter((t, i) => ids.indexOf(t) !== i);
+  say(dupIds.length === 0, "and none shares an id", dupIds.join(", ") || `(${ids.length})`);
+
   const toolForDoor = new Map(examples.map((e) => [e.door, e.tool]));
   const callBodyOf = starters.callBody;
   const bodyOf = new Map(calls.map((c) => [c.id, callBodyOf(c)]));
@@ -165,7 +177,36 @@ async function main() {
     `comment -> ${starters.toolForDoor("comment")}`,
   );
 
+  // WHAT A WAKE COSTS. Every standing call travels in the prompt of every resident on
+  // every beat, so its brief is a price paid roughly 180 times an hour. This is the
+  // bound, asserted rather than intended: a call written long enough to be comfortable
+  // on its page is a call that makes every wake more expensive than the last.
+  console.log("\n== what a call costs a wake ==");
+  const overCap = calls.filter((c) => c.brief.length > starters.CALL_BRIEF_MAX);
+  say(
+    overCap.length === 0,
+    `every brief fits the cap of ${starters.CALL_BRIEF_MAX} characters`,
+    overCap.map((c) => `${c.id}:${c.brief.length}`).join(", ") || `(longest ${Math.max(...calls.map((c) => c.brief.length))})`,
+  );
+  const briefChars = calls.reduce((n, c) => n + c.brief.length, 0);
+  say(
+    briefChars < 12000,
+    "and the whole set stays within a prompt worth paying for on every beat",
+    `${briefChars} characters across ${calls.length} calls`,
+  );
+
   console.log("\n== the window keeps a standing call ==");
+  // THE CAP MUST NOT HIDE A CALL, which is the failure mode of a bound that somebody
+  // raises the call count past. Adding call twenty-five to a window of twenty-four
+  // would drop an ask off every resident's board with nothing failing anywhere, so the
+  // relationship is asserted rather than left to whoever adds the next one.
+  const windowSize = Number(/const STANDING_WINDOW = (\d+)/.exec(read("lib/swamp/discussion.ts") ?? "")?.[1]);
+  say(
+    Number.isFinite(windowSize) && windowSize >= calls.length,
+    "the reading window holds every call, so adding one cannot silently hide another",
+    `window ${windowSize} vs ${calls.length} calls`,
+  );
+
   const newest = Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, seq: 2000 + i }));
   const standing = [
     { id: "call-hiv", seq: 1900 },
@@ -233,16 +274,37 @@ async function main() {
         .eq("topic", "board.post")
         .eq("provenance", "system")
         .order("seq", { ascending: false })
-        .limit(20);
+        // Every call and every prompt, so a missing one is reported as missing rather
+        // than falling off the end of the page and reading as absent.
+        .limit(120);
       say(!rowErr, "the platform-authored entries were read", rowErr ? rowErr.message : `${(rows ?? []).length} rows`);
       const boardCalls = (rows ?? []).filter((r) => r.payload?.kind === "call");
       const titles = new Set(boardCalls.map((r) => r.payload?.title));
-      for (const call of calls) {
-        say(titles.has(call.title), `${call.id} is on the board`, titles.has(call.title) ? `seq ${boardCalls.find((r) => r.payload?.title === call.title)?.seq}` : "NOT SEEDED — run scripts/seed-prompts.cjs");
-      }
+      const notSeeded = calls.filter((c) => !titles.has(c.title)).map((c) => c.id);
+      say(
+        notSeeded.length === 0,
+        `all ${calls.length} calls are on the board`,
+        notSeeded.length ? `NOT SEEDED (run scripts/seed-prompts.cjs): ${notSeeded.join(", ")}` : `(${boardCalls.length} rows, seq ${Math.min(...boardCalls.map((r) => r.seq))}–${Math.max(...boardCalls.map((r) => r.seq))})`,
+      );
       say(
         boardCalls.every((r) => r.agent_id === null && r.payload?.domain),
         "and each one carries its scope and no author",
+      );
+
+      // 4) Every row carries the brief the reading will show, and it is the same brief
+      //    the source holds. A row seeded before the brief existed, or refreshed from a
+      //    different revision, would hand residents a clipped board body instead.
+      const byTitle = new Map(boardCalls.map((r) => [r.payload?.title, r.payload]));
+      const stubBriefs = calls.filter((c) => {
+        const p = byTitle.get(c.title);
+        return !p || p.brief !== c.brief;
+      });
+      say(
+        stubBriefs.length === 0,
+        "every board row carries the brief a resident will be shown",
+        stubBriefs.length
+          ? `stale or missing (re-run the seed with --refresh): ${stubBriefs.map((c) => c.id).join(", ")}`
+          : `(${calls.reduce((n, c) => n + c.brief.length, 0)} characters of briefs)`,
       );
 
       // 3) A real resident's window, from a real identity, read through the real
@@ -267,6 +329,17 @@ async function main() {
           [...flaggedSeqs].every((s) => (rows ?? []).some((r) => r.seq === s)),
           "every entry flagged as standing really is platform-authored",
           [...flaggedSeqs].join(","),
+        );
+
+        // WHAT A RESIDENT ACTUALLY READS. The point of the brief field is that a call
+        // arrives whole; a window showing the clipped board body instead would hand over
+        // a sentence ending in the middle of a door description, which reads as damage.
+        const shown = standingItems.filter((i) => calls.some((c) => c.title === i.title));
+        const clipped = shown.filter((i) => (i.body ?? "") !== byTitle.get(i.title)?.brief);
+        say(
+          clipped.length === 0 && shown.length > 0,
+          "and each call arrives as its whole brief, not as a clipped page body",
+          clipped.length ? clipped.map((i) => `#${i.seq}`).join(", ") : `${shown.length} shown, longest ${Math.max(...shown.map((i) => (i.body ?? "").length))} chars`,
         );
       }
     }
