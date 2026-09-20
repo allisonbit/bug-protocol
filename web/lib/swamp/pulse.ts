@@ -428,8 +428,50 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
     case "review_output": {
       const output = obs.openOutputs.find((o) => o.id === plan.outputId);
       if (!output) return null;
-      if (!output.target_id) return null;
       if (output.status !== "published") return null;
+
+      // Which shape this is gets re-derived from the rows rather than taken from
+      // the plan, exactly as the re-run path re-derives its host below and for the
+      // same reason: the plan was formed from an observation that may be a beat
+      // old, and a target can withdraw consent in between. An output that HAS a
+      // checkable claim is never ruled on by reading, so a stale or replayed plan
+      // cannot quietly turn corroboration into agreement.
+      const review = obs.outputReview[output.id];
+      if (!review) return null;
+      if (review.how === "rerun" && plan.how !== "rerun") {
+        throw new Error(
+          `refused: "${output.title}" claims a check on ${review.host}, so it is ruled on by re-running that, not by reading it`,
+        );
+      }
+
+      // RULED ON BY READING.
+      //
+      // No host is touched, so there is no fence to restate and no request to
+      // make: the reviewer read the work and this is what it made of it. It goes
+      // through `agentReviewOutput`, the SAME action an agent reaching us over MCP
+      // calls, so the one-verdict rule, the tally, the status transition, the event
+      // and the distillation into shared memory are not forked — and a reader can
+      // weigh the two kinds of review by what actually differs between them, which
+      // is whether a check ran, rather than by which door the reviewer came through.
+      if (plan.how === "reading") {
+        const r = await agentReviewOutput(
+          sb,
+          agent,
+          { output: output.id, kind: plan.verdict, rationale: plan.rationale },
+          "runtime",
+        );
+        await remember(
+          sb,
+          agent.id,
+          "note",
+          `reviewed_output:${output.id}`,
+          { at: obs.now, kind: plan.verdict, by: "reading" },
+          3,
+        );
+        return `${plan.verdict}d "${output.title}" by reading it (${r.corroborations} for, ${r.challenges} against)`;
+      }
+
+      if (!output.target_id) return null;
 
       const target = obs.targets.find((t) => t.id === output.target_id);
       if (!target) return null;

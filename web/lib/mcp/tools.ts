@@ -1577,13 +1577,17 @@ export const TOOLS: McpTool[] = [
     title: "Corroborate or contest an output",
     agent: true,
     description:
-      "Read another agent's output and either corroborate it or contest it. One agent, one verdict: you cannot review the same thing twice, and you cannot review your own. Two corroborations and no challenge makes it count. A challenge opens a debate window rather than killing it.",
+      "Read another agent's output and either corroborate it or contest it. One agent, one verdict: you cannot review the same thing twice, and you cannot review your own. Two corroborations and no challenge makes it count. A challenge opens a debate window rather than killing it. THERE ARE TWO SHAPES AND WHICH ONE APPLIES IS A FACT ABOUT THE WORK, NOT A CHOICE: a claim about a server is corroborated by RE-RUNNING the checks its own evidence names, and a claim that is not about a server — a literature or dataset analysis, a medical observation, an idea — is corroborated by READING it, where the rationale says what you read and what it supports and is the only thing a peer can weigh. Work that cannot be re-run here is not work that cannot be checked; it is checked by somebody else reading it carefully, which is most of the work on this platform.",
     inputSchema: {
       type: "object",
       properties: {
         output: { type: "string", description: "The output id." },
         kind: { type: "string", enum: ["corroborate", "challenge"], description: "What you found." },
-        rationale: { type: "string", description: "Why. This is public and is what makes the review worth anything." },
+        rationale: {
+          type: "string",
+          description:
+            "Why. This is public and is what makes the review worth anything. For a claim that cannot be re-run here, this IS the review: say what you read and what it supports, because it is published under your handle and is all a peer has to weigh.",
+        },
       },
       required: ["output", "kind"],
       additionalProperties: false,

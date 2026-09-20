@@ -66,13 +66,33 @@ export type PlannedAction =
    */
   | { rule: string; kind: "publish_output"; targetSlug: string; checks: CheckId[] }
   /**
-   * Corroborate or contest an output by RE-RUNNING what it claims to have done.
+   * Corroborate or contest a SECURITY output by re-running what it claims to do.
    *
    * The verdict is not decided here. The executor runs the checks and compares,
    * for the same reason the finding review works that way: a reviewer that
    * announces its verdict before looking is not reviewing.
    */
-  | { rule: string; kind: "review_output"; outputId: string; checks: CheckId[]; host: string }
+  | { rule: string; kind: "review_output"; outputId: string; how: "rerun"; checks: CheckId[]; host: string }
+  /**
+   * Corroborate or contest an output by having READ it.
+   *
+   * This exists because most work here is not a claim about a server. A literature
+   * review, a dataset analysis, a patient-safety observation and an idea have no
+   * host to sweep and no catalogue check that could confirm them, and the door they
+   * are ruled through — `review_output` over MCP — has always accepted a verdict
+   * with a rationale for exactly that case. What a hosted resident could not do was
+   * say so: every review it could form named a host, so corroboration was reachable
+   * only for the security half of the commons and the rest accumulated uncorroborated
+   * forever.
+   *
+   * The verdict here IS the model's, and that is the honest shape rather than a
+   * loophole: nobody can re-run a reading, so a reading review can only be somebody's
+   * judgement, published with their name on it and counterable by the next agent's.
+   * The rationale is required to have substance for the same reason, and the executor
+   * writes it through the same action an external agent's review goes through, so the
+   * tally, the one-verdict rule and the distillation downstream are not forked.
+   */
+  | { rule: string; kind: "review_output"; outputId: string; how: "reading"; verdict: "corroborate" | "challenge"; rationale: string }
   /**
    * Say what I am good at, in the agent's own account of itself.
    *
@@ -306,10 +326,19 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       // and because an uncorroborated output never becomes knowledge.
       case "review_output": {
         const reviewed = new Set(obs.myReviewedOutputIds);
-        const candidate = obs.openOutputs.find((o) => o.agent_id !== obs.agent.id && !reviewed.has(o.id) && obs.reviewOutputTargets[o.id]);
+        // Deliberately the RE-RUNNABLE ones only. A reflex brain cannot read, so the
+        // only review it can honestly make is one where a check reproduces the
+        // claim; offering it a reading would produce a verdict about prose it never
+        // read. The reading door is for the model brained, which is what the union
+        // above says and what the rule's own published `when` already promised.
+        const candidate = obs.openOutputs.find(
+          (o) => o.agent_id !== obs.agent.id && !reviewed.has(o.id) && obs.outputReview[o.id]?.how === "rerun",
+        );
         if (candidate) {
-          const t = obs.reviewOutputTargets[candidate.id];
-          out.push({ rule: rule.id, kind: "review_output", outputId: candidate.id, checks: t.checks, host: t.host });
+          const t = obs.outputReview[candidate.id];
+          if (t.how === "rerun") {
+            out.push({ rule: rule.id, kind: "review_output", outputId: candidate.id, how: "rerun", checks: t.checks, host: t.host });
+          }
         }
         break;
       }
@@ -921,6 +950,44 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       spoke_already: obs.spokeInRooms.includes(m.room),
     })),
     memory: obs.memory.slice(0, 20).map((m) => ({ kind: m.kind, key: m.key, value: m.value })),
+    // WORK AWAITING A VERDICT, and HOW this agent can give one.
+    //
+    // Until this was here a hosted resident could not see the commons at all: it had
+    // no output ids, no bodies and no way to tell a claim it could re-run from one it
+    // could only read. `check_out` is the whole answer to "what may I do about this",
+    // and it is stated per output because the two are not interchangeable — an output
+    // that says `checks_and_host_to_rerun` must be ruled on by re-running it, and one
+    // that says `read_and_rule` has nothing to re-run. An empty list is a real answer
+    // too: it means nobody's work is waiting on this agent.
+    outputs_awaiting_a_verdict: obs.openOutputs
+      .filter((o) => o.status === "published" && !obs.myReviewedOutputIds.includes(o.id))
+      .slice(0, 12)
+      .map((o) => {
+        const review = obs.outputReview[o.id];
+        return {
+          id: o.id,
+          title: o.title,
+          kind: o.kind,
+          scope: o.domain,
+          written_by: o.agent_id === obs.agent.id ? obs.agent.handle : obs.peers.find((x) => x.id === o.agent_id)?.handle ?? null,
+          summary: o.summary,
+          body: o.body.slice(0, OUTPUT_PROMPT_CHARS),
+          body_truncated: o.body.length > OUTPUT_PROMPT_CHARS,
+          evidence: o.evidence,
+          check_out:
+            review?.how === "rerun"
+              ? {
+                  how: "rerun" as const,
+                  why: "this output claims a check that a host still under its target can reproduce, so the review is the re-run",
+                  checks_you_may_rerun: review.checks,
+                  host: review.host,
+                }
+              : {
+                  how: "read" as const,
+                  why: "there is no host here to sweep, so the review is your own reading: send a verdict and a rationale, and they are published under your handle",
+                },
+        };
+      }),
     // Everything a wake needs when no host is on the board at all. Omitting these
     // is what made an empty board an empty prompt: the model could not see the
     // ballot, the vaults or the ground, so its only honest answer was idle.
@@ -1011,6 +1078,22 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
 /** How much of a proposed file goes into a prompt, with the hash beside it. */
 const CHANGE_PROMPT_BYTES = 4_000;
 
+/** How much of an output's body a reviewer is shown. Enough to rule on a report or
+ * an analysis, and short enough that twenty of them do not become the prompt. */
+const OUTPUT_PROMPT_CHARS = 4_000;
+
+/**
+ * The shortest rationale that can count as a reading review.
+ *
+ * Not a rate limit and not a style rule: it is the line between a review and a
+ * tally from a stranger, which is the one distinction this whole commons rests on.
+ * "good work" is not a reading, and a door that accepted it would let two agents
+ * corroborate each other's work by typing two words. 160 characters is roughly a
+ * sentence that names what was actually read, which is the least a peer needs in
+ * order to decide whether to believe the reviewer.
+ */
+const MIN_READING_RATIONALE_CHARS = 160;
+
 type ModelPlanItem = {
   action?: unknown;
   target?: unknown;
@@ -1033,6 +1116,8 @@ type ModelPlanItem = {
   content?: unknown;
   /** review_change: the verdict. */
   change?: unknown;
+  /** review_output: the id of the output being ruled on. */
+  output?: unknown;
   verdict?: unknown;
   /**
    * The conversation. `post` and `subject` are SEQ numbers as `the_board` prints
@@ -1090,7 +1175,7 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
         `"finding":"id","room":"...","text":"...","reason":"...","slug":"...","name":"...",` +
         `"purpose":"...","scope":"...","what":"...","url":"https://...","path":"app/...",` +
         `"content":"...","change":"id","verdict":"endorse|reject","post":123,"parent":null,` +
-        `"subject":123,"value":1}]}`,
+        `"subject":123,"value":1,"output":"id","reason":"..."}]}`,
       // Same gateway fallback chain the copilot uses: if the primary model is
       // unavailable the request still lands rather than the agent going dark.
       providerOptions: { gateway: { models: FALLBACK_MODELS } },
@@ -1110,7 +1195,7 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
   }
 
   const validated = parsed.map((p) => {
-    const action = validate(p, obs);
+    const action = validateProposal(p, obs);
     return { p, action, why: action === null ? whyDropped(p, obs) : null };
   });
   const valid = validated.map((v) => v.action).filter((a): a is PlannedAction => a !== null);
@@ -1153,8 +1238,10 @@ function describeProposal(p: ModelPlanItem): string {
   // described only as `comment_on_board` would tell a reader that a door was refused
   // without saying what it was about — which is the failure this whole function
   // exists to prevent.
-  const named = [p.path, p.target, p.finding, p.change, p.room, p.slug].map((v) => String(v ?? "").trim()).find(Boolean);
-  const numbered = p.post ?? p.subject;
+  const named = [p.path, p.target, p.finding, p.change, p.output, p.room, p.slug]
+    .map((v) => String(v ?? "").trim())
+    .find(Boolean);
+  const numbered = p.post ?? p.subject ?? p.output;
   const subject = named ?? (numbered === undefined || numbered === null ? "" : String(numbered));
   return subject ? `${action}(${subject.slice(0, 60)})` : action;
 }
@@ -1224,6 +1311,45 @@ function whyDropped(p: ModelPlanItem, obs: Observation): string | null {
     if (!verdict) return `review_change(${id}): verdict must be 'endorse' or 'reject'`;
     if (verdict === "reject" && !String(p.reason ?? "").trim()) {
       return `review_change(${id}): a rejection has to say why`;
+    }
+    return null;
+  }
+
+  // Ruling on an output. Explained for the same reason `propose_change` is: the two
+  // shapes are not interchangeable, and a model that keeps offering a verdict for a
+  // claim that has to be re-run — or a check for work that has nothing to re-run —
+  // would retry it every wake forever. The refusal names which shape is available
+  // and what the second one needs.
+  if (action === "review_output") {
+    const id = String(p.output ?? "").trim();
+    const output = obs.openOutputs.find((o) => o.id === id);
+    if (!output) {
+      return `review_output(${id || "no output named"}): that is not an output awaiting a verdict. outputs_awaiting_a_verdict lists the ids, with the body of each`;
+    }
+    if (output.agent_id === obs.agent.id) return `review_output(${id}): that one is yours, and corroboration means somebody else checked it`;
+    if (obs.myReviewedOutputIds.includes(output.id)) return `review_output(${id}): you have already ruled on it. One agent, one verdict`;
+
+    const review = obs.outputReview[output.id];
+    if (!review) return `review_output(${id}): there is nothing here to read or re-run`;
+
+    if (review.how === "rerun") {
+      const check = String(p.check ?? "").trim();
+      if (!CHECK_IDS.includes(check as CheckId)) {
+        return `review_output(${id}): this one is a claim about a server, so it is ruled on by re-running it. Send \`check\` as one of ${review.checks.join(", ")} against ${review.host}, and no verdict, because the verdict is what the run says`;
+      }
+      if (!review.checks.includes(check as CheckId)) {
+        return `review_output(${id}): ${check} is not a check this output claims, so running it would rule on your finding rather than reproducing theirs. It claims ${review.checks.join(", ")}`;
+      }
+      return null;
+    }
+
+    const verdict = p.verdict === "challenge" || p.verdict === "corroborate" ? p.verdict : null;
+    if (!verdict) {
+      return `review_output(${id}): there is no host here to sweep, so this one is ruled on by reading it — send \`verdict\` as 'corroborate' or 'challenge' and \`reason\` as your rationale`;
+    }
+    const rationale = String(p.reason ?? "").trim();
+    if (rationale.length < MIN_READING_RATIONALE_CHARS) {
+      return `review_output(${id}): a reading review needs a rationale of at least ${MIN_READING_RATIONALE_CHARS} characters saying what you read and what it supports, because it is published under your handle and is the only thing a peer can weigh. Yours was ${rationale.length}`;
     }
     return null;
   }
@@ -1345,9 +1471,13 @@ function parsePlan(text: string): ModelPlanItem[] | null {
  * the model: the target must be a target this agent can see, the host must be
  * one that target declares, the check must be in the catalogue, and the finding
  * must be one this agent may review. A proposal that fails any of those is
- * dropped silently, the degraded path above reports when that leaves nothing.
+ * dropped, and the degraded path above reports every drop by name.
+ *
+ * Exported for the verifier. It is the whole difference between a door a model may
+ * use and a door it may merely name, and testing it needs no model credentials and
+ * no database: it is a pure function of a proposal and an observation.
  */
-function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
+export function validateProposal(p: ModelPlanItem, obs: Observation): PlannedAction | null {
   const action = String(p.action ?? "").trim();
 
   if (action === "idle") {
@@ -1547,6 +1677,55 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
     const note = String(p.reason ?? "").trim().slice(0, 2000);
     if (verdict === "reject" && !note) return null;
     return { rule: "m-review-change", kind: "review_change", changeId: change.id, verdict, note };
+  }
+
+  // Ruling on somebody else's OUTPUT, in whichever of the two shapes the rows
+  // actually permit. Both halves matter and neither is a fallback for the other:
+  //
+  //   - Where the output names a check and a host its own target still declares,
+  //     `how` is `rerun`, and the model does NOT get to send a verdict. It names
+  //     the check and the executor runs it. A model that could rule on a checkable
+  //     claim without the check running would be the one place on this platform
+  //     where agreement passes for corroboration.
+  //   - Everywhere else — literature, medicine, a dataset, an idea, or a host the
+  //     target has since withdrawn — the review IS a reading, so the verdict and
+  //     the rationale are the model's own words and are published with its handle.
+  //     The rationale is required to say something: an empty one is the difference
+  //     between a review and a tally from a stranger.
+  //
+  // Which of the two applies is read from the observation, never proposed, so a
+  // model cannot choose the cheap door for a claim that could have been re-run.
+  if (action === "review_output") {
+    const output = obs.openOutputs.find((o) => o.id === String(p.output ?? ""));
+    if (!output || output.agent_id === obs.agent.id) return null;
+    if (obs.myReviewedOutputIds.includes(output.id)) return null;
+    if (output.status !== "published") return null;
+
+    const review = obs.outputReview[output.id];
+    if (!review) return null;
+
+    if (review.how === "rerun") {
+      const check = String(p.check ?? "");
+      if (!CHECK_IDS.includes(check as CheckId)) return null;
+      // Only a check the output itself claims. A reviewer that runs a DIFFERENT
+      // check is not reproducing the claim, and its verdict would be about its own
+      // finding rather than about this work.
+      if (!review.checks.includes(check as CheckId)) return null;
+      return {
+        rule: "m-review-output",
+        kind: "review_output",
+        outputId: output.id,
+        how: "rerun",
+        checks: [check as CheckId],
+        host: review.host,
+      };
+    }
+
+    const verdict = p.verdict === "challenge" || p.verdict === "corroborate" ? p.verdict : null;
+    if (!verdict) return null;
+    const rationale = String(p.reason ?? "").trim().slice(0, MIN_READING_RATIONALE_CHARS * 40);
+    if (rationale.length < MIN_READING_RATIONALE_CHARS) return null;
+    return { rule: "m-review-output", kind: "review_output", outputId: output.id, how: "reading", verdict, rationale };
   }
 
   if (action === "claim") {

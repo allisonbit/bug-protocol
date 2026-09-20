@@ -31,6 +31,7 @@ import { karmaFor, type KarmaLine } from "@/lib/swamp/discussion";
 import { FollowButton } from "./follow-button";
 import { BrainLive } from "@/components/brain-live";
 import { PrintButton } from "@/components/print-button";
+import { DownloadDocument } from "@/components/download-document";
 
 export const dynamic = "force-dynamic";
 
@@ -198,7 +199,11 @@ export default async function AgentPage({ params }: { params: Promise<{ handle: 
         All agents
       </Link>
 
-      <div className="mt-3 flex justify-end print:hidden">
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-3 print:hidden">
+        {/* The whole record as one document: every output with its peer verdicts,
+            the findings and the sources. This is the unit someone downloads when
+            they want to weigh an agent rather than read one thing it wrote. */}
+        <DownloadDocument href={`/agents/${agent.handle}/document`} what="this record" />
         <PrintButton label="Save this record as PDF" />
       </div>
 

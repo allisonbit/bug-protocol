@@ -59,6 +59,17 @@ export type OpenMeeting = {
 };
 
 /**
+ * How one open output can be ruled on at all, decided from the rows.
+ *
+ * `rerun` is the security shape and carries what the re-run needs, already
+ * filtered to the catalogue and to a host the output's own target still declares.
+ * `reading` is every other kind of work: the reviewer reads the thing and says
+ * what it made of it, with a rationale, through the same door an agent reaching us
+ * over MCP has always used.
+ */
+export type OutputReview = { how: "rerun"; checks: CheckId[]; host: string } | { how: "reading" };
+
+/**
  * A proposal a resident can put a ballot on.
  *
  * The payload travels with it because a brain may not act on a title: whether a
@@ -241,14 +252,28 @@ export type Observation = {
   /** Output ids this agent has already ruled on. One agent, one verdict. */
   myReviewedOutputIds: string[];
   /**
-   * What a re-run needs, parsed from an output's evidence: which checks it claims
-   * to have run, and against which host.
+   * HOW this agent can rule on each open output, which is not one question.
    *
-   * Read from the base table and validated rather than trusted, because evidence
-   * is agent-authored. The host is re-derived against the output's own target
-   * before any request goes out, exactly as the finding review path does.
+   * A security output is corroborated by RE-RUNNING what it says it did, and that
+   * is only possible while the output names a check and a host its own target still
+   * declares — consent is re-derived here, not read once from evidence.
+   *
+   * Everything else is ruled on by READING it. That is not a weaker door invented
+   * for convenience: most work on this platform is not checkable by a request. A
+   * literature claim, a patient-safety observation, a dataset analysis and an idea
+   * have no host to sweep, and `review_output` over MCP has always accepted a
+   * verdict with a rationale for exactly those. What a hosted resident lacked was
+   * not the right, it was the ability to express it: the only review their planner
+   * could form named a host and a catalogue check, so a resident could corroborate
+   * a DMARC finding and could not corroborate anything else, forever.
+   *
+   * The line between the two is drawn from the rows rather than chosen: re-runnable
+   * means a catalogue check and a host that this target still declares, and every
+   * other open output falls to reading. A re-run is never traded for a reading,
+   * because the platform's whole claim is that it can tell corroboration from
+   * agreement.
    */
-  reviewOutputTargets: Record<string, { checks: CheckId[]; host: string }>;
+  outputReview: Record<string, OutputReview>;
   /**
    * What this agent says it is good at. Its own account of itself, unedited, and
    * empty for an agent that has never said. Rule r14 reads this and nothing else:
@@ -723,7 +748,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     myPublishedTargets: [...new Set(((myOutputsRes.data as { target_id: string }[] | null) ?? []).map((r) => r.target_id))],
     openOutputs: (openOutputsRes.data as Output[] | null) ?? [],
     myReviewedOutputIds: ((myOutputReviewsRes.data as { output_id: string }[] | null) ?? []).map((r) => r.output_id),
-    reviewOutputTargets: collectOutputReviewTargets(openOutputsRes.data),
+    outputReview: collectOutputReview(openOutputsRes.data, targets),
     mySkills: (mySkillsRes.data as MemorySkill[] | null) ?? [],
     hypotheses: (hypothesesRes.data as MemoryHypothesis[] | null) ?? [],
     unansweredArrival,
@@ -923,14 +948,15 @@ function collectReviewTargets(rows: unknown): Record<string, { check: CheckId; h
 }
 
 /**
- * What a re-run of an OUTPUT needs: the checks it claims to have run, and the
- * host. Both come out of agent-authored evidence, so both are validated rather
- * than trusted.
+ * What a re-run of an OUTPUT would need: the checks it claims to have run, and
+ * the host. Both come out of agent-authored evidence, so both are validated
+ * rather than trusted.
  *
  * The list is intersected with the catalogue, so an output cannot name a check
- * that does not exist and have the runtime try to run it. The host is not checked
- * for scope here; the executor re-derives that against the output's own target
- * immediately before any request, which is where it can actually refuse.
+ * that does not exist and have the runtime try to run it. Whether the host is one
+ * this platform may touch is NOT decided here — that is re-derived against the
+ * output's own target at the point of use, because that is where it can actually
+ * refuse, and a host the target no longer declares withdraws consent retroactively.
  */
 function pickOutputReviewTarget(evidence: unknown): { checks: CheckId[]; host: string } | null {
   const ev = evidence && typeof evidence === "object" && !Array.isArray(evidence) ? (evidence as Record<string, unknown>) : {};
@@ -946,14 +972,40 @@ function pickOutputReviewTarget(evidence: unknown): { checks: CheckId[]; host: s
   return { checks, host: h };
 }
 
-/** `pickOutputReviewTarget` across the rows, keyed by output id. */
-function collectOutputReviewTargets(rows: unknown): Record<string, { checks: CheckId[]; host: string }> {
-  const out: Record<string, { checks: CheckId[]; host: string }> = {};
+/**
+ * For each open output, the ONE way this agent can rule on it.
+ *
+ * Exported so the verifier can pin the derivation without a database: which shape
+ * an output gets is the load-bearing decision behind the whole door, and it is pure
+ * arithmetic over evidence and a target.
+ *
+ * Re-runnable is a fact about three things at once, and every one of them is read
+ * live: the output's evidence must name a catalogue check and a host, the output
+ * must belong to a target, and that target must still declare the host. Anything
+ * else — no evidence, no target, a target that no longer declares the host, an
+ * output about literature or medicine with nothing to sweep — is ruled on by
+ * reading. And an output that IS re-runnable is never downgraded to a reading,
+ * which is why the branches are ordered the way they are rather than merged.
+ */
+export function collectOutputReview(rows: unknown, targets: Target[]): Record<string, OutputReview> {
+  const out: Record<string, OutputReview> = {};
   for (const row of Array.isArray(rows) ? rows : []) {
-    const r = row as { id?: unknown; evidence?: unknown };
+    const r = row as { id?: unknown; evidence?: unknown; target_id?: unknown };
     if (typeof r.id !== "string") continue;
+
     const pick = pickOutputReviewTarget(r.evidence);
-    if (pick) out[r.id] = pick;
+    const target =
+      typeof r.target_id === "string" ? targets.find((t) => t.id === r.target_id) : undefined;
+    const declared = target ? (target.domains ?? []).map((d) => d.trim().toLowerCase()) : [];
+
+    // EVERY open output gets an entry, and the `reading` branch is the default
+    // rather than an afterthought. An output published with no evidence at all is
+    // the ordinary case for work that is not about a server — the medical dossiers
+    // and literature reviews arrive with `evidence: {}` — and skipping those was
+    // the bug this map was written to fix: they were absent from the map, so the
+    // planner dropped every proposal to rule on them and the commons sat
+    // uncorroborated while looking, from outside, exactly like an idle swarm.
+    out[r.id] = pick && declared.includes(pick.host) ? { how: "rerun", checks: pick.checks, host: pick.host } : { how: "reading" };
   }
   return out;
 }

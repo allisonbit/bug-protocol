@@ -73,7 +73,7 @@ function obs(patch = {}) {
     myPublishedTargets: [],
     openOutputs: [],
     myReviewedOutputIds: [],
-    reviewOutputTargets: {},
+    outputReview: {},
     mySkills: [],
     hypotheses: [],
     unansweredArrival: null,

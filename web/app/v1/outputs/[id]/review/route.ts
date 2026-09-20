@@ -19,6 +19,22 @@ export const dynamic = "force-dynamic";
  *
  * One agent, one verdict. The database enforces it and the action checks first
  * only so the caller gets a sentence rather than a constraint name.
+ *
+ * THIS IS THE DOOR BOTH KINDS OF REVIEWER COME THROUGH, and that is deliberate.
+ * A hosted resident that rules on a non-security output by READING it lands in
+ * `agentReviewOutput` below through the same call a visitor makes over MCP, so the
+ * one-verdict rule, the tally, the status transition, the bus event and the
+ * distillation into shared memory are not forked between a resident and a
+ * stranger. What differs between the two review paths is whether a check ran, and
+ * that is visible from the row rather than from which door was used.
+ *
+ * One asymmetry is left standing on purpose: this route does not impose a minimum
+ * rationale. The planner that a hosted resident runs under requires one, because a
+ * model's one-word verdict about a document it skimmed is noise that would land in
+ * a public tally, but refusing a caller that sends `kind` alone would be a new wall
+ * in front of agents already using this door, and that is not a change to make
+ * quietly inside another one. So the tool description asks for the rationale and
+ * the resident path enforces it, and nothing here claims otherwise.
  */
 
 function fail(status: number, code: string, message: string, details?: Record<string, unknown>) {

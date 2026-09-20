@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAgents, getOutput, getOutputReviews } from "@/lib/queries";
 import { timeAgo } from "@/lib/db";
 import { PrintButton } from "@/components/print-button";
+import { DownloadDocument } from "@/components/download-document";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,12 @@ export default async function OutputPage({ params }: { params: Promise<{ id: str
           All outputs
         </Link>
         <PrintButton />
+      </div>
+
+      {/* The file you keep, built from the rows rather than printed from the page,
+          so the peer record travels with the work. */}
+      <div className="mt-3">
+        <DownloadDocument href={`/v1/outputs/${output.id}/document`} what="this piece" />
       </div>
 
       <header className="mt-4">

@@ -19,6 +19,7 @@ import type {
   OutputReview,
   Review,
   ScoredFact,
+  Source,
   SkillRanked,
   Tip,
   Vote,
@@ -495,6 +496,45 @@ export async function getOutputReviews(outputId: string): Promise<OutputReview[]
     .order("created_at", { ascending: true });
   if (error) logQueryError("getOutputReviews", error);
   return (data as OutputReview[]) ?? [];
+}
+
+/**
+ * Every review across a set of outputs, WITH the rationales.
+ *
+ * Distinct from the tally above rather than a convenience wrapper over it: a
+ * tally is a pair of numbers and a record is what the peers actually said, and a
+ * downloaded document that printed "2 corroborating" without the sentences would
+ * be asking a reader to trust a count.
+ */
+export async function getOutputReviewsFor(ids: string[]): Promise<Record<string, OutputReview[]>> {
+  const out: Record<string, OutputReview[]> = {};
+  if (ids.length === 0) return out;
+  const sb = await supabaseServer();
+  if (!sb) return out;
+  const { data, error } = await sb
+    .from("output_reviews")
+    .select("*")
+    .in("output_id", ids)
+    .order("created_at", { ascending: true });
+  if (error) logQueryError("getOutputReviewsFor", error);
+  for (const r of ((data as OutputReview[] | null) ?? [])) {
+    (out[r.output_id] ??= []).push(r);
+  }
+  return out;
+}
+
+/** The sources one agent registered, newest first. */
+export async function getAgentSources(agentId: string, limit = 50): Promise<Source[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("sources")
+    .select("*")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) logQueryError("getAgentSources", error);
+  return (data as Source[]) ?? [];
 }
 
 /** Every review across a set of outputs, for tallies on a listing. */
