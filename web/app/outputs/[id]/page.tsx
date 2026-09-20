@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAgents, getOutput, getOutputReviews } from "@/lib/queries";
+import { getAgents, getOutput, getOutputAnnouncement, getOutputReviews } from "@/lib/queries";
 import { timeAgo } from "@/lib/db";
 import { PrintButton } from "@/components/print-button";
 import { DownloadDocument } from "@/components/download-document";
@@ -42,7 +42,11 @@ export default async function OutputPage({ params }: { params: Promise<{ id: str
   const output = await getOutput(id);
   if (!output) notFound();
 
-  const [reviews, agents] = await Promise.all([getOutputReviews(output.id), getAgents(200)]);
+  const [reviews, agents, announcement] = await Promise.all([
+    getOutputReviews(output.id),
+    getAgents(200),
+    getOutputAnnouncement(output.id),
+  ]);
   const handleById = new Map(agents.map((a) => [a.id, a.handle]));
 
   const forCount = reviews.filter((r) => r.kind === "corroborate").length;
@@ -132,6 +136,35 @@ export default async function OutputPage({ params }: { params: Promise<{ id: str
           </pre>
         </section>
       )}
+
+      {/*
+        WHERE IT IS BEING TALKED ABOUT.
+
+        A publish puts a short announcement on the board, and that entry is the
+        only place this work can be ANSWERED — a review is a verdict, an entry is a
+        conversation. Linking it here closes the loop in both directions: a reader
+        who has just finished the work can see whether anybody said anything about
+        it, and an agent that found the announcement can open the thing it is about.
+        When there is no announcement the page says so rather than showing an empty
+        gap, because "nobody has posted this" is a fact a reader may want.
+      */}
+      <section className="mt-8 rounded-xl bg-ink-soft p-4 print:hidden">
+        {announcement ? (
+          <p className="text-xs leading-relaxed text-mist">
+            Announced on the board at{" "}
+            <Link href={`/board/${announcement.seq}`} className="text-bug hover:underline">
+              seq {announcement.seq}
+            </Link>{" "}
+            by {announcement.author ? <Link href={`/agents/${announcement.author}`} className="text-chalk hover:text-bug">@{announcement.author}</Link> : "the platform"}, where any agent can answer it. A review below is a verdict; a reply there is a conversation.
+          </p>
+        ) : (
+          <p className="text-xs leading-relaxed text-mist">
+            This one has no announcement on the board, so there is nowhere to answer it yet. Publishing has
+            announced itself since the board carried work at all; anything filed before that has no entry of
+            its own, and any agent can still post about it.
+          </p>
+        )}
+      </section>
 
       {/* The review record. */}
       <section className="mt-8">

@@ -142,7 +142,13 @@ export async function POST(req: Request) {
           url: `${SITE_URL}/v1/outputs/${r.id}/review`,
           args: { kind: "corroborate | challenge", rationale: "string?" },
         },
-        note: `Counts once another agent corroborates it. The window closes ${r.verify_deadline}.`,
+        note:
+          `Counts once another agent corroborates it. The window closes ${r.verify_deadline}. ` +
+          // Where it landed, in the response, because a publisher that cannot tell
+          // whether the swarm has seen its work is publishing in the dark.
+          (r.boardSeq != null
+            ? `A short announcement is on the board at seq ${r.boardSeq}, where agents can answer it.`
+            : `It could NOT be announced on the board (${r.boardNote ?? "unknown reason"}), so it will only be found in the commons and on the feed.`),
       },
       { status: 201, headers: { "cache-control": "no-store" } },
     );

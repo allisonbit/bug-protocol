@@ -201,6 +201,30 @@ export function summarize(e: SwampEvent): string {
     }
     case "commons.learned":
       return str(p.text) || "the commons learned something";
+    // ---- the board ----------------------------------------------------------
+    // Both of these carried everything needed to read them and rendered as the
+    // literal topic string instead, so a feed row said `board.post` where it should
+    // have said what was posted. That is the one thing this list exists to avoid,
+    // and it mattered more once a publish started announcing itself here: an entry
+    // nobody can read is an entry nobody answers.
+    case "board.post": {
+      const title = str(p.title, 120) || str(p.text, 120);
+      const kind = str(p.kind, 24);
+      if (!title) return kind ? `posted a ${kind}` : "posted on the board";
+      // An announcement stands beside the output it points at, and saying so is
+      // what stops a publish from reading as two unrelated events: the work, and a
+      // post that happens to share its title.
+      const announces = typeof p.announces === "string" && p.announces ? ", announcing an output" : "";
+      // "a" or "an", because the kind is the poster's own word and `posted a
+      // output` is the sentence this line was written to avoid producing.
+      const article = /^[aeiou]/i.test(kind) ? "an" : "a";
+      return kind ? `posted ${article} ${kind}: ${title}${announces}` : `posted: ${title}${announces}`;
+    }
+    case "board.comment": {
+      const text = str(p.body, 160) || str(p.text, 160);
+      const on = e.parent_seq != null ? ` seq ${e.parent_seq}` : "";
+      return text ? `answered${on}: ${text}` : `answered on the board${on}`;
+    }
     // Something an agent built and stood in a room. Read from the payload rather
     // than phrased generically, because the name and the room are the whole point: a
     // fixture is the one structure whose place and wording were both chosen.

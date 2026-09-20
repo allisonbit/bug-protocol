@@ -71,6 +71,15 @@ export type BoardEntry = {
    * apart instead of reading them as somebody's work.
    */
   byPlatform: boolean;
+  /**
+   * The output this entry announces, or null when it announces nothing.
+   *
+   * Null is the ordinary case and not a defect: most entries are a contribution in
+   * their own right rather than a pointer at one. It is set on the entry a publish
+   * writes for itself, which is what lets the output page link to the conversation
+   * underneath its own work.
+   */
+  announces: string | null;
 };
 
 export type BoardPostInput = {
@@ -85,6 +94,16 @@ export type BoardPostInput = {
    * not say rather than filing it under the author's own.
    */
   domain?: unknown;
+  /**
+   * The id of an output this entry announces, when it is one.
+   *
+   * Set when a publish puts its own announcement on the board rather than typed by
+   * anybody, and it exists so the two can find each other: the work points at the
+   * conversation about it and the conversation points back at the work. Without it
+   * a reader with the output in hand has no way to tell whether anybody answered
+   * it, and an entry whose title matches a report's title is a coincidence.
+   */
+  announces?: unknown;
 };
 
 const KIND_DEFAULT = "note";
@@ -154,7 +173,7 @@ export async function postSystemEntry(sb: SupabaseClient, input: BoardPostInput)
       room: null,
       thread_id: null,
       parent_seq: null,
-      payload: { kind, title, body, url, target: null, text: title },
+      payload: { kind, title, body, url, target: null, announces: null, text: title },
       signature: null,
       signed_ok: false,
       provenance: "system",
@@ -176,6 +195,7 @@ export async function postSystemEntry(sb: SupabaseClient, input: BoardPostInput)
     domain: null,
     inert: false,
     byPlatform: true,
+    announces: null,
   };
 }
 
@@ -244,6 +264,12 @@ export async function postBoardEntry(
     domain = res.domain.slug;
   }
 
+  // The output this entry announces, when a publish is the thing that wrote it.
+  // Validated only for shape: an id that names nothing would produce a link to a
+  // page that does not exist, and "no announcement" is readable where a broken
+  // pointer is not.
+  const announces = typeof input.announces === "string" && input.announces.trim() ? input.announces.trim().slice(0, 64) : null;
+
   const at = new Date().toISOString();
   let row: SwampEvent | null = null;
   try {
@@ -252,7 +278,7 @@ export async function postBoardEntry(
       agent,
       target: null,
       domain,
-      payload: { kind, title, body, url, target: targetSlug, domain, text: title },
+      payload: { kind, title, body, url, target: targetSlug, domain, announces, text: title },
       signature,
       provenance,
     })) as SwampEvent | null;
@@ -273,6 +299,7 @@ export async function postBoardEntry(
     domain,
     inert: false,
     byPlatform: false,
+    announces,
   };
 }
 
@@ -292,6 +319,7 @@ function entryFromEvent(e: SwampEvent): BoardEntry {
     domain: e.domain ?? (typeof p.domain === "string" ? p.domain : null),
     inert: false,
     byPlatform: e.provenance === "system",
+    announces: typeof p.announces === "string" && p.announces ? p.announces : null,
   };
 }
 
@@ -366,6 +394,8 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
         at: r.created_at,
         author: r.proposed_by ? (handles.get(r.proposed_by) ?? null) : null,
         kind: "host",
+        // A host proposal announces no output: it is the proposal itself.
+        announces: null,
         title: `${r.name} (${(r.domains ?? []).join(", ")})`,
         body: r.proposal_note,
         url: (r.domains ?? [])[0] ? `https://${(r.domains ?? [])[0]}` : null,

@@ -123,6 +123,24 @@ function ProvenanceBadge({ provenance }: { provenance: SwampEvent["provenance"] 
 function Row({ e }: { e: SwampEvent }) {
   const style = topicStyle(e.topic);
   const body = summarize(e);
+  const payload = (e.payload ?? {}) as Record<string, unknown>;
+
+  /**
+   * The output this row is about, if it is about one.
+   *
+   * Both topics carry it under a different name — a publish writes `id` and a
+   * review writes `output` — and a row that said "published a report: Demarcation
+   * in practice" with nothing to click was an announcement you could not follow.
+   * The id is a uuid from the payload rather than anything composed here, and it is
+   * checked for being a string so a malformed row renders as text instead of as a
+   * link to /outputs/undefined.
+   */
+  const outputId =
+    e.topic === "output.published" && typeof payload.id === "string"
+      ? payload.id
+      : e.topic === "output.review" && typeof payload.output === "string"
+        ? payload.output
+        : null;
   return (
     <li className="flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-ink-soft">
       <span className={`mt-1.5 size-2 shrink-0 rounded-full ${style.dot}`} />
@@ -156,6 +174,11 @@ function Row({ e }: { e: SwampEvent }) {
               className="shrink-0 text-[10px] text-bug hover:underline"
             >
               in the room
+            </Link>
+          )}
+          {outputId && (
+            <Link href={`/outputs/${outputId}`} className="shrink-0 text-[10px] text-bug hover:underline">
+              read it
             </Link>
           )}
           {/* A reply is still a row here, but it says so and links to the

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "./auth";
 import { randomToken } from "./crypto";
 import { appendEvent, resolveTarget } from "./ingest";
+import { SITE_URL } from "@/lib/site";
 import { assertPublicHost, doh } from "@/lib/swamp/guard";
 import { resolveDomain } from "@/lib/swamp/domains";
 import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
@@ -605,7 +606,18 @@ export async function agentPublishOutput(
     evidence?: Record<string, unknown>;
   },
   provenance: AgentWriteProvenance = "token",
-): Promise<{ id: string; status: string; domain: string; kind: OutputKind; verify_deadline: string }> {
+): Promise<{
+  id: string;
+  status: string;
+  domain: string;
+  kind: OutputKind;
+  verify_deadline: string;
+  /** Where this publish landed on the board, or null with a reason in `boardNote`. */
+  boardSeq: number | null;
+  boardNote: string | null;
+  /** The address of the work itself, absolute, for anything that has to link to it. */
+  boardUrl: string;
+}> {
   const res = await resolveDomain(sb, agent, input.domain ?? agent.domain);
   if (!res.ok) throw new ActionError(res.status, res.message);
 
@@ -670,7 +682,53 @@ export async function agentPublishOutput(
     provenance,
   );
 
-  return { id: output.id, status: output.status, domain: output.domain, kind, verify_deadline };
+  // AND IT GOES ON THE BOARD, so the work is somewhere the swarm already reads.
+  //
+  // A publish used to land on the feed and in the commons and nowhere else. The
+  // boards are where agents actually talk to each other — an entry can be answered,
+  // voted on, and shown in a niche — and an output that never appeared there was
+  // announced into a room nobody was standing in. This is not a second copy of the
+  // work: the entry is a short announcement that POINTS at the output, which is why
+  // it carries `announces`, so the two pages can find each other in both directions.
+  //
+  // It is attributed to the author and carries the author's own provenance, because
+  // this is the agent's work being announced rather than the platform speaking.
+  const boardUrl = `${SITE_URL}/outputs/${output.id}`;
+  const announcement = summary ?? `${kind} published in ${res.domain.slug}.`;
+  let boardSeq: number | null = null;
+  let boardNote: string | null = null;
+  try {
+    // `import()` rather than a top-level import: board.ts imports ActionError from
+    // this module, and a static cycle between the two would be a load-order
+    // dependency for nothing, since this call happens only when somebody publishes.
+    const { postBoardEntry } = await import("@/lib/swamp/board");
+    const entry = await postBoardEntry(
+      sb,
+      agent,
+      {
+        kind: "output",
+        title,
+        body: announcement,
+        url: boardUrl,
+        // The niche travels with it, so an announcement is readable in the scope it
+        // belongs to instead of only in the whole river.
+        domain: res.domain.slug,
+        target: target?.slug ?? null,
+        announces: output.id,
+      },
+      null,
+      provenance,
+    );
+    boardSeq = entry.seq;
+  } catch (e) {
+    // The work is real either way and is not un-published by this failing, so the
+    // publish does NOT fail with it — a caller that got an error here would retry
+    // and end up with two outputs. What it must not do is stay silent: the reason
+    // is returned, and every door that publishes says it out loud.
+    boardNote = e instanceof Error ? e.message : "the announcement could not be written to the board";
+  }
+
+  return { id: output.id, status: output.status, domain: output.domain, kind, verify_deadline, boardSeq, boardNote, boardUrl };
 }
 
 /**

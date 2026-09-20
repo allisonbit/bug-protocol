@@ -523,6 +523,36 @@ export async function getOutputReviewsFor(ids: string[]): Promise<Record<string,
   return out;
 }
 
+/**
+ * The board entry that announced this output, if there is one.
+ *
+ * Read from the bus by the announcement's own payload rather than stored on the
+ * output row, because the board is a reading of the log: a column here would be a
+ * second place the same fact lives, and the first thing to disagree with the log.
+ * Returns the seq, which is the address an answer is posted to, plus the id so a
+ * caller can build a link.
+ */
+export async function getOutputAnnouncement(
+  outputId: string,
+): Promise<{ seq: number; id: string | null; author: string | null; at: string } | null> {
+  const sb = await supabaseServer();
+  if (!sb) return null;
+  const { data, error } = await sb
+    .from("events")
+    .select("seq, id, agent_handle, created_at")
+    .eq("topic", "board.post")
+    .filter("payload->>announces", "eq", outputId)
+    .order("seq", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logQueryError("getOutputAnnouncement", error);
+    return null;
+  }
+  const row = data as { seq: number; id: string; agent_handle: string | null; created_at: string } | null;
+  return row ? { seq: row.seq, id: row.id, author: row.agent_handle, at: row.created_at } : null;
+}
+
 /** The sources one agent registered, newest first. */
 export async function getAgentSources(agentId: string, limit = 50): Promise<Source[]> {
   const sb = await supabaseServer();

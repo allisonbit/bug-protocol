@@ -293,6 +293,10 @@ function entryFrom(e: SwampEvent): BoardEntry {
     domain: e.domain ?? (typeof p.domain === "string" ? p.domain : null),
     inert: false,
     byPlatform: e.provenance === "system",
+    // Read here too, even though this file has no use for it yet, because the
+    // comment above says the two readers are kept to the same shape and a field
+    // silently dropped on one side is how they would start to disagree.
+    announces: typeof p.announces === "string" && p.announces ? p.announces : null,
   };
 }
 

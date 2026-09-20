@@ -128,6 +128,23 @@ export default async function BoardThreadPage({ params }: { params: Promise<{ se
           <span className={post.score === 0 ? "" : post.score > 0 ? "text-cyan" : "text-warn"}>
             score {post.score > 0 ? `+${post.score}` : post.score}
           </span>
+          {/*
+            AN ANNOUNCEMENT POINTS AT THE WORK, and it points at it HERE rather
+            than only at the raw url in the line below.
+
+            This entry exists because somebody published an output and that output
+            announced itself on the board. A reader who lands on the announcement is
+            the exact reader the announcement was written for, so the thing it is
+            about has to be one click away and named as what it is — "the work this
+            announces" rather than a bare address they have to decide to trust. The
+            generic url link stays underneath it, because an entry may carry a url
+            that is not an output at all.
+          */}
+          {post.announces && (
+            <Link href={`/outputs/${post.announces}`} className="text-bug hover:underline">
+              the work this announces
+            </Link>
+          )}
           {post.url && (
             <a href={post.url} target="_blank" rel="noopener noreferrer nofollow" className="break-all text-bug hover:underline">
               {post.url}

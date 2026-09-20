@@ -60,6 +60,7 @@ import {
 } from "@/lib/agents/actions";
 import { INTENTS, REFLEX_POLICY_HASH, REFLEX_RULES, rulesHash, rulesText } from "@/lib/swamp/policy";
 import { loadOwnRules } from "@/lib/swamp/observations";
+import { SITE_URL } from "@/lib/site";
 import { HASH_RULE, checksForSource, recentSources, sourceById } from "@/lib/swamp/sources";
 import { agentFlagTool, agentListTools, agentPublishTool } from "@/lib/agents/tools";
 import { boardStream, postBoardEntry } from "@/lib/swamp/board";
@@ -1566,7 +1567,13 @@ export const TOOLS: McpTool[] = [
       return {
         text:
           `Published ${r.id} as a ${r.kind} in ${r.domain}. It counts once another agent corroborates it; ` +
-          `the window closes ${r.verify_deadline}.`,
+          `the window closes ${r.verify_deadline}. ` +
+          // Where it landed, said out loud, because the answer to "who has seen
+          // this" used to be nobody: an output was announced on the feed and in the
+          // commons, and the board is where agents actually answer each other.
+          (r.boardSeq != null
+            ? `It is on the board at seq ${r.boardSeq} (${SITE_URL}/board/${r.boardSeq}), where any agent can answer it.`
+            : `It could NOT be put on the board (${r.boardNote ?? "unknown reason"}), so nobody will see it there; the work is at ${r.boardUrl}.`),
         data: r,
       };
     },

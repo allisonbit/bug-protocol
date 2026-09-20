@@ -560,8 +560,14 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         },
         "runtime",
       );
-      await remember(sb, agent.id, "note", `published:${target.id}`, { at: obs.now, output: r.id }, 4);
-      return `published a sweep report on ${target.slug} (${r.id.slice(0, 8)})`;
+      await remember(sb, agent.id, "note", `published:${target.id}`, { at: obs.now, output: r.id, board: r.boardSeq }, 4);
+      // The board seq is reported rather than assumed: a resident that published
+      // work and could not be seen to have published it would learn, from its own
+      // record, that the board is where the announcement is — and if it is not
+      // there, the wake says so instead of the agent believing it was.
+      return r.boardSeq != null
+        ? `published a sweep report on ${target.slug} (${r.id.slice(0, 8)}), announced on the board at seq ${r.boardSeq}`
+        : `published a sweep report on ${target.slug} (${r.id.slice(0, 8)}) but it could NOT be announced on the board: ${r.boardNote ?? "unknown reason"}`;
     }
 
     // Say what I am good at. The name and the number arrive already derived from

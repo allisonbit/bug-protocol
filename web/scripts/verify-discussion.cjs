@@ -108,5 +108,61 @@ for (let i = 0; i < 200; i += 1) faces.add(avatarSvg(`agent-${i}`));
 say(faces.size > 60, "and the drawings actually vary across a swarm", `${faces.size} distinct of 200`);
 say(avatarUrl("buffy", 64) === "/avatar/buffy.svg?size=64", "the url points at the route that serves it", avatarUrl("buffy", 64));
 
+console.log("\n== the feed says what was posted, not which topic it was ==");
+// A row that renders its own topic name is a row a reader cannot act on, and this
+// was live: a board entry appeared on the feed as `board.post`, which is exactly as
+// informative as the timestamp beside it. Two things are pinned here — the two
+// sentences, and the general rule that a topic the feed knows how to LABEL is a
+// topic it must also know how to SAY, so the next topic added cannot arrive with a
+// name and no sentence.
+const { summarize } = require("../lib/agents/feed-render.ts");
+const ev = (topic, payload) => ({ topic, payload, agent_handle: "someone", target_slug: null, thread_id: null, parent_seq: null });
+
+say(
+  summarize(ev("board.post", { kind: "question", title: "Where does the salt live?", text: "Where does the salt live?" })) ===
+    "posted a question: Where does the salt live?",
+  "a board entry reads as what was posted",
+  summarize(ev("board.post", { kind: "question", title: "x", text: "x" })),
+);
+say(
+  summarize(ev("board.post", { kind: "output", title: "A report", announces: "o1" })).includes("announcing an output"),
+  "and an announcement says it is one",
+  summarize(ev("board.post", { kind: "output", title: "A report", announces: "o1" })),
+);
+say(
+  summarize(ev("board.post", { kind: "output", title: "A report", announces: "o1" })).startsWith("posted an output:"),
+  "with the article the word actually takes, since the kind is the poster's own",
+  summarize(ev("board.post", { kind: "output", title: "A report", announces: "o1" })),
+);
+say(
+  summarize(ev("board.post", { kind: "idea", title: "An idea" })).startsWith("posted an idea:"),
+  "and a word starting with a vowel gets 'an'",
+  summarize(ev("board.post", { kind: "idea", title: "An idea" })),
+);
+say(
+  !summarize(ev("board.post", { kind: "note", title: "A note" })).includes("board.post"),
+  "never as the raw topic string",
+);
+say(
+  summarize({ ...ev("board.comment", { body: "It is in the vault." }), parent_seq: 412 }).startsWith("answered seq 412: It is in the vault."),
+  "an answer names the entry it answers and quotes itself",
+  summarize({ ...ev("board.comment", { body: "It is in the vault." }), parent_seq: 412 }),
+);
+
+// The invariant, read off the source because the topic table is not exported.
+const feedSource = require("node:fs").readFileSync(require("node:path").join(__dirname, "../lib/agents/feed-render.ts"), "utf8");
+const styled = [...feedSource.matchAll(/^ {2}"([a-z.]+)": \{ label:/gm)].map((m) => m[1]);
+const said = [...feedSource.matchAll(/case "([a-z.]+)"/g)].map((m) => m[1]);
+const silent = styled.filter((t) => !said.includes(t));
+// Named rather than asserted away: these seven are known and out of scope for this
+// change, and a verifier that failed on them would be red until somebody fixed
+// work nobody asked for. What it does assert is that the list cannot GROW silently.
+const KNOWN_SILENT = ["memory.fact", "memory.verified", "memory.hypothesis", "memory.skill", "memory.meta", "source.claimed", "source.checked"];
+say(
+  silent.every((t) => KNOWN_SILENT.includes(t)),
+  "no topic renders as its own name, beyond the seven already known to",
+  silent.filter((t) => !KNOWN_SILENT.includes(t)).join(", ") || `${silent.length} known, 0 new`,
+);
+
 console.log(`\ndiscussion: ${failed === 0 ? "all checks passed" : `${failed} FAILED`}`);
 process.exitCode = failed === 0 ? 0 : 1;
