@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { uniqueChannelTopic } from "@/lib/supabase/channel-topic";
 import { inspectPick, shortPickTitle, type WorldPick } from "@/lib/world/inspect";
 import { visualFor } from "@/lib/world/mapping";
 import type { SwampEvent } from "@/lib/agents/types";
@@ -410,24 +411,40 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" | "f
       rendererRef.current?.pushEvent(visual);
       void refresh();
     };
-    const channel = sb
-      .channel("swamp-world")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, onEvent)
-      .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claims" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "findings" }, () => void refresh())
-      // Every table a building stands for. Without these, a row would raise its
-      // building on the next heartbeat rather than while a visitor is watching,
-      // and the point of a city is that you can see it being built.
-      .on("postgres_changes", { event: "*", schema: "public", table: "outputs" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "sources" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "targets" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "memory_facts" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "memory_hypotheses" }, () => void refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "world_zones" }, () => void refresh())
-      .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
+    // Unique per subscriber, because a named topic is not a channel: `channel(topic)`
+    // hands back the one that already exists, and `on()` throws on a channel that has
+    // already subscribed. A band can be mounted more than once on a page — the shell
+    // draws one and the chrome draws another — and that must not be an error.
+    let channel: RealtimeChannel;
+    try {
+      channel = sb
+        .channel(uniqueChannelTopic("swamp-world"))
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "events" }, onEvent)
+        .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "claims" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "findings" }, () => void refresh())
+        // Every table a building stands for. Without these, a row would raise its
+        // building on the next heartbeat rather than while a visitor is watching,
+        // and the point of a city is that you can see it being built.
+        .on("postgres_changes", { event: "*", schema: "public", table: "outputs" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "sources" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "targets" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "memory_facts" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "memory_hypotheses" }, () => void refresh())
+        .on("postgres_changes", { event: "*", schema: "public", table: "world_zones" }, () => void refresh())
+        .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
+    } catch {
+      // The drawing keeps its server-rendered state and the band reports itself as
+      // not live, which is the same honest degradation the rest of this file uses.
+      setLive(false);
+      return;
+    }
     return () => {
-      sb.removeChannel(channel);
+      try {
+        void sb.removeChannel(channel);
+      } catch {
+        // Already gone.
+      }
     };
   }, [hidden, refresh]);
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { uniqueChannelTopic } from "@/lib/supabase/channel-topic";
 
 /**
  * A live view of one table.
@@ -18,6 +19,11 @@ import { supabaseBrowser } from "@/lib/supabase/client";
  *
  * If Realtime isn't enabled on the table, or the backend isn't configured, this
  * shows the seed rows and never updates, a graceful degradation, never a fake tick.
+ *
+ * The topic is unique per subscriber for the reason `lib/supabase/channel-topic.ts`
+ * sets out: a named topic is handed back already-subscribed on the second request,
+ * and `on()` throws on it. Two components watching one table is not an error, and
+ * it must not be one.
  */
 export function useLiveRows<T extends Record<string, unknown>>(
   table: string,
@@ -51,21 +57,33 @@ export function useLiveRows<T extends Record<string, unknown>>(
       setRows((prev) => prev.filter((r) => keyRef.current(r) !== k));
     };
 
-    const channel = sb
-      .channel(opts.channel ?? `swamp-${table}`)
-      .on("postgres_changes", { event: "*", schema: "public", table }, (payload: RealtimePostgresChangesPayload<T>) => {
-        if (payload.eventType === "DELETE") {
-          const old = payload.old as T | undefined;
-          if (old && Object.keys(old).length > 0) remove(old);
-          return;
-        }
-        const row = payload.new as T | undefined;
-        if (row) upsert(row);
-      })
-      .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
+    let channel: RealtimeChannel;
+    try {
+      channel = sb
+        .channel(uniqueChannelTopic(opts.channel ?? `swamp-${table}`))
+        .on("postgres_changes", { event: "*", schema: "public", table }, (payload: RealtimePostgresChangesPayload<T>) => {
+          if (payload.eventType === "DELETE") {
+            const old = payload.old as T | undefined;
+            if (old && Object.keys(old).length > 0) remove(old);
+            return;
+          }
+          const row = payload.new as T | undefined;
+          if (row) upsert(row);
+        })
+        .subscribe((status: string) => setLive(status === "SUBSCRIBED"));
+    } catch {
+      // Seeded rows only, and `live` stays false, which is what the caller already
+      // renders as a real-but-not-current view. Nothing is faked, nothing throws.
+      setLive(false);
+      return;
+    }
 
     return () => {
-      sb.removeChannel(channel);
+      try {
+        void sb.removeChannel(channel);
+      } catch {
+        // Already gone; not something a reader needs told about.
+      }
     };
   }, [table, cap, opts.channel]);
 
