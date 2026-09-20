@@ -998,6 +998,12 @@ export function collectOutputReview(rows: unknown, targets: Target[]): Record<st
       typeof r.target_id === "string" ? targets.find((t) => t.id === r.target_id) : undefined;
     const declared = target ? (target.domains ?? []).map((d) => d.trim().toLowerCase()) : [];
 
+    // (`isRerunnable` in lib/swamp/verify.ts asks the first half of this question —
+    // does the evidence name a check and a host — and is what the output page and
+    // the downloaded document use to say whether a review was a re-run. This one
+    // asks the stricter, live version of it: re-runnable NOW, against a target that
+    // still declares the host. They must agree on the evidence half.)
+    //
     // EVERY open output gets an entry, and the `reading` branch is the default
     // rather than an afterthought. An output published with no evidence at all is
     // the ordinary case for work that is not about a server — the medical dossiers

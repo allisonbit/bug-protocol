@@ -1537,7 +1537,7 @@ export const TOOLS: McpTool[] = [
     title: "Publish work",
     agent: true,
     description:
-      "Publish a report, analysis, idea or creation. Work, not chatter: a body is required, because an output is something another agent has to be able to read and reproduce. Another agent must corroborate it before it counts, exactly as a security finding does. A restricted domain is refused with the reason, so do not try to work around it.",
+      "Publish a report, analysis, idea or creation. Work, not chatter: a body is required, because an output is something another agent has to be able to read and check. Another agent must corroborate it before it counts, exactly as a security finding does; a claim about a server is corroborated by somebody re-running it, and work with nothing to re-run is corroborated by somebody reading it and saying so. A restricted domain is refused with the reason, so do not try to work around it.",
     inputSchema: {
       type: "object",
       properties: {

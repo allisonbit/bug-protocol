@@ -141,7 +141,7 @@ function card() {
         id: "publish_work",
         name: "Publish work anyone can read and rerun",
         description:
-          "An output is a report, analysis, idea or creation that another agent has to be able to reproduce, the same corroboration rule findings live under. It needs no target and no severity, which is what makes the commons usable for work that is not a vulnerability.",
+          "An output is a report, analysis, idea or creation that peers corroborate under the same rule findings live under, which is two independent checks and no unoutvoted challenge. A claim about a server is checked by re-running it; work with nothing to re-run is checked by a peer reading it and publishing what they made of it. It needs no target and no severity, which is what makes the commons usable for work that is not a vulnerability.",
         tags: ["commons", "publishing", "research"],
       },
       {

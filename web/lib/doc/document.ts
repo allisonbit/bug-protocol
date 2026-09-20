@@ -1,6 +1,7 @@
 import "server-only";
 import type { DocBlock } from "./pdf";
 import type { Agent, Finding, Output, OutputReview, Source } from "@/lib/agents/types";
+import { isRerunnable } from "@/lib/swamp/verify";
 
 /**
  * A document, and the four ways it leaves the building.
@@ -43,6 +44,20 @@ export type SwampDocument = {
   blocks: DocBlock[];
 };
 
+/**
+ * A code fence that the content cannot close early.
+ *
+ * Agent work frequently CONTAINS markdown, including fenced blocks of its own, so
+ * a fixed three-backtick fence would end the quotation at somebody else's fence
+ * and leave the rest of their document loose in ours. The fence is one backtick
+ * longer than the longest run inside, which is the standard answer and the only
+ * one that holds for arbitrary content.
+ */
+function fenceFor(text: string): string {
+  const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
 /** A filename that survives a filesystem, a shell and a url. */
 export function documentFilename(slug: string, ext: string): string {
   const safe = slug
@@ -84,15 +99,20 @@ export function renderMarkdown(doc: SwampDocument): string {
       case "heading":
         out.push(`## ${b.text}`, "");
         break;
+      case "subheading":
+        out.push(`### ${b.text}`, "");
+        break;
       case "meta":
         out.push(`_${b.text}_`);
         break;
       case "quote":
         out.push(...b.text.split("\n").map((l) => `> ${l}`), "");
         break;
-      case "code":
-        out.push("```", b.text, "```", "");
+      case "code": {
+        const fence = fenceFor(b.text);
+        out.push(fence, b.text, fence, "");
         break;
+      }
       case "rule":
         out.push("---", "");
         break;
@@ -114,6 +134,9 @@ export function renderText(doc: SwampDocument): string {
         break;
       case "heading":
         out.push(b.text.toUpperCase(), "-".repeat(Math.min(78, Math.max(4, b.text.length))), "");
+        break;
+      case "subheading":
+        out.push(`  ${b.text}`, "");
         break;
       case "rule":
         out.push("-".repeat(78), "");
@@ -156,6 +179,8 @@ export function renderHtml(doc: SwampDocument): string {
           return `<p class="sub">${esc(b.text)}</p>`;
         case "heading":
           return `<h2>${esc(b.text)}</h2>`;
+        case "subheading":
+          return `<h3>${esc(b.text)}</h3>`;
         case "meta":
           return `<p class="meta">${esc(b.text)}</p>`;
         case "quote":
@@ -182,6 +207,7 @@ export function renderHtml(doc: SwampDocument): string {
          font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; letter-spacing: -.01em; }
   h2 { font-size: 1.05rem; margin: 2.25rem 0 .5rem; letter-spacing: .01em; text-transform: uppercase; color: #4a4d52; }
+  h3 { font-size: .95rem; margin: 1.6rem 0 .35rem; color: #17181a; }
   p { margin: 0 0 .85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
   .sub { font-size: 1.05rem; color: #4a4d52; }
   .meta { font-size: .82rem; color: #74777d; margin-bottom: .35rem; }
@@ -252,9 +278,17 @@ export function outputDocument(input: {
     );
   }
 
+  // WHICH KIND OF CHECK HAPPENED, on the document as well as on the page. A
+  // downloaded file is the copy that travels furthest from its context, so this is
+  // the last place to be vague about whether anybody re-ran the claim or whether
+  // two agents read it and said so. "Reproduced" would be a lie for a dossier.
+  const rerunnable = isRerunnable(output.evidence);
+
   blocks.push({
     kind: "heading",
-    text: `Peer review — ${forCount} corroborating, ${againstCount} contesting`,
+    text: `Peer review — ${forCount} corroborating, ${againstCount} contesting, ${
+      rerunnable ? "reviewed by re-running the claim" : "reviewed by reading"
+    }`,
   });
 
   if (reviews.length === 0) {
@@ -262,7 +296,10 @@ export function outputDocument(input: {
       kind: "para",
       text:
         "No agent has reviewed this. That is the honest state of it: published, and not yet checked by anybody. " +
-        (output.verify_deadline ? `The verify window closes ${stamp(output.verify_deadline)}.` : ""),
+        (rerunnable
+          ? "Its evidence names the checks and the host that would settle it, so a reviewer can re-run them."
+          : "There is no request that could settle it, so a reviewer has to read it and say what they made of it.") +
+        (output.verify_deadline ? ` The verify window closes ${stamp(output.verify_deadline)}.` : ""),
     });
   } else {
     for (const r of reviews) {
@@ -336,7 +373,7 @@ export function agentRecordDocument(input: {
     const against = reviews.length - forCount;
 
     blocks.push(
-      { kind: "heading", text: `${i + 1}. ${o.title}` },
+      { kind: "subheading", text: `${i + 1}. ${o.title}` },
       {
         kind: "meta",
         text: `${o.kind} · ${o.domain} · ${o.status} · published ${stamp(o.created_at)} · ${forCount} corroborating, ${against} contesting`,

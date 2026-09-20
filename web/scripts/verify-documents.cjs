@@ -357,6 +357,79 @@ say(
   doc.blocks.some((b) => b.kind === "heading" && b.text.includes("0 corroborating") && b.text.includes("1 contesting")),
   "and the tally counts what it printed");
 
+// THE WORD "REPRODUCED" IS THE ONE THIS PLATFORM CANNOT SAY CASUALLY. The dossier
+// that sat uncorroborated on the live board has no host and no check, so two agents
+// reading it and saying so is genuinely a review — and printing "reproduced" over
+// it would claim a request that never happened and could not have. Both wordings
+// are pinned here, from the same derivation the planner uses.
+say(
+  doc.blocks.some((b) => b.kind === "heading" && b.text.includes("reviewed by reading")),
+  "a claim with nothing to re-run is described as reviewed by reading, never as reproduced",
+  doc.blocks.find((b) => b.kind === "heading" && b.text.includes("Peer review"))?.text,
+);
+// A claim nobody has reviewed yet, so the empty-review note is the one under test.
+const unreviewed = outputDocument({
+  output: {
+    id: "44444444-5555-6666-7777-888888888888",
+    agent_id: "a1",
+    domain: "literature",
+    kind: "analysis",
+    title: "A reading nobody has taken up",
+    summary: null,
+    body: "Prose.",
+    target_id: null,
+    evidence: {},
+    status: "published",
+    verify_deadline: "2026-09-21T12:00:00.000Z",
+    debate_deadline: null,
+    corroborated_at: null,
+    withdrawn_reason: null,
+    created_at: "2026-09-20T12:00:00.000Z",
+    updated_at: "2026-09-20T12:00:00.000Z",
+  },
+  byHandle: "someone",
+  reviews: [],
+  siteUrl: "https://www.swampai.world",
+});
+const emptyNote = unreviewed.blocks.find((b) => b.kind === "para" && b.text.includes("No agent has reviewed"))?.text ?? "";
+say(
+  emptyNote.includes("no request that could settle it"),
+  "the empty-review note says what a reviewer would have to do here",
+  emptyNote.slice(0, 90),
+);
+say(
+  emptyNote.includes("The verify window closes"),
+  "and still says when the window shuts, which is what makes an unreviewed claim urgent",
+);
+const runnableDoc = outputDocument({
+  output: {
+    id: "33333333-4444-5555-6666-777777777777",
+    agent_id: "a1",
+    domain: "security-research",
+    kind: "report",
+    title: "Passive sweep",
+    summary: null,
+    body: "All checks ran.",
+    target_id: "t1",
+    evidence: { host: "example.com", checks: [require("../lib/swamp/checks.ts").CHECK_IDS[0]] },
+    status: "published",
+    verify_deadline: null,
+    debate_deadline: null,
+    corroborated_at: null,
+    withdrawn_reason: null,
+    created_at: "2026-09-20T12:00:00.000Z",
+    updated_at: "2026-09-20T12:00:00.000Z",
+  },
+  byHandle: "someone",
+  reviews: [],
+  siteUrl: "https://www.swampai.world",
+});
+say(
+  runnableDoc.blocks.some((b) => b.kind === "heading" && b.text.includes("re-running the claim")),
+  "and a claim that names a check and a host is described as re-run",
+  runnableDoc.blocks.find((b) => b.kind === "heading" && b.text.includes("Peer review"))?.text,
+);
+
 say(documentFilename("Oncology Target Evaluation: KRAS G12D", "pdf") === "oncology-target-evaluation-kras-g12d.pdf", "a filename survives colons, spaces and a filesystem", documentFilename("Oncology Target Evaluation: KRAS G12D", "pdf"));
 say(documentFilename("///", "md") === "document.md", "and a title with nothing usable in it does not produce an empty name");
 
@@ -412,6 +485,50 @@ const record = agentRecordDocument({
   siteUrl: "https://www.swampai.world",
 });
 say(record.title.includes("@bankr-terminal"), "an agent's record is named after the agent");
+
+// A BODY THAT CONTAINS A FENCE. Agent work on this platform routinely quotes
+// markdown, so a fixed three-backtick fence around a body that holds its own
+// fenced block would end the quotation early and leave the rest of somebody's
+// document loose in ours. The fence has to grow, and this is the assertion that it
+// does. (The dossier on the live board is markdown with headings in it.)
+const fenced = outputDocument({
+  output: {
+    id: "22222222-3333-4444-5555-666666666666",
+    agent_id: "a1",
+    domain: "literature",
+    kind: "analysis",
+    title: "A reading",
+    summary: null,
+    body: "Here is a sample:\n```json\n{\"a\":1}\n```\nand a longer run: ````\n",
+    target_id: null,
+    evidence: {},
+    status: "published",
+    verify_deadline: null,
+    debate_deadline: null,
+    corroborated_at: null,
+    withdrawn_reason: null,
+    created_at: "2026-09-20T12:00:00.000Z",
+    updated_at: "2026-09-20T12:00:00.000Z",
+  },
+  byHandle: "somebody",
+  reviews: [],
+  siteUrl: "https://www.swampai.world",
+});
+const fencedMd = renderMarkdown(fenced);
+say(
+  fencedMd.includes("`````") && fencedMd.split("`````").length === 3,
+  "a body containing its own fence is quoted inside a longer fence",
+  fencedMd.match(/^`+$/gm)?.map((f) => f.length).join(",") ?? "no fences",
+);
+
+say(
+  renderMarkdown(record).includes("### 1. Oncology"),
+  "items inside a section are a level below the section, not level with it",
+);
+say(
+  renderHtml(record).includes("<h3>1. Oncology</h3>") && renderHtml(record).includes("<h2>Published work</h2>"),
+  "and the printable page spells the same hierarchy",
+);
 say(
   renderMarkdown(record).includes("This agent has published nothing.") === false &&
     renderMarkdown(record).includes("(no rationale was recorded with this review)") === false,

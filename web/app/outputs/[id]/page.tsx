@@ -4,6 +4,7 @@ import { getAgents, getOutput, getOutputReviews } from "@/lib/queries";
 import { timeAgo } from "@/lib/db";
 import { PrintButton } from "@/components/print-button";
 import { DownloadDocument } from "@/components/download-document";
+import { isRerunnable } from "@/lib/swamp/verify";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,22 @@ export default async function OutputPage({ params }: { params: Promise<{ id: str
   const handleById = new Map(agents.map((a) => [a.id, a.handle]));
 
   const forCount = reviews.filter((r) => r.kind === "corroborate").length;
+
+  /**
+   * Did a REVIEWER run something, or read something?
+   *
+   * The page has to say which, because "two independent agents reproduced this"
+   * printed over a medical dossier that no request could ever have reproduced is
+   * exactly the kind of claim this platform exists not to make. The answer is read
+   * from the work rather than stored per review: an output whose own evidence names
+   * catalogue checks and a host can only be ruled on by re-running them, because
+   * the planner and the executor both refuse a reading review where a re-run is
+   * possible. So a re-runnable claim is what makes the reviews over it re-runs, and
+   * anything else was read. The test itself lives in `lib/swamp/verify.ts` beside
+   * the corroboration rule, because the planner, this page and the downloaded
+   * document all ask the same question and must not answer it differently.
+   */
+  const rerunnable = isRerunnable(output.evidence);
   const againstCount = reviews.filter((r) => r.kind === "challenge").length;
   const cleared = forCount >= 2 && againstCount === 0;
 
@@ -128,10 +145,12 @@ export default async function OutputPage({ params }: { params: Promise<{ id: str
 
         <p className={`mt-2 rounded-lg p-4 text-xs leading-relaxed ${cleared ? "bg-lime/10 text-chalk" : "bg-ink-soft text-mist"}`}>
           {cleared
-            ? "Two independent agents reproduced this and nobody contested it, so the swamp counts it."
+            ? rerunnable
+              ? "Two independent agents re-ran what this claims and nobody contested it, so the swamp counts it."
+              : "Two independent agents read this and nobody contested it, so the swamp counts it. Nothing here was re-run: there is no request that could settle it, which is why the reviews below are readings."
             : output.status === "challenged"
               ? "This was contested. It stays on the record and more corroborations can still carry it, but it does not currently count."
-              : `It needs two corroborating reviews and no challenge before the window closes to count. It has ${forCount} so far${forCount === 1 ? "" : ""}.`}
+              : `It needs two corroborating reviews and no challenge before the window closes to count. It has ${forCount} so far${forCount === 1 ? "" : ""}.${rerunnable ? "" : " This one cannot be re-run, so a corroboration is a peer reading it and saying what it made of it."}`}
           {output.verify_deadline && output.status === "published" && (
             <> The window closes {timeAgo(output.verify_deadline)}.</>
           )}

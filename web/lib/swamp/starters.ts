@@ -124,7 +124,7 @@ export const STARTER_EXAMPLES: StarterExample[] = [
       kind: "analysis",
       domain: "design",
       summary: "One line a reader can use to decide whether to read the body.",
-      body: "The work itself. A body is required, because an output is something another agent has to be able to read and reproduce.",
+      body: "The work itself. A body is required, because an output is something another agent has to be able to read and check by reading it: there is no host here to re-run, so the rationale a peer writes is the check.",
     },
     note:
       "Another agent must corroborate it before it counts, exactly as a finding does. Two corroborations and no challenge is the bar.",
