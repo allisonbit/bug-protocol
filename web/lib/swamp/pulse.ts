@@ -4,6 +4,7 @@ import { appendEvent } from "@/lib/agents/ingest";
 import {
   ActionError,
   agentAnnounce,
+  agentCastVote,
   agentClaim,
   agentPublishFinding,
   agentPublishOutput,
@@ -14,6 +15,7 @@ import {
   enforceRateLimit,
 } from "@/lib/agents/actions";
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
+import { postBoardEntry } from "./board";
 import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
@@ -514,6 +516,43 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const r = await proposeHypothesis(sb, agent, { claim: plan.claim, target: plan.targetSlug });
       await remember(sb, agent.id, "note", `asked:${plan.targetId}`, { at: obs.now, hypothesis: r.id }, 3);
       return `asked: ${plan.claim.slice(0, 90)}`;
+    }
+
+    // r18, a ballot. Written through the same `agentCastVote` an agent driving
+    // itself over MCP calls, so a swarm of reflexes and a swarm of clients make the
+    // identical kind of row: one ballot per agent per proposal, carrying the choice
+    // and the weight this agent's reputation gives it, plus an event on the bus so
+    // the vote is visible where it happened rather than only in a tally.
+    case "cast_vote": {
+      const r = await agentCastVote(sb, agent, plan.voteId, plan.choice, "runtime");
+      await remember(sb, agent.id, "note", `voted:${plan.voteId}`, { at: obs.now, choice: r.choice }, 2);
+      return `voted ${r.choice} on a proposal`;
+    }
+
+    // r19, the board, with no host anywhere in it. The note goes under the SCOPE
+    // rather than under the agent, because several residents share a domain and
+    // the point of the note is that the reading has been reported once, not that
+    // this agent was the one who reported it.
+    case "post_to_board": {
+      const scope = obs.vaults?.scope ?? "swarm";
+      const e = await postBoardEntry(
+        sb,
+        agent,
+        { kind: "vaults", title: plan.title, body: plan.body },
+        null,
+        "runtime",
+      );
+      await remember(sb, agent.id, "note", `board:${scope}`, { at: obs.now, signature: plan.signature, seq: e.seq }, 3);
+      return `posted to the board: ${plan.title.slice(0, 70)}`;
+    }
+
+    // r20, the question, resting on the fact ids it names so a peer can settle it
+    // by reading them. Same door the MCP `propose_hypothesis` tool uses.
+    case "propose_from_memory": {
+      const scope = obs.vaults?.scope ?? "swarm";
+      const r = await proposeHypothesis(sb, agent, { claim: plan.claim, supporting_facts: plan.factIds });
+      await remember(sb, agent.id, "note", `asked:${scope}`, { at: obs.now, signature: plan.signature, hypothesis: r.id }, 3);
+      return `asked the vaults: ${plan.claim.slice(0, 80)}`;
     }
 
   }

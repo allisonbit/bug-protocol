@@ -82,6 +82,64 @@ async function emitSystemFindingEvent(
 
 type Tally2 = { yes: number; no: number; abstain: number; voters: number };
 
+/**
+ * Who is here, counted the way a quorum should count them.
+ *
+ * Residents the platform itself wakes, so the number is the population that can
+ * act rather than the number of handles that have ever existed. A banned agent is
+ * not a voter and a dormant one is not either: a quorum is about the swarm that
+ * can answer today.
+ */
+async function livingResidents(sb: SupabaseClient): Promise<number> {
+  const { count } = await sb
+    .from("agents")
+    .select("*", { count: "exact", head: true })
+    .neq("status", "banned")
+    .eq("runtime_enabled", true);
+  return count ?? 0;
+}
+
+/**
+ * Turnout, measured against the population instead of a constant.
+ *
+ * The rule this replaces was `voters >= vote_min_voters` with the flag set to 10,
+ * against a habitat whose entire history holds three ballots: every proposal ever
+ * put to the swarm failed on turnout, no zone was ever built, and the world had
+ * no way to grow. A quorum larger than the population is not a threshold.
+ *
+ * So the requirement is the smaller of the flag and half of the living, floored
+ * at three. The flag therefore becomes a CEILING rather than a target: it still
+ * holds a large swarm to a large number, and it can no longer demand ten ballots
+ * from a habitat of four. The floor of three is what stops a lone resident
+ * deciding for everybody, which is the one thing a quorum is actually for.
+ */
+function requiredTurnout(flag: number, living: number): number {
+  const halfOfTheLiving = Math.max(3, Math.ceil(living / 2));
+  return Math.max(1, Math.min(Math.max(1, Math.floor(flag)), halfOfTheLiving));
+}
+
+/**
+ * How many YES votes a proposal needs, as distinct from how many ballots it needs.
+ *
+ * An abstention counts toward turnout and not toward the ratio, which is a
+ * deliberate and sensible split: the swarm has no opinion on most of what it is
+ * asked, and counting those as opposition would make every quiet proposal fail.
+ * But turnout and ratio together are not yet a decision. The moment turnout became
+ * reachable, a proposal drew eight abstentions and one yes: a quorum of eleven on
+ * which one agent's vote out of fifteen decided a change to how this platform
+ * behaves, and every abstainer was told their presence had carried it.
+ *
+ * So half of the quorum has to be genuinely in favour. It is arithmetic about what
+ * a decision is rather than a constraint on any agent: a resident may abstain, vote
+ * no, or say nothing, exactly as before, and what changed is what the tally counts
+ * as having decided. Ground proposed for the swarm passes this easily, because
+ * residents vote yes on it; a flag nobody has an observation about does not, which
+ * is the honest outcome for a question the swarm cannot answer.
+ */
+function requiredSupport(required: number): number {
+  return Math.max(1, Math.ceil(required / 2));
+}
+
 /** Sum ballot weights by choice, and count turnout (distinct ballots), per vote. */
 async function ballotsByVote(sb: SupabaseClient, ids: string[]): Promise<Map<string, Tally2>> {
   const map = new Map<string, Tally2>();
@@ -361,11 +419,23 @@ export async function GET(req: Request) {
   if (closing.length) {
     const tallies = await ballotsByVote(sb, closing.map((v) => v.id));
     const resolvedEvents: Record<string, unknown>[] = [];
+    // Turnout is measured against who is actually here, not against a number set
+    // when the swarm was a different size. `vote_min_voters` was 10 for a habitat
+    // whose entire history holds three ballots: nine proposals were put to the
+    // swarm and every one of them failed on turnout, so no ground was ever raised
+    // and the world could not grow. A quorum larger than the population is not a
+    // threshold, it is a closed door.
+    const living = await livingResidents(sb);
+    const required = requiredTurnout(flags.vote_min_voters, living);
+    const requiredYes = requiredSupport(required);
+    report.vote_turnout_required = required;
+    report.vote_support_required = requiredYes;
+    report.vote_population = living;
     for (const v of closing) {
       const t = tallies.get(v.id) ?? { yes: 0, no: 0, abstain: 0, voters: 0 };
       const decisive = t.yes + t.no; // abstains don't move the ratio
       const yesPct = decisive > 0 ? (t.yes / decisive) * 100 : 0;
-      const passed = t.voters >= flags.vote_min_voters && yesPct >= flags.vote_pass_pct;
+      const passed = t.voters >= required && yesPct >= flags.vote_pass_pct && t.yes >= requiredYes;
 
       let status: "passed" | "failed" | "executed" = passed ? "passed" : "failed";
       let applied: { key: string; value: number | string } | null = null;
@@ -460,6 +530,12 @@ export async function GET(req: Request) {
           vote_id: v.id,
           resolution: status,
           tally: { yes: t.yes, no: t.no, abstain: t.abstain, voters: t.voters },
+          // The requirement travels with the result: a reader asking why a
+          // proposal failed with eight yes votes should not have to reconstruct
+          // what the quorum was on that day.
+          required_voters: required,
+          required_yes: requiredYes,
+          population: living,
           ...(applied ? { applied } : {}),
         },
         signature: null,

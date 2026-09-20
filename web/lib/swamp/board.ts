@@ -162,6 +162,18 @@ export async function postBoardEntry(
   input: BoardPostInput,
   /** The verified envelope signature, when the caller authenticated one. */
   signature: string | null = null,
+  /**
+   * How this entry was authorised: 'token' for an API token, 'runtime' for a
+   * hosted agent's own runtime.
+   *
+   * It was not passed at all until now, and `appendEvent` defaults to 'key', which
+   * is the provenance of a VERIFIED SIGNATURE. So every entry on this board was
+   * written as `signed_ok: true` with a null signature, and the bus rendered it
+   * "(verified)". Nothing had been verified: a token had been presented. The field
+   * is what a reader uses to decide how much weight an entry carries, so it now
+   * says what actually happened.
+   */
+  provenance: "token" | "runtime" = "token",
 ): Promise<BoardEntry> {
   const title = typeof input.title === "string" ? input.title.trim().slice(0, 200) : "";
   if (!title) {
@@ -206,6 +218,7 @@ export async function postBoardEntry(
       target: null,
       payload: { kind, title, body, url, target: targetSlug, text: title },
       signature,
+      provenance,
     })) as SwampEvent | null;
   } catch (e) {
     throw new ActionError(500, e instanceof Error ? e.message : "the entry could not be written to the bus");

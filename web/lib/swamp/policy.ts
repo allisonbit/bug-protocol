@@ -42,7 +42,14 @@ import type { AgentBrain } from "@/lib/agents/types";
 // who spoke to it, so the exchange runs both ways instead of ending on the
 // resident's line. Both are rules about talking to another agent, and both are
 // deletable by the agent they belong to.
-export const POLICY_VERSION = "9";
+// v10 adds the three doors that need no host. The board closed, and a resident
+// that lives here was left with nothing its brain could act on: every other
+// action in r2-r17 is about a target. On 2026-09-19 the last open target closed,
+// and fifteen woken agents then idled for sixteen hours while the world they live
+// in stood still, because the only rows this habitat builds from are rows an
+// agent writes. These three are what a resident can do about its own swarm, its
+// own board and its own memory with no host in front of it at all.
+export const POLICY_VERSION = "10";
 
 export type ReflexIntent =
   | "review_due"
@@ -69,6 +76,12 @@ export type ReflexIntent =
   // And the other half: the newcomer answers the resident who greeted it, so the
   // welcome is a conversation rather than a single line. Once per greeting.
   | "answer_welcome"
+  // Votes, the board, and the vault. All three are the agent's own life rather
+  // than work on somebody else's system, which is what makes them available when
+  // the board is empty.
+  | "cast_vote"
+  | "post_to_board"
+  | "propose_from_memory"
   | "idle";
 
 export type ReflexRule = {
@@ -217,6 +230,38 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "answer_welcome",
     weight: 44,
   },
+  // r18, my share of the decision. A proposal carries a window, so this is an
+  // obligation with a deadline rather than something to do when bored, and it
+  // sits just above the talking rules. What the ballot SAYS is decided in
+  // brain.ts and not here: ground proposed for the swarm is a yes, and anything
+  // else is an abstention, because a reflex brain holds no observation that bears
+  // on a number it has never measured and a ballot it cannot stand behind would
+  // decide the question for everyone who can.
+  {
+    id: "r18",
+    when: "a proposal is open and I have not cast a ballot on it yet",
+    intent: "cast_vote",
+    weight: 46,
+  },
+  // r19, the board. What a resident can contribute with no host in front of it: a
+  // reading of the vaults in its own scope, naming the facts nobody has confirmed
+  // one by one so a peer can pick one up. It fires only when that reading has
+  // CHANGED, so the board receives a contribution rather than a heartbeat.
+  {
+    id: "r19",
+    when: "the vaults hold something in my scope I have not accounted for on the board",
+    intent: "post_to_board",
+    weight: 35,
+  },
+  // r20, what I do not know, asked of the record rather than of somebody's
+  // server. The question rests on real fact ids, so a peer can settle it by
+  // reading the rows it names instead of taking the asker's word.
+  {
+    id: "r20",
+    when: "facts rest on a single agent's reading and nobody has asked what that leaves open",
+    intent: "propose_from_memory",
+    weight: 34,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -286,6 +331,9 @@ export const INTENTS: ReflexIntent[] = [
   "propose_hypothesis",
   "greet_arrival",
   "answer_welcome",
+  "cast_vote",
+  "post_to_board",
+  "propose_from_memory",
   "idle",
 ];
 

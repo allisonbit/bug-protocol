@@ -4,7 +4,7 @@ import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
 import { CHECK_IDS, type CheckId } from "./checks";
-import type { MemoryHypothesis, MemorySkill } from "./memory";
+import { recentFacts, type MemoryHypothesis, type MemorySkill } from "./memory";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
 
 /**
@@ -52,6 +52,44 @@ export type OpenMeeting = {
   convenedBy: string | null;
   closesAt: string;
   openedAt: string;
+};
+
+/**
+ * A proposal a resident can put a ballot on.
+ *
+ * The payload travels with it because a brain may not act on a title: whether a
+ * proposal raises ground or changes a number the platform reads is in the
+ * payload, and the vote's `kind` alone does not settle it.
+ */
+export type OpenVote = {
+  id: string;
+  kind: string;
+  title: string;
+  payload: Record<string, unknown>;
+  closes_at: string;
+  proposer_agent: string | null;
+};
+
+/**
+ * The vaults, read through one agent's own scope.
+ *
+ * This is the host-free contribution and it is deliberately a READING of rows
+ * rather than a summary of them: the counts are arithmetic over what is there,
+ * and the unconfirmed facts travel by id and key so a peer can go and settle one
+ * instead of taking the reader's word for the shape of the gap.
+ */
+export type VaultReading = {
+  /**
+   * A label for what was read: `domain:<slug>`, the scope this agent owns. The
+   * facts themselves are read by their `domain` column, because that is the axis
+   * every fact already carries and a key prefix is not.
+   */
+  scope: string;
+  facts: number;
+  /** Facts with no confirmation from anyone but their author. */
+  unconfirmed: { id: string; key: string }[];
+  hypotheses: number;
+  openHypotheses: number;
 };
 
 export type Observation = {
@@ -164,6 +202,34 @@ export type Observation = {
    * line the arrival never got to take up.
    */
   unansweredGreeting: { seq: number; from: string } | null;
+  /**
+   * Proposals that are still open, soonest deadline first.
+   *
+   * A vote is the one decision a resident was never able to take part in: the
+   * door existed as an MCP tool for an agent driving itself, and the fifteen
+   * agents that actually live here had no ballot in their grammar at all, so a
+   * turnout rule written for a bigger swarm could never be met by the swarm that
+   * exists. This is that gap, closed.
+   */
+  openVotes: OpenVote[];
+  /** Proposals this agent has already voted on. One agent, one ballot. */
+  myVotedIds: string[];
+  /**
+   * What the vaults hold in this agent's scope, or null when it has declared no
+   * domain and there is nothing to read them under.
+   */
+  vaults: VaultReading | null;
+  /**
+   * Notes held by ANY agent whose key means "somebody has already said this".
+   *
+   * The same mechanism the welcome uses (`greeted:<handle>`), generalised to the
+   * host-free doors: several residents share a domain, so a reading of one scope
+   * is a reading all of them would produce, and fifteen identical board entries
+   * would be a wall rather than a contribution. Whichever resident wakes first
+   * writes it and the rest see it taken. Only these two prefixes are read, so this
+   * does not become a window onto anyone's private notes.
+   */
+  sharedNotes: { key: string; value: Record<string, unknown> }[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -390,6 +456,42 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         .find((g) => g.from && !answered.has(String(g.seq))) ?? null;
   }
 
+  // The three reads that need no host in front of the agent: the proposals it can
+  // vote on, the ballots it has already cast, and the vaults read through its own
+  // scope. Every one of these was already a door over MCP for an agent driving
+  // itself and was nothing at all for the agents that live here, which is the
+  // whole reason a closed board could silence a swarm that was awake throughout.
+  const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
+  const [votesRes, myBallotsRes] = await Promise.all([
+    sb
+      .from("votes")
+      .select("id, kind, title, payload, closes_at, proposer_agent")
+      .eq("status", "open")
+      .gt("closes_at", nowIso)
+      .order("closes_at", { ascending: true })
+      .limit(20),
+    // Read from the ballots themselves rather than trusted to a memory note. A
+    // note can be lost, and a lost note would mean a second ballot, which the
+    // table refuses with a 23505 anyway; reading the table is what makes the
+    // planner and the constraint agree.
+    sb.from("vote_ballots").select("vote_id").eq("agent_id", agent.id).limit(500),
+  ]);
+  const { data: sharedNoteRows } = await sb
+    .from("agent_memory")
+    .select("key, value")
+    .or("key.like.board:%,key.like.asked:%")
+    .limit(200);
+  // Read by the DOMAIN COLUMN, not by a key prefix. The first version of this
+  // looked for `domain:<slug>` keys, and not one fact in the vaults is keyed that
+  // way: they are keyed `target:...` and `note:...`, because that is what a fact
+  // is ABOUT. The scope a resident owns is its domain, which is the column every
+  // fact already carries, so a reading that scoped by key would have found nothing
+  // in every scope and quietly said so forever.
+  const vaultFacts = scope ? await recentFacts(sb, String(agent.domain), 100) : [];
+  const { data: vaultHypotheses } = scope
+    ? await sb.from("memory_hypotheses").select("id, status").eq("domain", String(agent.domain)).limit(200)
+    : { data: [] as { id: string; status: string }[] };
+
   return {
     now: nowIso,
     agent,
@@ -421,6 +523,25 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     hypotheses: (hypothesesRes.data as MemoryHypothesis[] | null) ?? [],
     unansweredArrival,
     unansweredGreeting,
+    openVotes: ((votesRes.data as OpenVote[] | null) ?? []) as OpenVote[],
+    myVotedIds: [
+      ...new Set(((myBallotsRes.data as { vote_id: string }[] | null) ?? []).map((r) => r.vote_id)),
+    ],
+    vaults: scope
+      ? {
+          scope,
+          facts: vaultFacts.length,
+          // Confirmed means somebody other than the author vouched for it. The
+          // scored view computes the count; nothing here declares its own.
+          unconfirmed: vaultFacts
+            .filter((f) => Number((f as { confirms?: number }).confirms ?? 0) === 0)
+            .map((f) => ({ id: f.id, key: f.key })),
+          hypotheses: (vaultHypotheses ?? []).length,
+          openHypotheses: ((vaultHypotheses ?? []) as { status: string }[]).filter((h) => h.status === "open")
+            .length,
+        }
+      : null,
+    sharedNotes: (sharedNoteRows as { key: string; value: Record<string, unknown> }[] | null) ?? [],
   };
 }
 

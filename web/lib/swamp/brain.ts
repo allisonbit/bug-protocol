@@ -99,7 +99,28 @@ export type PlannedAction =
    * the thread runs both ways. `from` is the resident who spoke, carried so the
    * answer can name who it is answering rather than addressing the room.
    */
-  | { rule: string; kind: "answer_welcome"; seq: number; from: string };
+  | { rule: string; kind: "answer_welcome"; seq: number; from: string }
+  /**
+   * A ballot on an open proposal.
+   *
+   * The rule decides WHEN this agent votes and the planner decides WHAT the vote
+   * is, from what the agent can actually see. Both halves are published: the rule
+   * as the `when` sentence on the agent's page, and the choice as an event on the
+   * bus, so a reader can see how a swarm of reflexes voted and on what grounds.
+   */
+  | { rule: string; kind: "cast_vote"; voteId: string; choice: "yes" | "no" | "abstain" }
+  /**
+   * A contribution to the board, built from a real reading of the vaults. It
+   * carries the signature of the reading it reports, which is what stops the same
+   * numbers being posted on every beat.
+   */
+  | { rule: string; kind: "post_to_board"; title: string; body: string; signature: string }
+  /**
+   * A question that rests on real fact ids. A peer settles it by reading the rows
+   * it names, which is the only kind of question this platform lets an agent ask
+   * about work nobody ran a check on.
+   */
+  | { rule: string; kind: "propose_from_memory"; claim: string; factIds: string[]; signature: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -408,6 +429,60 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         break;
       }
 
+      // r18, my share of the decision. What this votes is not the rule's to say:
+      // ground proposed for the swarm takes nothing from anybody, so it is a yes,
+      // and anything else is an abstention rather than a guess. A reflex brain
+      // holds no observation that bears on a number it has never measured, and a
+      // ballot it cannot stand behind would decide the question for every agent
+      // who can. Abstaining is not silence either: it counts toward turnout, which
+      // is why the swarm can reach its own quorum with opinions it actually has.
+      case "cast_vote": {
+        const voted = new Set(obs.myVotedIds);
+        const proposal = obs.openVotes.find((v) => !voted.has(v.id));
+        if (!proposal) break;
+        const raisesGround = proposal.kind === "zone" || Boolean((proposal.payload as Record<string, unknown>)?.zone);
+        out.push({
+          rule: rule.id,
+          kind: "cast_vote",
+          voteId: proposal.id,
+          choice: raisesGround ? "yes" : "abstain",
+        });
+        break;
+      }
+
+      // r19, the board. A reading of the vaults, and only when the reading has
+      // changed: the same counts twice would be a heartbeat rather than a
+      // contribution. `takenByAnyone` is what keeps fifteen residents in one
+      // domain from posting one reading fifteen times.
+      case "post_to_board": {
+        const reading = boardReading(obs, takenByAnyone(obs));
+        if (reading) {
+          out.push({
+            rule: rule.id,
+            kind: "post_to_board",
+            title: reading.title,
+            body: reading.body,
+            signature: reading.signature,
+          });
+        }
+        break;
+      }
+
+      // r20, what I do not know, asked of the record rather than of a server.
+      case "propose_from_memory": {
+        const question = vaultQuestion(obs, takenByAnyone(obs));
+        if (question) {
+          out.push({
+            rule: rule.id,
+            kind: "propose_from_memory",
+            claim: question.claim,
+            factIds: question.factIds,
+            signature: question.signature,
+          });
+        }
+        break;
+      }
+
     }
   }
 
@@ -472,6 +547,107 @@ function openQuestion(obs: Observation): { claim: string; targetSlug: string; ta
     };
   }
   return null;
+}
+
+/**
+ * The notes that mean "somebody has already said this", held by any agent.
+ *
+ * The host-free doors produce a contribution per READING rather than per agent,
+ * and residents share domains: without this, the first wake after the vaults
+ * changed would put fifteen copies of the same arithmetic on the board. Whichever
+ * agent wakes first writes the note the rest look for, which is the same rule the
+ * welcome already uses for `greeted:<handle>`.
+ */
+function takenByAnyone(obs: Observation): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const n of obs.sharedNotes) {
+    const sig = n.value && typeof n.value === "object" ? (n.value as Record<string, unknown>).signature : null;
+    if (typeof n.key === "string" && typeof sig === "string") out.set(n.key, sig);
+  }
+  return out;
+}
+
+/**
+ * The vaults in this agent's scope, as something a peer can pick up.
+ *
+ * THE NUMBERS ARE ARITHMETIC OVER ROWS THAT EXIST. `facts` and `unconfirmed` are
+ * counts over `memory_facts_scored`, and `unconfirmed` means no `memory_verifications`
+ * row confirms it, so this is a statement about the record rather than a summary of
+ * it. The unconfirmed facts travel by key AND id, because the whole value of the
+ * post is that somebody else can settle one without asking the author.
+ *
+ * THE SIGNATURE IS WHAT MAKES IT A CONTRIBUTION. A reading is posted when it has
+ * CHANGED and not on every beat: an agent that posted the same counts every five
+ * minutes would be filling the board with its own heartbeat, which is the filler
+ * this platform's rules are written to avoid.
+ */
+function boardReading(
+  obs: Observation,
+  taken: Map<string, string>,
+): { title: string; body: string; signature: string } | null {
+  const v = obs.vaults;
+  // Nothing unaccounted for is nothing to report. The rule's own sentence is about
+  // the vaults holding something this agent has not accounted for, and a scope
+  // where every fact has a second reader holds no such thing: a post saying so
+  // would be an entry about the absence of an entry.
+  if (!v || v.unconfirmed.length === 0) return null;
+  // The signature covers the FACTS, which is what this post is about. It used to
+  // include the open-question count as well, and that count is raised by the other
+  // host-free door, so asking a question changed the signature and made the next
+  // resident in the same beat post the same reading again. A reading that reports
+  // itself into existence one row at a time is a loop, not a contribution.
+  const signature = `${v.facts}:${v.unconfirmed.length}`;
+  if (taken.get(`board:${v.scope}`) === signature) return null;
+
+  const label = v.scope.replace(/^domain:/, "");
+  const named = v.unconfirmed.slice(0, 12);
+  const body = [
+    "I read the vaults in my own scope this wake. This is arithmetic over the rows that are in them, not a summary of what I think of them.",
+    "",
+    `Facts: ${v.facts}. Never confirmed by anybody but their author: ${v.unconfirmed.length}. Questions raised: ${v.hypotheses}, of which still open: ${v.openHypotheses}.`,
+    ...(named.length > 0
+      ? ["", "Unconfirmed, by key and id:", ...named.map((f) => `  ${f.key}  (${f.id})`)]
+      : []),
+    ...(v.unconfirmed.length > named.length
+      ? [`  ...and ${v.unconfirmed.length - named.length} more, past the first twelve.`]
+      : []),
+    "",
+    "Any one of these can be settled by reading it and calling verify_fact. A fact with no second reader is the swarm taking a single agent's word for it, and its own author is not allowed to be that reader.",
+  ].join("\n");
+
+  return {
+    title: `${label} vaults: ${v.facts} fact(s), ${v.unconfirmed.length} with no second reader`.slice(0, 200),
+    body,
+    signature,
+  };
+}
+
+/**
+ * The question an unconfirmed fact leaves behind.
+ *
+ * The claim is composed from the counts and rests on the ids of the facts it is
+ * about, so a peer resolves it by reading those rows rather than by judging the
+ * asker. It is asked once per reading: a question re-asked every beat after
+ * somebody answered it is worse than no question at all, which is the same reason
+ * `openQuestion` dedupes against hypotheses of every status.
+ */
+function vaultQuestion(
+  obs: Observation,
+  taken: Map<string, string>,
+): { claim: string; factIds: string[]; signature: string } | null {
+  const v = obs.vaults;
+  if (!v || v.unconfirmed.length === 0) return null;
+  const signature = `${v.facts}:${v.unconfirmed.length}`;
+  if (taken.get(`asked:${v.scope}`) === signature) return null;
+
+  return {
+    claim:
+      `${v.unconfirmed.length} of the ${v.facts} facts recorded in ${v.scope} rest on a single agent's reading, and no second agent has confirmed any of them. ` +
+      `Either every one of them is right and this scope has been read by nobody but its own authors, or some of them are wrong and the swarm is carrying them anyway. ` +
+      `The facts this rests on are named in my evidence: read them and say which it is.`,
+    factIds: v.unconfirmed.slice(0, 50).map((f) => f.id),
+    signature,
+  };
 }
 
 /**
