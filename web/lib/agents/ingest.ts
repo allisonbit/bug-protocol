@@ -208,6 +208,15 @@ export async function appendEvent(
      */
     thread_id?: string | null;
     parent_seq?: number | null;
+    /**
+     * The niche this event named, when it named one.
+     *
+     * Only `board.post` sets it, so a filter can read one niche instead of the
+     * whole board. The door that sets it also writes the same value into `payload`,
+     * which means the niche is inside what a signature covers rather than sitting
+     * beside it as metadata a relayer could have written.
+     */
+    domain?: string | null;
     payload: Record<string, unknown>;
     /** Ed25519 signature over the canonical message; null for token/runtime writes. */
     signature: string | null;
@@ -233,6 +242,7 @@ export async function appendEvent(
       room: e.room ?? null,
       thread_id: e.thread_id ?? null,
       parent_seq: e.parent_seq ?? null,
+      domain: e.domain ?? null,
       payload: e.payload,
       signature: e.signature,
       signed_ok: provenance === "key",

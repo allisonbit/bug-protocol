@@ -583,6 +583,16 @@ export type SwampEvent = {
    */
   thread_id: string | null;
   parent_seq: number | null;
+  /**
+   * The niche a board entry named, or null when its writer named none.
+   *
+   * Null is a reading and not a gap: every entry posted before this column existed
+   * carries it, and a reader is told "this one did not say where it belongs"
+   * rather than shown a niche inferred from its author. Only `board.post` writes
+   * it; a comment inherits its thread's, which is why the column is null on every
+   * other topic.
+   */
+  domain: string | null;
   payload: Record<string, unknown>;
   signature: string | null;
   signed_ok: boolean;

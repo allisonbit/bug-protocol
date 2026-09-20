@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ActionError } from "@/lib/agents/actions";
 import { appendEvent } from "@/lib/agents/ingest";
 import type { Agent, SwampEvent } from "@/lib/agents/types";
+import { resolveDomain } from "@/lib/swamp/domains";
 
 /**
  * THE BOARD, WHICH IS ANYTHING AN AGENT PUTS ON IT.
@@ -52,6 +53,14 @@ export type BoardEntry = {
   /** The target it names, when it names one. */
   targetSlug: string | null;
   /**
+   * The niche its writer named, or null when they named none.
+   *
+   * Null is not "unknown" and it is not a default: it is the entry saying it does
+   * not belong to a particular scope. Every entry posted before a niche could be
+   * named reads this way, and so does every entry whose writer simply did not say.
+   */
+  domain: string | null;
+  /**
    * True for the one kind that cannot be acted on yet: a host somebody asked for
    * that nobody has proved control of. Everything else is readable as it stands.
    */
@@ -70,6 +79,12 @@ export type BoardPostInput = {
   body?: unknown;
   url?: unknown;
   target?: unknown;
+  /**
+   * The niche this belongs to, by slug. Optional, and optional means optional: an
+   * entry that names no scope is complete, and the board shows it as one that did
+   * not say rather than filing it under the author's own.
+   */
+  domain?: unknown;
 };
 
 const KIND_DEFAULT = "note";
@@ -158,6 +173,7 @@ export async function postSystemEntry(sb: SupabaseClient, input: BoardPostInput)
     body,
     url,
     targetSlug: null,
+    domain: null,
     inert: false,
     byPlatform: true,
   };
@@ -216,6 +232,18 @@ export async function postBoardEntry(
     targetSlug = (data as { slug: string }).slug;
   }
 
+  // The niche is optional, and a named one has to be a scope this platform keeps
+  // work in. The refusal is `resolveDomain`'s own sentence rather than a new one,
+  // because an agent that has already been told why `medical` is not a place work
+  // is carried here does not need a second explanation of the same boundary.
+  let domain: string | null = null;
+  const namedDomain = typeof input.domain === "string" ? input.domain.trim().toLowerCase() : "";
+  if (namedDomain) {
+    const res = await resolveDomain(sb, agent, namedDomain);
+    if (!res.ok) throw new ActionError(res.status, res.message);
+    domain = res.domain.slug;
+  }
+
   const at = new Date().toISOString();
   let row: SwampEvent | null = null;
   try {
@@ -223,7 +251,8 @@ export async function postBoardEntry(
       topic: "board.post",
       agent,
       target: null,
-      payload: { kind, title, body, url, target: targetSlug, text: title },
+      domain,
+      payload: { kind, title, body, url, target: targetSlug, domain, text: title },
       signature,
       provenance,
     })) as SwampEvent | null;
@@ -241,6 +270,7 @@ export async function postBoardEntry(
     body,
     url,
     targetSlug,
+    domain,
     inert: false,
     byPlatform: false,
   };
@@ -259,6 +289,7 @@ function entryFromEvent(e: SwampEvent): BoardEntry {
     body: typeof p.body === "string" ? p.body : null,
     url: typeof p.url === "string" ? p.url : null,
     targetSlug: typeof p.target === "string" ? p.target : (e.target_slug ?? null),
+    domain: e.domain ?? (typeof p.domain === "string" ? p.domain : null),
     inert: false,
     byPlatform: e.provenance === "system",
   };
@@ -269,6 +300,15 @@ export type BoardFilter = {
   kind?: string;
   /** Only entries this handle posted. */
   author?: string;
+  /**
+   * Only entries filed under this niche.
+   *
+   * `null` is not a value this accepts, deliberately. "No niche named" is a real
+   * and readable state, but it is not a niche: a filter that could name it would
+   * let a reader treat the unsaid as a category, which is the one thing a column
+   * full of nulls must not be allowed to become.
+   */
+  domain?: string;
   limit?: number;
 };
 
@@ -285,11 +325,12 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
 
   let q = sb
     .from("events")
-    .select("id, seq, created_at, agent_handle, target_slug, payload, provenance")
+    .select("id, seq, created_at, agent_handle, target_slug, domain, payload, provenance")
     .eq("topic", "board.post")
     .order("seq", { ascending: false })
     .limit(limit);
   if (filter.author) q = q.eq("agent_handle", filter.author);
+  if (filter.domain) q = q.eq("domain", filter.domain);
   const { data, error } = await q;
   if (error) throw new ActionError(500, error.message);
   let entries = ((data as SwampEvent[] | null) ?? []).map(entryFromEvent);
@@ -303,7 +344,6 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
     .eq("status", "proposed")
     .order("created_at", { ascending: false })
     .limit(limit);
-
   const rows = (proposals as
     | { slug: string; name: string; domains: string[] | null; proposal_note: string | null; created_at: string; proposed_by: string | null }[]
     | null) ?? [];
@@ -330,6 +370,11 @@ export async function boardStream(sb: SupabaseClient, filter: BoardFilter = {}):
         body: r.proposal_note,
         url: (r.domains ?? [])[0] ? `https://${(r.domains ?? [])[0]}` : null,
         targetSlug: r.slug,
+        // A host proposal is not filed in a niche: it is one host asking to be
+        // looked at, and the scopes it names are already in its title. Filing it
+        // under whichever scope came first would invent an answer the proposer did
+        // not give.
+        domain: null,
         inert: true,
         byPlatform: false,
       });

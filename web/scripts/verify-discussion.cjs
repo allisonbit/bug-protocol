@@ -65,9 +65,34 @@ say(quiet.length === 2 && quiet.every((r) => r.replies === 0), "quiet: only the 
 say(quiet[0].name === "middle, most agreed", "quiet: and still newest first among them", quiet[0].name);
 say(sortBoard(rows, "new").length === rows.length, "no sort drops a row except quiet");
 say(JSON.stringify(sortBoard(rows, "new").map((r) => r.name)) !== JSON.stringify(rows.map((r) => r.name)), "and the caller's array is not sorted in place");
-const { isBoardSort } = require("../lib/swamp/discussion.ts");
-say(isBoardSort("top") && isBoardSort("quiet"), "the four names are accepted");
+const { isBoardSort, BOARD_SORTS, BOARD_SORT_LABELS, hotWeight, TRENDING_WINDOW_HOURS } = require("../lib/swamp/discussion.ts");
+say(BOARD_SORTS.every((s) => isBoardSort(s)), "every name the board offers is accepted by the reader", BOARD_SORTS.join(", "));
+say(BOARD_SORTS.every((s) => BOARD_SORT_LABELS[s] && BOARD_SORT_LABELS[s].note.length > 0), "and every one of them is explained where it is offered, so no ordering is a mystery");
 say(!isBoardSort("newest") && !isBoardSort("") && !isBoardSort(undefined), "anything else falls back rather than throwing");
+
+// `hot` and `trending` are the two orderings inherited from Claudebook, and each one
+// fails quietly in a different way: `hot` if age stops mattering, `trending` if it
+// reads totals instead of what moved.
+console.log("\n== hot: age is the whole point ==");
+const now = Date.parse("2026-01-10T12:00:00Z");
+const fresh = { at: "2026-01-10T11:00:00Z", score: 1, replies: 0 };
+const stale = { at: "2026-01-01T12:00:00Z", score: 40, replies: 2 };
+say(hotWeight(fresh, now) > hotWeight(stale, now), "an hour-old entry outranks a nine-day-old one with forty times the score", `${hotWeight(fresh, now).toFixed(5)} vs ${hotWeight(stale, now).toFixed(5)}`);
+// One hour old, one vote, no answers: (1 + 2 x 0) / (1 + 2) ^ 1.5.
+say(hotWeight(fresh, now) === 1 / Math.pow(3, 1.5), "the formula is the one the board prints, to the digit", `${hotWeight(fresh, now)}`);
+say(hotWeight({ at: "2026-01-10T12:00:00Z", score: 0, replies: 0 }, now) === 0, "an entry with no engagement weighs nothing however new it is");
+say(hotWeight({ at: "2026-01-10T12:00:00Z", score: 0, replies: 1 }, now) === 2 / Math.pow(2, 1.5), "an answer is worth two votes, as the note says");
+say(hotWeight({ at: "2026-01-20T00:00:00Z", score: 1, replies: 0 }, now) === 1 / Math.pow(2, 1.5), "a future timestamp divides by the floor rather than producing a negative age");
+say(sortBoard(rows, "hot").length === rows.length, "hot ranks every row rather than filtering");
+
+console.log("\n== trending: now, not totals ==");
+const moved = rows.map((r, i) => ({ ...r, recent: [0, 30, 0, 12][i] }));
+say(sortBoard(moved, "trending")[0].name === "new and liked", "what moved today comes first", sortBoard(moved, "trending")[0].name);
+say(sortBoard(moved, "trending")[1].name === "newest, well answered", "then the next largest mover, not the next newest");
+const allStill = rows.map((r) => ({ ...r, recent: 0 }));
+say(sortBoard(allStill, "trending")[0].name === "newest, well answered", "a board where nothing moved falls back to newest rather than to an arbitrary order");
+say(sortBoard(rows, "trending")[0].name === "newest, well answered", "and a row that never carried a recent count is read as zero rather than as NaN");
+say(TRENDING_WINDOW_HOURS === 24, "the window trending reads is the one it publishes", `${TRENDING_WINDOW_HOURS}h`);
 
 console.log("\n== avatarSvg: the same handle always draws the same face ==");
 const { avatarSvg, avatarUrl } = require("../lib/swamp/avatar.ts");

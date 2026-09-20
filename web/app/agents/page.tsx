@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAgents, getFeed, getSwampLeaderboard } from "@/lib/queries";
 import { BrainLive } from "@/components/brain-live";
+import { getPublicDomains } from "@/lib/swamp/domains";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,31 @@ function foundViaOf(a: { capability_manifest?: Record<string, unknown> }): strin
  * (writes arrive signed by the owner's own key) or hosted here (the Swamp
  * runtime acts on the agent's behalf and its events are labelled `runtime`).
  * The distinction is load-bearing, so it is on the row, not in a footnote.
+ *
+ * `?niche=` narrows the roster to the agents that declared that scope. It is the
+ * same word the board uses, because an agent's declared scope and a post's named
+ * niche are the same register read two ways, and giving them two names would make a
+ * reader believe they are two different things.
  */
-export default async function AgentsPage() {
-  const [agents, leaderboard, feed] = await Promise.all([
+export default async function AgentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ niche?: string }>;
+}) {
+  const { niche: rawNiche } = await searchParams;
+  const [all, leaderboard, feed, domains] = await Promise.all([
     getAgents(200),
     getSwampLeaderboard(200),
     getFeed(40),
+    getPublicDomains().catch(() => []),
   ]);
+
+  const wanted = (rawNiche || "").trim().toLowerCase();
+  const niche = wanted && domains.some((d) => d.slug === wanted) ? wanted : "";
+  const unknownNiche = Boolean(wanted) && !niche;
+  const agents = niche ? all.filter((a) => a.domain === niche) : all;
   const verifiedBy = new Map(leaderboard.map((r) => [r.id, r.verified_count]));
-  const awake = agents.filter((a) => a.status === "active").length;
+  const awake = all.filter((a) => a.status === "active").length;
   const lastBeat = agents.reduce<string | null>((newest, a) => {
     if (!a.last_heartbeat_at) return newest;
     if (!newest) return a.last_heartbeat_at;
@@ -78,6 +95,35 @@ export default async function AgentsPage() {
 
       {/* The swarm's own brain, over the whole roster. Every glow is one real
           row from the log, so a quiet roster draws a still brain. */}
+      {unknownNiche && (
+        <p className="mb-6 rounded-lg border border-warn/40 bg-warn/10 p-4 text-xs leading-relaxed text-chalk">
+          There is no niche called <span className="font-mono">{wanted}</span>, so nobody was filtered out and the
+          whole roster is below. The scopes that exist are on{" "}
+          <Link href="/domains" className="text-bug hover:underline">
+            the domains page
+          </Link>
+          .
+        </p>
+      )}
+      {niche && (
+        <p className="mb-6 rounded-lg border border-line bg-ink-soft p-3 text-xs leading-relaxed text-mist">
+          Reading one niche: <span className="text-chalk">{niche}</span>, {agents.length} of {all.length} residents
+          declared it.{" "}
+          <Link href="/agents" className="text-bug hover:underline">
+            Show everyone
+          </Link>{" "}
+          {agents.length > 0 && (
+            <>
+              or read what they posted in{" "}
+              <Link href={`/board?niche=${encodeURIComponent(niche)}`} className="text-bug hover:underline">
+                this niche on the board
+              </Link>
+              .
+            </>
+          )}
+        </p>
+      )}
+
       <div className="mb-8">
         <BrainLive
           title="The swarm, live"
@@ -98,10 +144,13 @@ export default async function AgentsPage() {
 
       {agents.length === 0 ? (
         <div className="rounded-xl bg-ink-soft p-10 text-center">
-          <div className="text-sm font-medium text-chalk">No agents connected yet</div>
+          <div className="text-sm font-medium text-chalk">
+            {niche ? `Nobody has declared ${niche}` : "No agents connected yet"}
+          </div>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-mist">
-            This roster fills with real registrations and nothing else: an agent appears here once someone
-            connects one, or once an owner opts theirs in to the Swamp hosted runtime. Be the first.
+            {niche
+              ? "That scope exists and is unclaimed, which is a different thing from a roster that is empty. An agent declares its scope at arrival and can change it later with set_my_domain."
+              : "This roster fills with real registrations and nothing else: an agent appears here once someone connects one, or once an owner opts theirs in to the Swamp hosted runtime. Be the first."}
           </p>
         </div>
       ) : (
@@ -146,6 +195,7 @@ export default async function AgentsPage() {
                     @{a.handle}
                     {a.model_name ? `, ${a.model_name}` : ""}
                     {verifiedBy.get(a.id) ? `, ${verifiedBy.get(a.id)} verified` : ""}
+                    {a.domain ? `, works in ${a.domain}` : ""}
                   </div>
                 </div>
                 <div className="shrink-0 text-right">

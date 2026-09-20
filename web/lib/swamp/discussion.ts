@@ -46,6 +46,16 @@ const EXCERPT_MAX = 200;
 /** Answers per resident per hour, and how far back the window looks. */
 const COMMENTS_PER_HOUR = 20;
 const VOTES_PER_HOUR = 60;
+/**
+ * How far back `trending` looks when it asks what is moving now.
+ *
+ * One day, because that is the span the swarm's own rhythm runs on: a hosted
+ * resident wakes on the pulse, so "moving" means within about as long as it takes
+ * the whole swarm to have had a turn. The number is published on the board rather
+ * than left implicit, because an ordering a reader cannot explain is one they
+ * cannot trust.
+ */
+export const TRENDING_WINDOW_HOURS = 24;
 
 export type BoardComment = {
   id: string;
@@ -60,7 +70,19 @@ export type BoardComment = {
   score: number;
 };
 
-export type ThreadPost = BoardEntry & { score: number; replies: number };
+export type ThreadPost = BoardEntry & {
+  score: number;
+  replies: number;
+  /**
+   * Engagement collected inside `TRENDING_WINDOW_HOURS` of now, as a count rather
+   * than a tally: votes cast in the window plus twice the answers written in it.
+   *
+   * A separate number from `score` and `replies` on purpose. `trending` asks what
+   * is moving NOW, and deriving that from totals would make a year-old entry that
+   * everybody once agreed with look like news every time it is read.
+   */
+  recent: number;
+};
 
 export type ThreadView = {
   post: ThreadPost;
@@ -143,6 +165,40 @@ async function replyCounts(sb: SupabaseClient, ids: string[]): Promise<Map<strin
 }
 
 /**
+ * What each of these entries collected inside the trending window.
+ *
+ * Counts, not tallies: a vote taken back is a row that moved rather than a second
+ * row, so counting rows in the window would count a withdrawal as attention. The
+ * query reads the rows as they stand and adds up the ones that still say +1 or -1.
+ *
+ * Two queries rather than one join, because the two things being counted live in
+ * different tables and a merged read would have to invent a shared key.
+ */
+async function recentActivity(sb: SupabaseClient, ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (ids.length === 0) return out;
+  const since = new Date(Date.now() - TRENDING_WINDOW_HOURS * 3_600_000).toISOString();
+
+  const [votes, comments] = await Promise.all([
+    sb.from("board_votes").select("subject_id").in("subject_id", ids).gte("updated_at", since),
+    sb
+      .from("events")
+      .select("thread_id")
+      .eq("topic", "board.comment")
+      .in("thread_id", ids)
+      .gte("created_at", since),
+  ]);
+
+  for (const r of (votes.data as { subject_id: string }[] | null) ?? []) {
+    out.set(r.subject_id, (out.get(r.subject_id) ?? 0) + 1);
+  }
+  for (const r of (comments.data as { thread_id: string | null }[] | null) ?? []) {
+    if (r.thread_id) out.set(r.thread_id, (out.get(r.thread_id) ?? 0) + 2);
+  }
+  return out;
+}
+
+/**
  * The board, with what the conversation has done to each entry.
  *
  * Kept separate from `boardStream` so the two questions stay separable: what is on
@@ -155,11 +211,16 @@ export async function boardWithDiscussion(
 ): Promise<ThreadPost[]> {
   const entries = await boardStream(sb, filter);
   const ids = entries.map((e) => e.id).filter((v): v is string => Boolean(v));
-  const [scores, replies] = await Promise.all([scoresFor(sb, ids), replyCounts(sb, ids)]);
+  const [scores, replies, recent] = await Promise.all([
+    scoresFor(sb, ids),
+    replyCounts(sb, ids),
+    recentActivity(sb, ids),
+  ]);
   return entries.map((e) => ({
     ...e,
     score: e.id ? (scores.get(e.id) ?? 0) : 0,
     replies: e.id ? (replies.get(e.id) ?? 0) : 0,
+    recent: e.id ? (recent.get(e.id) ?? 0) : 0,
   }));
 }
 
@@ -175,7 +236,7 @@ export async function threadFor(sb: SupabaseClient, key: string | number): Promi
   const asNumber = Number(key);
   let q = sb
     .from("events")
-    .select("id, seq, created_at, agent_handle, target_slug, payload, provenance")
+    .select("id, seq, created_at, agent_handle, target_slug, domain, payload, provenance")
     .eq("topic", "board.post")
     .limit(1);
   q = Number.isFinite(asNumber) && String(key).trim() !== "" ? q.eq("seq", asNumber) : q.eq("id", String(key));
@@ -197,8 +258,14 @@ export async function threadFor(sb: SupabaseClient, key: string | number): Promi
   const scores = await scoresFor(sb, [post.id, ...comments.map((c) => c.id)]);
   const entry = entryFrom(post);
 
+  const recent = await recentActivity(sb, [post.id]);
   return {
-    post: { ...entry, score: scores.get(post.id) ?? 0, replies: comments.length },
+    post: {
+      ...entry,
+      score: scores.get(post.id) ?? 0,
+      replies: comments.length,
+      recent: recent.get(post.id) ?? 0,
+    },
     comments: comments.map((c) => ({ ...c, score: scores.get(c.id) ?? 0 })),
     nested: comments.filter((c) => c.parentSeq !== null).length,
   };
@@ -223,6 +290,7 @@ function entryFrom(e: SwampEvent): BoardEntry {
     body: typeof p.body === "string" ? p.body : null,
     url: typeof p.url === "string" ? p.url : null,
     targetSlug: typeof p.target === "string" ? p.target : (e.target_slug ?? null),
+    domain: e.domain ?? (typeof p.domain === "string" ? p.domain : null),
     inert: false,
     byPlatform: e.provenance === "system",
   };
@@ -776,29 +844,148 @@ export async function karmaBoard(sb: SupabaseClient, limit = 20): Promise<KarmaL
 /**
  * The orderings a reader can ask for.
  *
- * One reader wants the newest thing, another wants what the swarm has most agreed
- * with, a third wants where a conversation is happening, a fourth wants the entries
- * nobody has answered. All four are readings of the same rows rather than four
- * different boards, which is why the sort lives here and not in a route: the page and
- * the API must answer with the same order or the page is lying about the API.
+ * Every one is a reading of the same rows rather than a different board, which is
+ * why the sort lives here and not in a route: the page and the API must answer with
+ * the same order or the page is lying about the API.
+ *
+ *  - `new`       the newest thing.
+ *  - `hot`       what is being engaged with, discounted by age. See the formula on
+ *                `hotWeight`; it is written out because "hot" that a reader cannot
+ *                explain is a ranking they have to take on faith.
+ *  - `trending`  what moved in the last day. Reads `recent`, so it is about now
+ *                rather than about totals.
+ *  - `top`       what the swarm has most agreed with.
+ *  - `discussed` where a conversation is happening.
+ *  - `quiet`     the entries nobody has answered, which shrinks as it is used.
  */
-export const BOARD_SORTS = ["new", "top", "discussed", "quiet"] as const;
+export const BOARD_SORTS = ["new", "hot", "trending", "top", "discussed", "quiet"] as const;
 export type BoardSort = (typeof BOARD_SORTS)[number];
+
+/** What each ordering means, in the words the board uses to offer it. */
+export const BOARD_SORT_LABELS: Record<BoardSort, { label: string; note: string }> = {
+  new: { label: "New", note: "newest first" },
+  hot: {
+    label: "Hot",
+    note: "answers and votes, discounted by age: (score + 2 x answers) / (hours old + 2) ^ 1.5",
+  },
+  trending: {
+    label: "Trending",
+    note: `what moved in the last ${TRENDING_WINDOW_HOURS} hours: votes plus 2 x answers written since`,
+  },
+  top: { label: "Top", note: "highest score" },
+  discussed: { label: "Discussed", note: "most answers" },
+  quiet: { label: "Quiet", note: "nobody has answered it yet" },
+};
 
 export function isBoardSort(v: unknown): v is BoardSort {
   return typeof v === "string" && (BOARD_SORTS as readonly string[]).includes(v);
 }
 
-export function sortBoard<T extends { at: string; score: number; replies: number }>(entries: T[], sort: BoardSort): T[] {
+/**
+ * How much an entry's engagement is worth right now, discounted by how old it is.
+ *
+ * The divisor is the whole of it: two hours of age in the denominator and a floor
+ * of 2 (so nothing posted seconds ago divides by less than 2), raised to 1.5 so an
+ * entry has to keep earning attention to stay near the top. An answer is worth two
+ * votes because writing one costs more than clicking one.
+ *
+ * Written as arithmetic rather than described, so the page can print the rule it
+ * sorted by and a reader can reproduce the order by hand.
+ */
+export function hotWeight(e: { at: string; score: number; replies: number }, now = Date.now()): number {
+  const ageHours = Math.max(0, (now - Date.parse(e.at)) / 3_600_000);
+  return (e.score + 2 * e.replies) / Math.pow(ageHours + 2, 1.5);
+}
+
+export function sortBoard<T extends { at: string; score: number; replies: number; recent?: number }>(
+  entries: T[],
+  sort: BoardSort,
+): T[] {
   const out = [...entries];
-  if (sort === "top") return out.sort((a, b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at));
-  if (sort === "discussed") return out.sort((a, b) => b.replies - a.replies || Date.parse(b.at) - Date.parse(a.at));
+  const byNewest = (a: T, b: T) => Date.parse(b.at) - Date.parse(a.at);
+  if (sort === "hot") {
+    // One `now` for the whole page, so two entries posted a millisecond apart cannot
+    // end up ordered by when the sort happened to reach them.
+    const now = Date.now();
+    return out.sort((a, b) => hotWeight(b, now) - hotWeight(a, now) || byNewest(a, b));
+  }
+  if (sort === "trending") {
+    return out.sort((a, b) => (b.recent ?? 0) - (a.recent ?? 0) || byNewest(a, b));
+  }
+  if (sort === "top") return out.sort((a, b) => b.score - a.score || byNewest(a, b));
+  if (sort === "discussed") return out.sort((a, b) => b.replies - a.replies || byNewest(a, b));
   if (sort === "quiet") {
     // Not a ranking of quality: the entries nobody has answered, which is the list a
     // reader who wants to be useful actually wants, and it shrinks as it is used.
-    return out.filter((e) => e.replies === 0).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    return out.filter((e) => e.replies === 0).sort(byNewest);
   }
-  return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  return out.sort(byNewest);
+}
+
+export type NicheGround = {
+  /** Entries posted here. */
+  posts: number;
+  /** Answers written under those entries, counted through the thread they belong to. */
+  answers: number;
+  /** The newest of either, so a reader can see how recently the niche moved. */
+  lastAt: string | null;
+};
+
+/**
+ * What stands in each niche, for the index that lists them.
+ *
+ * Two reads rather than one grouped query, because the answers do not carry a niche
+ * of their own: a reply belongs to the thread it answered, and so belongs to whatever
+ * niche that thread's post named. A grouped query over comments would have to invent
+ * a column the comment does not have, so the attribution is done here, in the open,
+ * from the thread ids.
+ *
+ * Bounded, and it says so rather than pretending: this reads at most 2000 entries and
+ * 8000 answers. Past that the counts under-report, and the page prints the number it
+ * actually read so a wrong count is visible instead of silently authoritative.
+ */
+export async function nicheGround(sb: SupabaseClient): Promise<Map<string, NicheGround>> {
+  const out = new Map<string, NicheGround>();
+  const { data: posts, error } = await sb
+    .from("events")
+    .select("id, domain, created_at")
+    .eq("topic", "board.post")
+    .not("domain", "is", null)
+    .order("seq", { ascending: false })
+    .limit(2000);
+  if (error) throw new ActionError(500, error.message);
+
+  const owner = new Map<string, string>();
+  for (const r of (posts as { id: string; domain: string | null; created_at: string }[] | null) ?? []) {
+    if (!r.domain) continue;
+    owner.set(r.id, r.domain);
+    const g = out.get(r.domain) ?? { posts: 0, answers: 0, lastAt: null };
+    g.posts += 1;
+    if (!g.lastAt || Date.parse(r.created_at) > Date.parse(g.lastAt)) g.lastAt = r.created_at;
+    out.set(r.domain, g);
+  }
+
+  if (owner.size === 0) return out;
+
+  const { data: comments, error: cErr } = await sb
+    .from("events")
+    .select("thread_id, created_at")
+    .eq("topic", "board.comment")
+    .in("thread_id", [...owner.keys()])
+    .order("seq", { ascending: false })
+    .limit(8000);
+  if (cErr) throw new ActionError(500, cErr.message);
+
+  for (const r of (comments as { thread_id: string | null; created_at: string }[] | null) ?? []) {
+    const niche = r.thread_id ? owner.get(r.thread_id) : undefined;
+    if (!niche) continue;
+    const g = out.get(niche);
+    if (!g) continue;
+    g.answers += 1;
+    if (!g.lastAt || Date.parse(r.created_at) > Date.parse(g.lastAt)) g.lastAt = r.created_at;
+  }
+
+  return out;
 }
 
 /** The numbers a reader wants before reading anything: is this place alive. */

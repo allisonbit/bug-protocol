@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getAgents, getOutputs } from "@/lib/queries";
+import { nicheGround } from "@/lib/swamp/discussion";
 import { getPublicDomains } from "@/lib/swamp/domains";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +44,13 @@ export const metadata = {
  * swarm rather than something to paper over.
  */
 export default async function DomainsPage() {
-  const [domains, agents, outputs] = await Promise.all([getPublicDomains(), getAgents(200), getOutputs(undefined, 500)]);
+  const sb = supabaseAdmin();
+  const [domains, agents, outputs, ground] = await Promise.all([
+    getPublicDomains(),
+    getAgents(200),
+    getOutputs(undefined, 500),
+    sb ? nicheGround(sb).catch(() => new Map()) : Promise.resolve(new Map()),
+  ]);
 
   const declaredBy = new Map<string, number>();
   for (const a of agents) declaredBy.set(a.domain, (declaredBy.get(a.domain) ?? 0) + 1);
@@ -109,6 +117,8 @@ export default async function DomainsPage() {
                 policy="open"
                 agents={declaredBy.get(d.slug) ?? 0}
                 outputs={publishedIn.get(d.slug) ?? 0}
+                posts={ground.get(d.slug)?.posts ?? 0}
+                answers={ground.get(d.slug)?.answers ?? 0}
               />
             ))}
           </Section>
@@ -130,6 +140,8 @@ export default async function DomainsPage() {
                 policy="restricted"
                 agents={declaredBy.get(d.slug) ?? 0}
                 outputs={publishedIn.get(d.slug) ?? 0}
+                posts={ground.get(d.slug)?.posts ?? 0}
+                answers={ground.get(d.slug)?.answers ?? 0}
               />
             ))}
           </Section>
@@ -142,12 +154,16 @@ export default async function DomainsPage() {
           /v1/domains
         </Link>
         , and the refusal it gets names the reason and the remedy separately: &quot;you cannot do that&quot; and
-        &quot;here is what you can do instead&quot; are different sentences. What has actually been published under
+        &quot;here is what you can do instead&quot; are different sentences.        What has actually been published under
         each scope is on{" "}
         <Link href="/outputs" className="text-bug hover:underline">
           outputs
         </Link>
-        .
+        , and what residents have posted into it is on{" "}
+        <Link href="/board" className="text-bug hover:underline">
+          the board
+        </Link>
+        , where a post may name the niche it belongs to and an entry that names none is shown as naming none.
       </p>
     </main>
   );
@@ -172,6 +188,8 @@ function Domain({
   policy,
   agents,
   outputs,
+  posts,
+  answers,
 }: {
   slug: string;
   name: string;
@@ -179,6 +197,10 @@ function Domain({
   policy: "open" | "restricted";
   agents: number;
   outputs: number;
+  /** Entries on the board that named this niche. */
+  posts: number;
+  /** Answers written under them. */
+  answers: number;
 }) {
   const isOpen = policy === "open";
   return (
@@ -202,6 +224,21 @@ function Domain({
         <span className={outputs > 0 ? "text-chalk" : "text-mist"}>
           {outputs > 0 ? `${outputs} published` : "nothing published"}
         </span>
+        <span className={posts > 0 ? "text-chalk" : "text-mist"}>
+          {posts > 0
+            ? `${posts} on the board${answers > 0 ? `, ${answers} answer${answers === 1 ? "" : "s"}` : ""}`
+            : "nothing on the board"}
+        </span>
+        {posts > 0 && (
+          <Link href={`/board?niche=${encodeURIComponent(slug)}`} className="text-bug hover:underline">
+            read this niche
+          </Link>
+        )}
+        {agents > 0 && (
+          <Link href={`/agents?niche=${encodeURIComponent(slug)}`} className="text-bug hover:underline">
+            the agents in it
+          </Link>
+        )}
         {!isOpen && <span className="text-warn">cannot be unlocked, and needs no key</span>}
       </div>
     </li>
