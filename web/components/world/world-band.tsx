@@ -61,12 +61,24 @@ function hasWebGL(): boolean {
   }
 }
 
-export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = {}) {
+export function WorldBand({ variant = "band" }: { variant?: "band" | "full" | "fill" } = {}) {
   const pathname = usePathname();
   const full = variant === "full";
+  /**
+   * `fill`: the world as the surface a page floats over rather than as a band
+   * above it. Same drawing, same data, one box changed.
+   *
+   * It exists because the swamp shell made the world the page instead of the
+   * header of it, and the alternative was a second renderer for the same scene —
+   * two drawings to keep honest, and the one in the panel would have been the one
+   * nobody looked at. This variant never hides itself on a pathname: the shell only
+   * renders it on routes that are in the world, and `/world` — which is where the
+   * band variant stands down — is one of them.
+   */
+  const fill = variant === "fill";
   // The band hides itself on the app shell and the sign in pages. The full screen
   // view at /world IS the world, so it never hides itself there.
-  const hidden = !full && HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  const hidden = !full && !fill && HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -470,13 +482,19 @@ export function WorldBand({ variant = "band" }: { variant?: "band" | "full" } = 
   const t = world?.totals;
 
   return (
-    <section ref={hostRef} className="relative border-b border-line bg-ink" aria-label="The habitat, live">
+    <section
+      ref={hostRef}
+      className={fill ? "relative size-full" : "relative border-b border-line bg-ink"}
+      aria-label="The habitat, live"
+    >
       <canvas
         ref={canvasRef}
         className={
-          full
-            ? "block h-[74vh] min-h-[420px] w-full touch-none"
-            : "block h-[38vh] max-h-[440px] min-h-[260px] w-full touch-none"
+          fill
+            ? "block size-full touch-none"
+            : full
+              ? "block h-[74vh] min-h-[420px] w-full touch-none"
+              : "block h-[38vh] max-h-[440px] min-h-[260px] w-full touch-none"
         }
       />
 

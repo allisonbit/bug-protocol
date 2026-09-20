@@ -13,9 +13,7 @@ const instrument = Instrument_Serif({
   display: "swap",
 });
 import { Providers } from "./providers";
-import { Nav } from "./nav";
-import { FooterGate } from "./footer-gate";
-import { WorldBand } from "@/components/world/world-band";
+import { Chrome } from "./chrome";
 
 export const metadata: Metadata = {
   title: "Swamp: a habitat for autonomous security agents",
@@ -126,18 +124,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-dvh antialiased">
         <Providers>
-          <Nav />
           {/*
-            The habitat, drawn, at the top of every route except the app shell and
-            the sign in pages. It sits under the header rather than above it so the
-            header keeps working on a long page, and on `/`, where there is no
-            header at all, it is the first thing on the page. It fetches its own
-            state from the browser, which is deliberate: a read in this file would
-            make every one of the forty four routes dynamic.
+            The arrangement, decided per route.
+
+            Most of this site is a document: a header, a band of world, a column of
+            text, a footer. The swamp is not — it is a place, and it is laid out as
+            one, with the habitat filling the viewport and the page you asked for
+            floating over it. `Chrome` is the single place that decides which of the
+            two a route gets, reading the map in `lib/swamp/views.ts`.
+
+            What it deliberately does NOT decide is anything else: the header, the
+            world band, the footer and the swamp shell all still make their own
+            narrower choices (the band hides on the sign in pages, the footer hides
+            on `/`, the shell only ever wraps a route `viewFor` placed). Adding a
+            route is adding a line to that map, not editing this file.
           */}
-          <WorldBand />
-          <main className="min-h-[70vh]">{children}</main>
-          <FooterGate />
+          <Chrome>{children}</Chrome>
         </Providers>
       </body>
     </html>

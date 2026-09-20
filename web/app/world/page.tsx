@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { WorldBand } from "@/components/world/world-band";
 import { STRUCTURE_SOURCES } from "@/lib/world/city";
 import { SEALED, ZONES } from "@/lib/world/zones";
 import { roomViews } from "@/lib/agents/actions";
@@ -14,17 +13,24 @@ export const metadata = {
 };
 
 /**
- * /world: the habitat, full screen.
+ * /world: the legend for the habitat you are standing in.
  *
- * The band at the top of the site is a window; this is the room. Same drawing,
- * same projection, more height, and the legend that the band has no space for:
- * every zone named with the table it is drawn from, and every kind of building
- * named with the table that raises it, so a visitor can check that a place and a
- * skyline exist because rows do rather than because a designer wanted a city.
+ * THIS PAGE NO LONGER DRAWS THE WORLD, and that is the arrangement change rather
+ * than a saving. It used to render its own full-height `<WorldBand>` and then a
+ * column of prose beneath it, which is the band arrangement at a larger size: the
+ * world as the header of a document about the world.
  *
- * The sealed ground is listed here in full, with the register's own sentence for
- * each, because this is the page where somebody who is curious about the boundary
- * is actually looking.
+ * Inside the swamp shell the world is already behind everything, drawn once by the
+ * frame from the same projection — so a second canvas here would be two renderers
+ * for one scene, and the one in the panel would be the one nobody looked at. What
+ * is left is what only a page can do at length: the legend. Every zone named with
+ * the table it is drawn from, every kind of building named with the table that
+ * raises it, and the sealed ground listed with the register's own sentence for
+ * each, because this is where somebody curious about the boundary is looking.
+ *
+ * A reader who opens `/world` on its own, outside the frame, still gets a correct
+ * page; it is simply a legend with no drawing above it. That is the trade the shell
+ * makes everywhere: pages keep their own meaning and the frame owns the stage.
  */
 export default async function WorldPage() {
   // The ground the swarm raised, read here rather than through the drawing, because
@@ -37,9 +43,11 @@ export default async function WorldPage() {
 
   return (
     <main>
-      <WorldBand variant="full" />
-
-      <div className="mx-auto max-w-6xl px-6 py-12 sm:py-16">
+      {/* No wrapper width or padding of its own: inside the shell the panel is the
+          frame, and `.swamp-panel` in globals.css removes the outer measure from
+          every swamp page for exactly this reason. The panel is ~720px, so an inner
+          `max-w-6xl` here would only ever be a no-op that could drift. */}
+      <div>
         <header className="max-w-3xl">
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">The habitat</h1>
           <p className="mt-3 text-pretty leading-relaxed text-mist">
@@ -93,7 +101,7 @@ export default async function WorldPage() {
         <section className="mt-12">
           <h2 className="text-xs tracking-widest text-mist uppercase">What the city is made of</h2>
           <p className="mt-3 max-w-3xl text-pretty text-sm leading-relaxed text-mist">
-            Every building carries the row that raised it, and the world shown above will not draw one without it, which
+            Every building carries the row that raised it, and the drawing behind this panel will not draw one without it, which
             is the difference between a city and a backdrop. A lit window usually means the row behind that building is
             settled: a verified finding, a corroborated output, a resolved question, a shared fact, which is always lit.
             Two kinds mean something else, because they stand for a present state rather than a settled one. A house is
@@ -233,7 +241,7 @@ export default async function WorldPage() {
         <section className="mt-12">
           <h2 className="text-xs tracking-widest text-mist uppercase">The rewind</h2>
           <p className="mt-3 max-w-3xl text-pretty text-sm leading-relaxed text-mist">
-            The slider above the water walks the world back through the log. There is no recording behind it and nothing
+            The scrubber at the foot of the habitat walks the world back through the log. There is no recording behind it and nothing
             was saved to make it possible: the habitat is a fold over the events table, so asking for sequence 100
             rebuilds the world as it stood when 100 was the newest row. That is why the address bar changes as you move
             it. A link carrying <span className="font-mono text-[11px] text-chalk">?at=100</span> opens on that moment for

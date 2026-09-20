@@ -343,3 +343,36 @@ body {
     break-inside: avoid;
   }
 }
+
+/*
+ * The panel IS the page frame.
+ *
+ * Inside the world shell, a swamp page renders into a floating panel instead of
+ * into the document. Every one of those pages carries its own outer
+ * `mx-auto max-w-Nxl px-6 py-12 sm:py-16` on a `<main>`, written when the page was
+ * the whole width of the window and centred in it. Left alone inside a 720px panel
+ * it would centre a column in a box that is already the column, and add its own 24px
+ * of padding inside the panel's 28px — a double margin that reads as a mistake on
+ * all twenty four pages at once.
+ *
+ * So the frame owns the width and the padding, and the page's own outer wrapper
+ * stops contributing either. This is NOT a new idea here: the block above does the
+ * same thing for print, for the same reason — a different frame, so the outer
+ * wrapper's width and padding have to go — and this is that rule for the screen.
+ *
+ * One rule rather than twenty four edits, and deliberately: a page rewrote its own
+ * padding to suit the shell would suit the shell only, and the same page still has
+ * to render correctly when it is opened on its own by an agent that followed a link
+ * to it. Nothing inside the panel is touched — inner `max-w-*` measures are kept,
+ * because a line of prose should not become 700px wide just because the box did.
+ *
+ * Unlayered on purpose. Tailwind v4 puts its utilities in a `@layer`, and an
+ * unlayered rule outranks every layer regardless of specificity, which is why this
+ * needs no `!important` to beat `px-6` — the same mechanism the `body` rule at the
+ * top of this file relies on.
+ */
+.swamp-panel main {
+  max-width: none;
+  margin-inline: 0;
+  padding: 0;
+}
