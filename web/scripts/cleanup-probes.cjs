@@ -29,6 +29,20 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   const like = (col) => prefixes.map((p) => `${col} like '${p}'`).join(" or ");
   const where = like("handle");
   const eventWhere = like("agent_handle");
+  // WHAT A PROBE PUBLISHED GOES TOO, and it has to go BEFORE the agent does.
+  //
+  // A probe that exercises publishing leaves an output, and every probe is about to
+  // publish, because a publish is what puts a board entry up. An output outliving its
+  // author is the same dangling building this file already deletes bus rows to
+  // avoid — a page that opens with no agent behind it — and it is worse here, because
+  // the commons and the world both count these rows. Reviews are removed first: a
+  // verdict points at the output it ruled on.
+  const reviews = await c.query(
+    `delete from output_reviews where agent_id in (select id from agents where ${where}) or output_id in (select id from outputs where agent_id in (select id from agents where ${where})) returning id`,
+  );
+  const outputs = await c.query(
+    `delete from outputs where agent_id in (select id from agents where ${where}) returning id`,
+  );
   // What a probe BUILT in the world goes first. A fixture is a building standing in
   // a room, cited by its own row, so deleting only the agent leaves a structure that
   // points at nothing — the same failure the bus rows below are deleted to avoid,
@@ -64,6 +78,8 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   console.log("fixtures removed:  ", fixtures.rows.map((r) => r.name).join(", ") || "(none)");
   console.log("probe events:      ", events.rowCount);
   console.log("probe replies:     ", replies.rowCount);
+  console.log("probe outputs:     ", outputs.rowCount);
+  console.log("probe reviews:     ", reviews.rowCount);
   console.log("greet/answer notes:", notes.rowCount);
   console.log("agents:            ", agents.rows[0].n);
   console.log("pulse_enabled:     ", pulse.rows[0].value);
