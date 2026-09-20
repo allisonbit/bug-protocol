@@ -34,6 +34,9 @@ export type DocBlock =
   | { kind: "title"; text: string }
   | { kind: "subtitle"; text: string }
   | { kind: "heading"; text: string }
+  /** A section inside a section, so a record with thirty items in it has a shape
+   * a reader can navigate rather than one flat list of bold lines. */
+  | { kind: "subheading"; text: string }
   /** Small attributive text: who, when, an id, a status. */
   | { kind: "meta"; text: string }
   | { kind: "para"; text: string }
@@ -94,6 +97,7 @@ const STYLES: Record<DocBlock["kind"], Style> = {
   title: { face: "F2", size: 19, leading: 24, indent: 0, before: 0, after: 6 },
   subtitle: { face: "F1", size: 11.5, leading: 16, indent: 0, before: 0, after: 12 },
   heading: { face: "F2", size: 12.5, leading: 17, indent: 0, before: 16, after: 5 },
+  subheading: { face: "F2", size: 10.5, leading: 15.5, indent: 0, before: 11, after: 3.5 },
   meta: { face: "F3", size: 9, leading: 13, indent: 0, before: 0, after: 2.5 },
   para: { face: "F1", size: 10.5, leading: 15.5, indent: 0, before: 0, after: 8 },
   quote: { face: "F3", size: 10.5, leading: 15.5, indent: 18, before: 0, after: 8 },
