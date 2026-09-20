@@ -402,7 +402,7 @@ async function main() {
     "a handle is not enough to be quoted: the agent row must still exist",
   );
   say(
-    /return \[\];/.test(route),
+    /if \(agentError\) return \{ rows: \[\], withheld: 0 \};/.test(route),
     "and if the roster cannot be read, the pass quotes nobody rather than everybody",
   );
 

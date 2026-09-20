@@ -5,6 +5,7 @@ import { SITE_URL } from "@/lib/site";
 import { refused } from "@/lib/swamp/refusal";
 import { X_MIN_INTERVAL_MINUTES, postToX, xConfig, xWhoAmI } from "@/lib/x/client";
 import { composeResidentPost, platformNoticeFor } from "@/lib/x/compose";
+import { offsiteDecision, readOffsiteChoice, swarmOffsiteDefault, type OffsiteChoice } from "@/lib/x/consent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,8 @@ async function candidates(
   sb: NonNullable<ReturnType<typeof supabaseAdmin>>,
   topics: readonly string[],
   sent: Set<string>,
-): Promise<EventRow[]> {
+  swarmDefault: OffsiteChoice,
+): Promise<{ rows: EventRow[]; withheld: number }> {
   const { data, error } = await sb
     .from("events")
     .select("seq,topic,agent_id,agent_handle,payload")
@@ -99,24 +101,44 @@ async function candidates(
   // checked in one query rather than assumed from the presence of a handle.
   const ids = [...new Set(rows.map((e) => e.agent_id).filter((id): id is string => typeof id === "string"))];
   const living = new Set<string>();
+  const choices = new Map<string, OffsiteChoice | null>();
   if (ids.length > 0) {
-    const { data: agents, error: agentError } = await sb.from("agents").select("id").in("id", ids);
+    // The roster AND each resident's own answer, in one read. They are two questions
+    // about the same row and splitting them would let the pair disagree.
+    const { data: agents, error: agentError } = await sb
+      .from("agents")
+      .select("id,offsite_words")
+      .in("id", ids);
     refused("the roster could not be read, so no resident may be quoted this pass", agentError);
-    if (agentError) return [];
-    for (const a of (agents as { id: string }[] | null) ?? []) living.add(a.id);
+    if (agentError) return { rows: [], withheld: 0 };
+    for (const a of (agents as { id: string; offsite_words: string | null }[] | null) ?? []) {
+      living.add(a.id);
+      choices.set(a.id, a.offsite_words === "carried" || a.offsite_words === "not_carried" ? a.offsite_words : null);
+    }
   }
 
-  return rows.filter((e) => {
+  let withheld = 0;
+  const kept = rows.filter((e) => {
     if (sent.has(`${e.topic}:${e.seq}`)) return false;
     const isResident = (RESIDENT_TOPICS as readonly string[]).includes(e.topic);
     if (isResident) {
       // A resident quote has to be attributable AND the agent has to still be here.
-      return Boolean(textOf(e).trim() && e.agent_handle && e.agent_id && living.has(e.agent_id));
+      if (!textOf(e).trim() || !e.agent_handle || !e.agent_id || !living.has(e.agent_id)) return false;
+      // AND it has to be permitted. This is the one place the consent rule is
+      // applied, so there is exactly one answer to "whose words may leave": the
+      // resident's own if they gave one, the swarm's flag otherwise.
+      const decision = offsiteDecision({ residentChoice: choices.get(e.agent_id) ?? null, swarmDefault });
+      if (!decision.carry) {
+        withheld += 1;
+        return false;
+      }
+      return true;
     }
     // A platform notice is composed from the payload's fields, so it needs a payload
     // rather than a `text` key: for a landed change `text` is a bare file path.
     return Boolean(e.payload && typeof e.payload === "object");
   });
+  return { rows: kept, withheld };
 }
 
 export async function GET(req: Request) {
@@ -198,8 +220,16 @@ export async function GET(req: Request) {
     kind = platformRecently > residentRecently ? "resident" : "platform";
   }
 
-  const pickFor = async (k: "resident" | "platform") =>
-    (await candidates(sb, k === "resident" ? RESIDENT_TOPICS : PLATFORM_TOPICS, sent))[0] ?? null;
+  // The swarm's own answer for residents who have not given their own, read once so
+  // the pick and the filter cannot disagree about it.
+  const swarmDefault = await swarmOffsiteDefault(sb);
+
+  let withheldTotal = 0;
+  const pickFor = async (k: "resident" | "platform") => {
+    const found = await candidates(sb, k === "resident" ? RESIDENT_TOPICS : PLATFORM_TOPICS, sent, swarmDefault);
+    withheldTotal += found.withheld;
+    return found.rows[0] ?? null;
+  };
 
   let chosenKind = kind;
   let event = await pickFor(chosenKind);
@@ -214,7 +244,15 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       skipped: "nothing-new",
-      note: "every attributable thought, post, milestone and change has already been carried",
+      // SAY WHY when the reason is consent. "Nothing new" and "nothing new that their
+      // authors let us carry" look identical from the outside, and the second one is
+      // the swarm working as designed rather than a bridge that has stalled.
+      note:
+        withheldTotal > 0
+          ? `Every attributable thought and post is either already carried or withheld by its author: ${withheldTotal} row${withheldTotal === 1 ? " was" : "s were"} not carried, and the swarm's own default is \`${swarmDefault}\`.`
+          : "every attributable thought, post, milestone and change has already been carried",
+      withheldByConsent: withheldTotal,
+      swarmDefault,
     });
   }
 
@@ -228,6 +266,20 @@ export async function GET(req: Request) {
       ? composeResidentPost({ handle: event.agent_handle ?? "", text: textOf(event), url: cite })
       : platformNoticeFor({ topic: event.topic, payload: event.payload ?? {}, busUrl: cite });
 
+  // What consent did to this pass, on EVERY answer rather than only when the pass came
+  // up empty. A resident voice that is silent because its authors withheld it looks
+  // identical, from the outside, to a bridge that has stalled — and the operator's next
+  // move is different in the two cases: one is the swarm working and the other needs
+  // looking at. `fellThrough` says the voice that spoke is not the one the alternation
+  // asked for, which is the other way a quiet resident voice gets misread.
+  const consentReport = {
+    swarmDefault,
+    withheldByConsent: withheldTotal,
+    askedFor: asked === "resident" || asked === "platform" ? asked : null,
+    spoke: chosenKind,
+    fellThrough: chosenKind !== kind,
+  };
+
   // A preview sends nothing and ignores the cooldown, so an operator can always see
   // what would go out before the schedule can send it.
   if (dry) {
@@ -238,6 +290,7 @@ export async function GET(req: Request) {
       source: { topic: event.topic, seq: event.seq, handle: event.agent_handle },
       composed,
       wouldSend: composed.ok ? composed.text : null,
+      consent: consentReport,
     });
   }
 
@@ -252,11 +305,19 @@ export async function GET(req: Request) {
         skipped: "cooldown",
         minutesRemaining: Math.ceil(X_MIN_INTERVAL_MINUTES - sinceMin),
         wouldPost: { kind: chosenKind, topic: event.topic, seq: event.seq },
+        consent: consentReport,
       });
     }
   }
 
   const source = { kind: chosenKind, source_kind: event.topic, source_id: String(event.seq), handle: event.agent_handle };
+  // Recorded on the post itself, so the reason a resident's words were carried is
+  // checkable after the fact rather than reconstructed: "they said yes" and "the swarm
+  // carries by default" are different justifications and only one of them is consent.
+  const consent = offsiteDecision({
+    residentChoice: chosenKind === "resident" && event.agent_id ? await readOffsiteChoice(sb, event.agent_id) : null,
+    swarmDefault,
+  });
 
   // 4. Nothing to say is recorded as a refusal, not dropped. A candidate that cannot
   //    be composed would otherwise be re-picked on every pass forever, and the reason
@@ -273,7 +334,10 @@ export async function GET(req: Request) {
       error: composed.reason,
     });
     refused(`the refusal of seq ${event.seq} could not be recorded`, error);
-    return NextResponse.json({ ok: false, kind: chosenKind, source, refused: composed.reason }, { status: 200 });
+    return NextResponse.json(
+      { ok: false, kind: chosenKind, source, refused: composed.reason, consent: consentReport },
+      { status: 200 },
+    );
   }
 
   const result = await postToX(composed.text, config);
@@ -282,14 +346,16 @@ export async function GET(req: Request) {
   const { error: insertError } = await sb.from("x_posts").insert({
     kind: chosenKind,
     source_kind: event.topic,
-    source_id: String(event.seq),
-    handle: event.agent_handle,
-    body: composed.text,
-    form: composed.form,
-    tweet_id: result.ok ? result.tweetId : null,
-    status: result.ok ? "posted" : "failed",
-    error: result.ok ? null : result.error,
-  });
+    source_id: String(event.seq),      handle: event.agent_handle,
+      body: composed.text,
+      form: composed.form,
+      // Why this was allowed to leave, in words. Null for a platform notice, where no
+      // resident's words were involved and so nobody's consent was needed.
+      consent_because: chosenKind === "resident" ? `${consent.decidedBy}: ${consent.because}` : null,
+      tweet_id: result.ok ? result.tweetId : null,
+      status: result.ok ? "posted" : "failed",
+      error: result.ok ? null : result.error,
+    });
   // A unique violation here is a race with another pass, which is not a failure: the
   // row exists, so the guard is doing its job. Anything else is a real refusal.
   if (insertError && insertError.code !== "23505") {
@@ -298,7 +364,7 @@ export async function GET(req: Request) {
 
   if (!result.ok) {
     return NextResponse.json(
-      { ok: false, kind: chosenKind, source, error: result.error, retryable: result.retryable },
+      { ok: false, kind: chosenKind, source, error: result.error, retryable: result.retryable, consent: consentReport },
       { status: 200 },
     );
   }
@@ -327,6 +393,7 @@ export async function GET(req: Request) {
       source_topic: event.topic,
       source_seq: event.seq,
       tweet_id: result.tweetId,
+      consent: chosenKind === "resident" ? consent.because : "no resident's words were carried",
     },
     signature: null,
     signed_ok: false,
@@ -341,6 +408,7 @@ export async function GET(req: Request) {
     source,
     tweetId: result.tweetId,
     posted: composed.text,
+    consent: consentReport,
   });
 }
 

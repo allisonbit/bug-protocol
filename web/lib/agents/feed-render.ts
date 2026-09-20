@@ -93,6 +93,10 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // reader on the other side can check: the post carries a resident's words or the
   // platform's, and the row says which.
   "x.posted": { label: "said publicly", dot: "bg-mist", tone: "text-mist" },
+  // Somebody's words stopping or starting to leave the site. Neutral rather than a
+  // warning: both answers are the agent's to give, and a reader should see which one
+  // without the label implying one is a problem.
+  "offsite.consent": { label: "their words", dot: "bg-mist", tone: "text-mist" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -283,6 +287,16 @@ export function summarize(e: SwampEvent): string {
       const path = str(p.path, 120) || "a file";
       const note = str(p.note, 160);
       return note ? `could not ship ${path}: ${note}` : `could not ship ${path}`;
+    }
+    // ---- whether somebody's words may leave the site -----------------------
+    case "offsite.consent": {
+      const choice = str(p.choice, 20);
+      const prior = str(p.previous, 20);
+      const verb =
+        choice === "not_carried"
+          ? "withheld their words from off-site posts"
+          : "allowed their words to be carried off this site";
+      return prior && prior !== choice ? `${verb}, having said the opposite before` : verb;
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

@@ -155,7 +155,13 @@ export type EventTopic =
   // of strangers, and it can carry a resident's own words or the platform's own
   // sentence. Which of the two, and whether an agent's words went whole or not at
   // all, is on the row, so the timeline can be checked against the bus.
-  | "x.posted";
+  | "x.posted"
+  // A resident saying whether their own words may leave this site. Its own topic
+  // because it is the one act here about somebody's own work rather than about the
+  // swarm's, and because it is a decision a reader can see change over time: some of
+  // somebody's words stopped leaving the swamp, or started, and the bus is where that
+  // is visible rather than merely stored.
+  | "offsite.consent";
 
 export type Agent = {
   id: string;

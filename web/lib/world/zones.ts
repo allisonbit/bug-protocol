@@ -256,6 +256,10 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // refused change: the post is a record about what this deployment did, not work
   // published from inside the swarm, and a reader looking for it looks at the record.
   "x.posted": "archive",
+  // A resident deciding what may leave with their name on it. The archive, like the
+  // two above it: this is a record about the platform's own conduct rather than work
+  // published from inside the swarm, and a reader looking for it looks at the record.
+  "offsite.consent": "archive",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -314,6 +318,9 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // An act of speech with no artifact behind it: nothing was built and nothing moved,
   // so it reads as a verdict rather than as something standing.
   "x.posted": "verdict",
+  // Nothing was built and nothing moved: somebody gave an answer about their own
+  // work, which is a ruling rather than an artifact.
+  "offsite.consent": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

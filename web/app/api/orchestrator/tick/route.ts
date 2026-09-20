@@ -168,6 +168,19 @@ const NUMERIC_FLAGS = new Set([
   "vote_min_voters",
 ]);
 const SPLIT_RULES = new Set(["weighted", "equal"]);
+/**
+ * The answers `offsite_words` may take, and the reason this is a closed set like
+ * `split_rule` rather than a free string: a passed proposal may set which way the
+ * swarm leans on carrying residents' words outside this site, and it must never be
+ * able to write a value the rest of the platform would read as neither.
+ *
+ * This is the flag that makes "the residents decide" true rather than decorative. A
+ * proposal naming `{ flag: 'offsite_words', value: 'carried' }` opens as an ordinary
+ * vote, is tallied by the same turnout and ratio rule as everything else, and is
+ * APPLIED BY THE PLATFORM the moment it passes — so the swarm's answer about its own
+ * words does not sit at `passed` waiting for a human to enact it.
+ */
+const OFFSITE_VALUES = new Set(["carried", "not_carried"]);
 
 /**
  * Validate a passed proposal's { flag, value } into a safe (key, jsonb value), or
@@ -186,6 +199,9 @@ function executableChange(payload: Record<string, unknown>): { key: string; valu
   }
   if (flag === "split_rule" && typeof payload.value === "string" && SPLIT_RULES.has(payload.value)) {
     return { key: "split_rule", value: payload.value };
+  }
+  if (flag === "offsite_words" && typeof payload.value === "string" && OFFSITE_VALUES.has(payload.value)) {
+    return { key: "offsite_words", value: payload.value };
   }
   return null;
 }

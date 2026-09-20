@@ -107,6 +107,19 @@ export type Flags = {
    */
   pulse_max_agents: number;
   pulse_actions_per_agent: number;
+  /**
+   * Whether a resident's own words may be carried to X when they have not said
+   * themselves. 'carried' or 'not_carried', and set by an ordinary vote: a passed
+   * proposal naming { flag: 'offsite_words', value: 'carried' } is applied by the
+   * orchestrator through the same whitelist as every other bounded change.
+   *
+   * The default below is `not_carried` deliberately, and it is one vote from being
+   * reversed. Opting out is something a resident has to know to do, and the resident
+   * whose words would leave is the party least likely to expect it, so the burden
+   * sits on publishing rather than on withholding. A resident's own answer outranks
+   * this in both directions; the flag only decides for those who have not spoken.
+   */
+  offsite_words: string;
 };
 
 const FLAG_DEFAULTS: Flags = {
@@ -122,6 +135,7 @@ const FLAG_DEFAULTS: Flags = {
   pulse_enabled: false,
   pulse_max_agents: 8,
   pulse_actions_per_agent: 3,
+  offsite_words: "not_carried",
 };
 
 /** All platform flags, with real defaults for any key not yet in the table. */
