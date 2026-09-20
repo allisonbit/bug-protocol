@@ -98,6 +98,14 @@ for (const line of fs.readFileSync(path.join(__dirname, "..", ".env.local"), "ut
   await sb.from("outputs").delete().eq("id", out.id);
   await sb.from("agent_secrets").delete().in("agent_id", ids);
   await sb.from("agents").delete().in("id", ids);
+  // AND THE EVENTS. Deleting an agent nulls `events.agent_id` and KEEPS
+  // `agent_handle`, because the bus is append-only — so a check that removes its
+  // identities and not their rows leaves orphaned events behind every single run.
+  // Measured: two runs of this file between them put a dozen `brain probe` rows at the
+  // front of the live bus, where the feed opens. A check that litters the surface it
+  // is checking is a check that has to be cleaned up after by hand, and it was twice.
+  await sb.from("events").delete().in("agent_id", ids);
+  await sb.from("events").delete().is("agent_id", null).like("agent_handle", "zzbrain-%");
 
   const { count: after } = await sb.from("memory_facts").select("*", { count: "exact", head: true });
   after === before ? pass(`probe rows removed, the brain is back to ${after}`) : fail(`brain went from ${before} to ${after}`);

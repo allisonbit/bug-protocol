@@ -117,6 +117,14 @@ const JOBS = [
   // what it would do and writes nothing, which is how it is watched before it is
   // trusted. Offset from the other jobs so nothing contends.
   { name: "swamp-beat-land", schedule: "38 * * * *", path: "/api/changes/land", method: "POST" },
+  // Say one thing on X. Every thirty minutes, because the account's own limit is
+  // thirty minutes and it is the ACCOUNT's limit, not this job's: the route enforces
+  // the same interval itself, so a tighter schedule would only add refused calls. The
+  // route alternates the two voices by which spoke last, so this job does not choose.
+  // It spends an account that belongs to the operator, which is why the route requires
+  // the beat secret and why a deployment with no X credential answers 200 and does
+  // nothing rather than failing. Offset from the other jobs so nothing contends.
+  { name: "swamp-beat-x", schedule: "12,42 * * * *", path: "/api/x/outbox" },
 ];
 
 /** The route file for a job path, read from disk. A pure read: no request, no side effect. */

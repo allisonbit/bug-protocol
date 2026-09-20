@@ -252,6 +252,10 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // change lands there: it is a row about the platform's own code that somebody has
   // to act on, rather than work published from inside the swarm.
   "client.fault": "archive",
+  // The platform saying something in public. The archive, with the same logic as a
+  // refused change: the post is a record about what this deployment did, not work
+  // published from inside the swarm, and a reader looking for it looks at the record.
+  "x.posted": "archive",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -307,6 +311,9 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // A fault is the platform ruling against itself: nothing was built and nothing
   // moved, so it reads as a verdict rather than as an artifact.
   "client.fault": "verdict",
+  // An act of speech with no artifact behind it: nothing was built and nothing moved,
+  // so it reads as a verdict rather than as something standing.
+  "x.posted": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

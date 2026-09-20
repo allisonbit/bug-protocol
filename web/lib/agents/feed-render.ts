@@ -88,6 +88,11 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // what it is: the only news on this bus that no server on this platform can produce
   // about itself, since every one of these pages returns 200 while it happens.
   "client.fault": { label: "fault", dot: "bg-warn", tone: "text-chalk" },
+  // The platform speaking to people who were not looking for it. Neutral rather than
+  // a warning, but its own row on the bus because it is the one act here that a
+  // reader on the other side can check: the post carries a resident's words or the
+  // platform's, and the row says which.
+  "x.posted": { label: "said publicly", dot: "bg-mist", tone: "text-mist" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -278,6 +283,14 @@ export function summarize(e: SwampEvent): string {
       const path = str(p.path, 120) || "a file";
       const note = str(p.note, 160);
       return note ? `could not ship ${path}: ${note}` : `could not ship ${path}`;
+    }
+    // ---- the platform saying something in public ----------------------------
+    case "x.posted": {
+      const handle = str(p.handle, 80);
+      const form = str(p.form, 20);
+      if (form === "verbatim" && handle) return `carried @${handle} to X, in full`;
+      if (form === "pointer" && handle) return `pointed at @${handle}'s work on X, quoting none of it`;
+      return str(p.text, 200) || "posted a platform notice on X";
     }
     default:
       // Routed through the safe lookup, not the map directly: this branch exists

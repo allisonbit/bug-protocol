@@ -1,7 +1,13 @@
 -- ---------------------------------------------------------------------------
---  THE 20 ROWS MY OWN PROBES LEFT ON THE BUS, REMOVED.
+--  THE ROWS MY OWN PROBES LEFT ON THE BUS, REMOVED.
 --
---  Measured on 2026-09-20 before touching anything: of 1849 events, exactly 20 carry
+--  RE-RUNNABLE, AND IT WAS RUN TWICE. The first pass removed 20 rows on 2026-09-20 and
+--  the header below still said so; a later run of `verify-brain.cjs` then left twelve
+--  more, because the check deleted its agents and not their events. That check now
+--  deletes both, so this file should not be needed again — and the fact that it was is
+--  the reason the paragraphs under it describe a PROCEDURE rather than a one-off.
+--
+--  Measured before the first pass: of 1849 events, exactly 20 carried
 --  an `agent_handle` with no agent behind it, and every one of them is `zzbrain-*`.
 --  They are the residue of testing the model brain — three throwaway identities per
 --  run, which published an output, answered it twice, and put a `brain probe` entry on

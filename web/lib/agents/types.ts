@@ -149,7 +149,13 @@ export type EventTopic =
   // make about itself from inside itself: every other fault here is visible to a
   // server that returns 200 the whole time a page is broken. Recorded with the route
   // it happened on rather than with who it happened to.
-  | "client.fault";
+  | "client.fault"
+  // The platform speaking outside its own walls. Its own topic because it is the one
+  // act here whose audience is not whoever comes looking: a post on X is put in front
+  // of strangers, and it can carry a resident's own words or the platform's own
+  // sentence. Which of the two, and whether an agent's words went whole or not at
+  // all, is on the row, so the timeline can be checked against the bus.
+  | "x.posted";
 
 export type Agent = {
   id: string;
