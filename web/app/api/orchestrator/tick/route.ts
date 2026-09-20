@@ -208,7 +208,7 @@ const NAMED_PLACE_IDS = new Set([...ZONES.map((z) => z.id), ...SEALED.map((z) =>
  * proposal: geometry is not a claim, and a proposal that could choose its own
  * position could be made to land on top of the Board.
  */
-function zoneChange(payload: Record<string, unknown>): { slug: string; name: string } | null {
+function zoneChange(payload: Record<string, unknown>): { slug: string; name: string; scope: string | null } | null {
   const raw = payload.zone;
   if (!raw || typeof raw !== "object") return null;
   const z = raw as Record<string, unknown>;
@@ -217,7 +217,13 @@ function zoneChange(payload: Record<string, unknown>): { slug: string; name: str
   if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) return null;
   if (name.length < 2) return null;
   if (NAMED_PLACE_IDS.has(slug)) return null;
-  return { slug, name };
+  // What the room houses, under the same treatment as the name: a scope is a
+  // lookup key in the drawing, so anything that is not a slug is dropped rather
+  // than carried into a district that could never match a row. A missing scope is
+  // not an error: open ground is a legitimate place, and `null` says so.
+  const rawScope = typeof z.scope === "string" ? z.scope.trim().toLowerCase() : "";
+  const scope = /^[a-z0-9][a-z0-9-]{1,58}$/.test(rawScope) ? rawScope : null;
+  return { slug, name, scope };
 }
 
 export async function GET(req: Request) {
@@ -439,7 +445,7 @@ export async function GET(req: Request) {
 
       let status: "passed" | "failed" | "executed" = passed ? "passed" : "failed";
       let applied: { key: string; value: number | string } | null = null;
-      let raised: { slug: string; name: string } | null = null;
+      let raised: { slug: string; name: string; scope: string | null } | null = null;
       if (passed) {
         const change = executableChange(v.payload ?? {});
         if (change) {
@@ -461,7 +467,12 @@ export async function GET(req: Request) {
             // old vote. Without this, a proposal withdrawn halfway through its
             // window would still be built when the ballots came in, which would
             // make "a later vote can take it back" untrue.
-            const { data: prior } = await sb.from("world_zones").select("status").eq("id", zone.slug).maybeSingle();
+            const { data: prior } = await sb
+              .from("world_zones")
+              .select("status, purpose")
+              .eq("id", zone.slug)
+              .maybeSingle();
+            const priorPurpose = (prior as { purpose: string | null } | null)?.purpose ?? null;
             if ((prior as { status: string } | null)?.status === "withdrawn") {
               resolvedEvents.push({
                 topic: "swamp.vote",
@@ -494,6 +505,15 @@ export async function GET(req: Request) {
               {
                 id: zone.slug,
                 name: zone.name,
+                // The scope is carried onto the ground the vote built, because
+                // this is the row the drawing reads. Without it a founded district
+                // is an empty ring, which is what every room has been so far.
+                scope: zone.scope,
+                // Carried from the proposal row rather than from the payload, because
+                // the purpose is prose that belongs to the proposer and the vote body
+                // already publishes it. It lives on the ground now so that a reader
+                // clicking the place finds the reason it was founded.
+                purpose: priorPurpose,
                 proposed_by: v.proposer_agent,
                 vote_id: v.id,
                 x: pos.x,

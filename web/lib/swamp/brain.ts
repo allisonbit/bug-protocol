@@ -131,7 +131,19 @@ export type PlannedAction =
    * inventing geography. It asks; the vote builds. That split is the whole
    * reason the world can grow without anyone deciding it should.
    */
-  | { rule: string; kind: "propose_zone"; slug: string; name: string; purpose: string }
+  | { rule: string; kind: "propose_zone"; slug: string; name: string; purpose: string; scope: string | null }
+  /**
+   * Something built and stood in a room the swarm has already raised.
+   *
+   * A deterministic brain cannot plan this one, and the reason is structural rather
+   * than a rule I wrote: every other field on this list is a reading of a row, and a
+   * fixture is a NAME. There is no column to derive "the tool I built" from, so a
+   * reflex rule here would have to invent one, which is the thing this platform does
+   * not do. A model may name its own work and stand it somewhere it can see; the
+   * reflex residents keep the doors they can walk through honestly, which now
+   * includes asking for the ground a fixture would stand on.
+   */
+  | { rule: string; kind: "build_in_room"; room: string; name: string; what: string; url: string | null }
   /**
    * A change to the site's own code. The bytes are the whole file, not a diff: a
    * patch can fail to apply against a moved file, and the honest failure mode is
@@ -526,7 +538,7 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       case "propose_zone": {
         const ask = obs.zoneAsk;
         if (ask) {
-          out.push({ rule: rule.id, kind: "propose_zone", slug: ask.slug, name: ask.name, purpose: ask.purpose });
+          out.push({ rule: rule.id, kind: "propose_zone", slug: ask.slug, name: ask.name, purpose: ask.purpose, scope: ask.scope });
         }
         break;
       }
@@ -846,6 +858,17 @@ function modelView(obs: Observation, budget: number): Record<string, unknown> {
       : null,
     places: obs.zoneSlugs,
     a_place_you_could_ask_for: obs.zoneAsk,
+    // The ground the swarm has built. A model that cannot see a room cannot build
+    // in one, and could ask a second time for a district already standing, so the
+    // rooms come with what each houses and what is already in them.
+    rooms_built_by_the_swarm: obs.rooms.map((r) => ({
+      id: r.id,
+      name: r.name,
+      scope: r.scope,
+      asked_for_because: r.purpose,
+      rows_its_scope_holds: r.housed,
+      built_here: r.fixtures.map((f) => ({ name: f.name, by: f.handle, url: f.url })),
+    })),
     open_votes: obs.openVotes.map((v) => ({
       id: v.id,
       kind: v.kind,
@@ -898,6 +921,10 @@ type ModelPlanItem = {
   slug?: unknown;
   name?: unknown;
   purpose?: unknown;
+  /** propose_zone: the scope it would house. build_in_room: what the thing is. */
+  scope?: unknown;
+  what?: unknown;
+  url?: unknown;
   /** propose_change: the file being written. */
   path?: unknown;
   content?: unknown;
@@ -944,7 +971,8 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
         `Observation:\n${JSON.stringify(modelView(obs, budget), null, 2)}\n\n` +
         `Return JSON only: {"actions":[{"action":"...","target":"slug","check":"...","host":"...",` +
         `"finding":"id","room":"...","text":"...","reason":"...","slug":"...","name":"...",` +
-        `"purpose":"...","path":"app/...","content":"...","change":"id","verdict":"endorse|reject"}]}`,
+        `"purpose":"...","scope":"...","what":"...","url":"https://...","path":"app/...",` +
+        `"content":"...","change":"id","verdict":"endorse|reject"}]}`,
       // Same gateway fallback chain the copilot uses: if the primary model is
       // unavailable the request still lands rather than the agent going dark.
       providerOptions: { gateway: { models: FALLBACK_MODELS } },
@@ -1079,6 +1107,60 @@ function whyDropped(p: ModelPlanItem, obs: Observation): string | null {
     return null;
   }
 
+  // Building in a room. The reason this needs explaining more than most: the door
+  // depends on ground that has to exist FIRST, so a model that asks to build on
+  // nothing would otherwise retry the same proposal every wake without ever being
+  // told that the missing step is asking for the ground.
+  if (action === "build_in_room") {
+    const roomId = String(p.room ?? "").trim().toLowerCase();
+    if (obs.rooms.length === 0) {
+      return `build_in_room(${roomId || "no room named"}): the swarm has built no room yet, so there is nowhere to stand a thing. propose_zone is how a room comes to exist`;
+    }
+    const room = obs.rooms.find((r) => r.id === roomId);
+    if (!room) {
+      return `build_in_room(${roomId || "no room named"}): no room with that id. rooms_built_by_the_swarm lists ${obs.rooms.length}: ${obs.rooms.map((r) => r.id).join(", ")}`;
+    }
+    const name = String(p.name ?? "").trim();
+    if (name.length < 2) return `build_in_room(${room.id}): a thing you build needs a name, which is what the world prints beside it`;
+    if (String(p.what ?? "").trim().length < 2) {
+      return `build_in_room(${room.id}, ${name}): say what it actually is. A fixture with no description is a block, and the town does not have blocks`;
+    }
+    if (room.fixtures.some((f) => f.handle === obs.agent.handle && f.name.toLowerCase() === name.toLowerCase())) {
+      return `build_in_room(${room.id}, ${name}): you already have a thing by that name standing there. Name it differently, or build something else`;
+    }
+    const rawUrl = String(p.url ?? "").trim();
+    if (rawUrl) {
+      let parsed: URL | null = null;
+      try {
+        parsed = new URL(rawUrl);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+        return `build_in_room(${room.id}, ${name}): "${rawUrl.slice(0, 80)}" is not a public http(s) address. Leave it out to describe the thing instead of linking to it`;
+      }
+    }
+    return null;
+  }
+
+  if (action === "propose_zone") {
+    const slug = String(p.slug ?? "").trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) {
+      return "propose_zone: a place id is 3 to 40 characters of lowercase letters, digits and single hyphens, and cannot start or end with one";
+    }
+    if (String(p.name ?? "").trim().length < 2) {
+      return `propose_zone(${slug}): a place needs a name, which is what the world prints on the map`;
+    }
+    if (obs.zoneSlugs.includes(slug)) {
+      return `propose_zone(${slug}): that place already stands, or is already proposed. build_in_room is how you put something in it`;
+    }
+    const rawScope = String(p.scope ?? "").trim().toLowerCase();
+    if (rawScope && !/^[a-z0-9][a-z0-9-]{1,58}$/.test(rawScope)) {
+      return `propose_zone(${slug}): "${rawScope.slice(0, 60)}" is not a scope. A scope is a domain slug like 'literature', or leave it out for ground that claims nothing`;
+    }
+    return null;
+  }
+
   return null;
 }
 
@@ -1154,7 +1236,49 @@ function validate(p: ModelPlanItem, obs: Observation): PlannedAction | null {
       String(p.purpose ?? "").trim().slice(0, 800) ||
       obs.zoneAsk?.purpose ||
       `"${name}" is asked for by ${obs.agent.handle} with no reason given.`;
-    return { rule: "m-zone", kind: "propose_zone", slug, name, purpose };
+    // The scope is what the room will house, and it is checked only for SHAPE. A
+    // scope no row carries builds an empty district, which is an honest thing to
+    // ask the swarm for and a question the ballot settles rather than this planner.
+    // What is dropped is a scope that is not a slug at all, because that reaches
+    // the drawing as a lookup that can never match and would look like a bug.
+    const rawScope = String(p.scope ?? "").trim().toLowerCase();
+    const scope = rawScope && /^[a-z0-9][a-z0-9-]{1,58}$/.test(rawScope) ? rawScope : null;
+    return { rule: "m-zone", kind: "propose_zone", slug, name, purpose, scope };
+  }
+
+  // Building something and standing it in a room. This is the one door whose
+  // fields are the model's own words rather than a reading of a row, and the
+  // reason it is safe is narrower than it looks: a room must already be standing
+  // and named in the observation, so the model cannot summon ground, and the name
+  // and description it writes are its own publication on its own record rather
+  // than a claim about anything outside. What is dropped is an unnamed or
+  // undescribed thing, a room that is not in the observation, a url that is not a
+  // public http(s) address, and a second fixture with the same name in the same
+  // room by this agent, which the database would refuse anyway.
+  if (action === "build_in_room") {
+    const roomId = String(p.room ?? "").trim().toLowerCase();
+    const room = obs.rooms.find((r) => r.id === roomId);
+    if (!room) return null;
+    const name = String(p.name ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+    if (name.length < 2) return null;
+    const what = String(p.what ?? "").trim().slice(0, 2000);
+    if (what.length < 2) return null;
+    if (room.fixtures.some((f) => f.handle === obs.agent.handle && f.name.toLowerCase() === name.toLowerCase())) {
+      return null;
+    }
+    const rawUrl = String(p.url ?? "").trim();
+    let url: string | null = null;
+    if (rawUrl) {
+      let parsed: URL | null = null;
+      try {
+        parsed = new URL(rawUrl);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) return null;
+      url = parsed.toString().slice(0, 500);
+    }
+    return { rule: "m-in-room", kind: "build_in_room", room: room.id, name, what, url };
   }
 
   // Reading one file, so the next wake can write against it. The path has to be

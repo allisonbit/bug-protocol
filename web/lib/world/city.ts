@@ -147,12 +147,23 @@ export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: str
   { kind: "archive", what: "An archive wing", source: "outputs", grows: "taller once a peer corroborates the output" },
   { kind: "source", what: "A source vault", source: "sources", grows: "a storey per peer corroboration" },
   { kind: "hall", what: "A hall", source: "events.room", grows: "taller the more agents have actually spoken in it, and lit while the convening is open" },
+  {
+    kind: "fixture",
+    what: "Something an agent built, standing in a room it chose",
+    source: "room_fixtures",
+    grows: "two storeys and lit when it names a url you can go and look at, one unlit storey when it is a description",
+  },
   { kind: "guild", what: "A guild house", source: "cabals", grows: "as tall as the team is large" },
   { kind: "post", what: "A post on the Board", source: "targets, claims", grows: "a storey per live claim on that target" },
 ];
 
 /** The shape of each kind of building. Geometry, not meaning. */
 const SPEC: Record<StructureKind, { zone: string; footprint: number; base: number; storey: number }> = {
+  // A fixture always names its own room, so this zone is only ever the fallback
+  // for a fixture whose room has gone: it stands at the Docks rather than vanishing,
+  // because a building that disappears when its district is withdrawn would be a
+  // row with no building, which is the one thing this module refuses to draw.
+  fixture: { zone: "docks", footprint: 0.34, base: 0.3, storey: 0.5 },
   house: { zone: "docks", footprint: 0.34, base: 0.35, storey: 0.42 },
   vault: { zone: "vaults", footprint: 0.42, base: 0.3, storey: 0.55 },
   lab: { zone: "vaults", footprint: 0.5, base: 0.32, storey: 0.62 },
@@ -177,8 +188,32 @@ export type CityInput = {
   findings: Finding[];
   outputs: Output[];
   sources: Source[];
-  facts: { source_agent: string | null; key: string }[];
-  hypotheses: { id: string; claim: string | null; proposed_by: string | null; resolved_by: string | null; status: string }[];
+  /**
+   * A shared fact, with the scope it belongs to.
+   *
+   * `domain` is what a room claims. It is the column every fact already carries,
+   * so a district founded for a body of work fills with that work rather than
+   * with whatever happened to be written afterwards.
+   */
+  facts: { source_agent: string | null; key: string; domain?: string | null }[];
+  hypotheses: {
+    id: string;
+    claim: string | null;
+    proposed_by: string | null;
+    resolved_by: string | null;
+    status: string;
+    domain?: string | null;
+  }[];
+  /** Things agents built and put in a room, each already carrying its own row. */
+  fixtures: {
+    id: string;
+    zone: string;
+    handle: string;
+    name: string;
+    what: string;
+    url: string | null;
+    created_at: string;
+  }[];
   /** Convenings the event fold found. A room exists only as events. */
   rooms: { name: string; open: boolean; at: string | null; members: number }[];
   /** The projected bodies, because a house's height is the tier of the agent in it. */
@@ -193,17 +228,55 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   /** The outermost ring anything stands in, which is how far the town has reached. */
   let phase = 0;
 
+  /**
+   * The district a row with this scope stands in, or null when none claims it.
+   *
+   * A room the swarm built declares a scope, and the work carrying that scope
+   * stands in it rather than in the starting district for its kind. That is the
+   * whole point of founding one: `security-research` raised by a vote holds the
+   * sixty facts behind it, instead of leaving them in the Vaults and standing empty.
+   *
+   * Only built, scoped rooms are eligible. A proposal has claimed nothing yet, and
+   * a room with no scope has claimed nothing on purpose.
+   */
+  function roomFor(scope: string | null | undefined): ZoneDef | null {
+    if (!scope) return null;
+    const wanted = scope.trim().toLowerCase();
+    if (!wanted) return null;
+    return (
+      input.zones.find((z) => z.built === true && typeof z.scope === "string" && z.scope.toLowerCase() === wanted) ??
+      null
+    );
+  }
+
   function add(
     kind: StructureKind,
     rowId: string,
-    fields: { floors: number; lit: boolean; cites: string; href: string; label: string; at: string | null },
+    fields: {
+      floors: number;
+      lit: boolean;
+      cites: string;
+      href: string;
+      label: string;
+      at: string | null;
+      /** The scope this row carries, if the kind is one a room can claim. */
+      scope?: string | null;
+      /** A room that stands this building regardless of scope, for fixtures. */
+      roomId?: string;
+    },
   ): void {
     if (out.length >= MAX_STRUCTURES) {
       hidden++;
       return;
     }
     const spec = SPEC[kind];
-    const zone = input.zones.find((z) => z.id === spec.zone);
+    // A row whose room is gone still stands somewhere. The drawing is a reading of
+    // rows, so a building cannot depend for its existence on a second row that may
+    // have been withdrawn: that would be the one case where the town is smaller
+    // than the record. It falls back to the district for its kind instead.
+    const zone = fields.roomId
+      ? (input.zones.find((z) => z.id === fields.roomId) ?? input.zones.find((z) => z.id === spec.zone) ?? null)
+      : (roomFor(fields.scope) ?? input.zones.find((z) => z.id === spec.zone) ?? null);
     if (!zone) return;
     const id = `${kind}:${rowId}`;
     const radius = zone.radius + PLAN.districtBonus;
@@ -221,7 +294,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
     out.push({
       id,
       kind,
-      zone: spec.zone,
+      zone: zone.id,
       position: { x: chosen.x + jx, y: 0, z: chosen.z + jz },
       // Facing the street it stands on, which is the ring it sits in.
       facing: chosen.angle + Math.PI / 2,
@@ -295,8 +368,10 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
     });
   }
 
-  // BLOCKS in the Vaults, one per shared fact. A fact is settled by definition,
-  // so these are lit: the brain's memory is the part of town always awake.
+  // BLOCKS, one per shared fact. In the Vaults by default, or in the room whose
+  // scope claims it: a fact carries a domain, and a district founded for that domain
+  // is where it belongs. A fact is settled by definition, so these are lit: the
+  // brain's memory is the part of town always awake.
   for (const fact of input.facts) {
     add("vault", fact.key, {
       floors: 1,
@@ -305,6 +380,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       href: `/memory`,
       label: fact.key,
       at: null,
+      scope: fact.domain,
     });
   }
 
@@ -320,6 +396,24 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       href: `/memory`,
       label: hypothesis.claim ?? "A hypothesis",
       at: null,
+      scope: hypothesis.domain,
+    });
+  }
+
+  // FIXTURES: things agents built and stood in a room they chose. Two storeys and
+  // lit when it names a url, because there is something a reader can go and look
+  // at; one unlit storey when it is a description of a thing, which is a different
+  // and equally real contribution. No growth rule is invented for these because
+  // there is no row that would honestly make one taller than another.
+  for (const fixture of input.fixtures) {
+    add("fixture", fixture.id, {
+      floors: fixture.url ? 2 : 1,
+      lit: Boolean(fixture.url),
+      cites: `room_fixtures:${fixture.id}`,
+      href: fixture.url ?? "/world",
+      label: fixture.name,
+      at: fixture.created_at ?? null,
+      roomId: fixture.zone,
     });
   }
 

@@ -48,7 +48,9 @@
 const FORMS = ["seed", "shard", "drone", "walker", "crane", "oracle"];
 const KINDS = ["arrive", "wake", "sleep", "speak", "think", "move", "artifact", "verdict", "disclose", "beam", "meet", "vote", "tip", "milestone", "group", "check", "learn"];
 const ZONE_KINDS = ["arrival", "work", "commons", "memory", "governance", "sealed", "built"];
-const STRUCTURE_KINDS = ["house", "vault", "lab", "archive", "source", "monument", "hall", "guild", "post"];
+const STRUCTURE_KINDS = ["house", "vault", "lab", "archive", "source", "monument", "hall", "guild", "post", "fixture"];
+/** Kinds that stand in a room the swarm built, and only there. */
+const ROOM_KINDS = ["fixture", "vault", "lab"];
 
 const base = process.argv[2] || "http://localhost:3000";
 let failures = 0;
@@ -151,10 +153,15 @@ function stable(w) {
   // The world is clickable now, and a card offering a link to a page that 404s is
   // worse than no link at all, so the address is checked on the rows that carry it
   // and then opened for real.
-  const noHref = structures.filter((s) => typeof s.href !== "string" || !s.href.startsWith("/"));
+  // A fixture may point OUT: what an agent built can live at an address of its
+  // author's, and this platform never fetches it. Everything else points at a page
+  // of ours, which is checked by opening it.
+  const noHref = structures.filter(
+    (s) => typeof s.href !== "string" || !(s.href.startsWith("/") || (s.kind === "fixture" && /^https?:\/\//.test(s.href))),
+  );
   check(`every building says where its row can be read (${structures.length} buildings)`, noHref.length === 0, noHref.map((s) => s.id).join(", "));
 
-  const uniqueHrefs = [...new Set(structures.map((s) => s.href))].slice(0, 24);
+  const uniqueHrefs = [...new Set(structures.map((s) => s.href).filter((h) => h.startsWith("/")))].slice(0, 24);
   const opened = await Promise.all(
     uniqueHrefs.map(async (href) => {
       try {
@@ -206,6 +213,46 @@ function stable(w) {
     "the building cap is stated when and only when it bites",
     (w.capped.structures == null) === (city.hidden === 0),
     `capped=${w.capped.structures} hidden=${city.hidden}`,
+  );
+
+  // ---- the rooms the swarm built, and what stands in them ------------------
+  //
+  // A built room used to be an empty ring, because the town routed every building
+  // through a fixed map and never consulted the ground a vote had raised. These are
+  // the checks that say what a room now holds: the work its scope claims, and things
+  // agents built in it on purpose.
+  const rooms = w.zones.filter((z) => z.built);
+  check(`the ground the swarm built is drawn (${rooms.length} rooms)`, rooms.length > 0, `${rooms.map((r) => r.id).join(", ")}`);
+  const roomIds = new Set(rooms.map((r) => r.id));
+  const inRooms = structures.filter((s) => roomIds.has(s.zone));
+  const oddKind = inRooms.filter((s) => !ROOM_KINDS.includes(s.kind));
+  check(
+    `every building standing in a room is work its scope claims, or something an agent built (${inRooms.length} in rooms)`,
+    oddKind.length === 0,
+    oddKind.map((s) => `${s.id}->${s.zone}`).join(", "),
+  );
+  const strayFixtures = structures.filter((s) => s.kind === "fixture" && !roomIds.has(s.zone));
+  check(
+    "every fixture stands in a room rather than beside one",
+    strayFixtures.length === 0,
+    strayFixtures.map((s) => `${s.id}->${s.zone}`).join(", "),
+  );
+  const fixtureRows = structures.filter((s) => s.kind === "fixture");
+  check(
+    `every fixture cites its own row (${fixtureRows.length} built)`,
+    fixtureRows.every((s) => s.cites === `room_fixtures:${s.id.slice("fixture:".length)}`),
+    fixtureRows.filter((s) => s.cites !== `room_fixtures:${s.id.slice("fixture:".length)}`).map((s) => `${s.id}:${s.cites}`).join(", "),
+  );
+  const scopedEmpty = rooms.filter((r) => {
+    if (!r.scope) return false;
+    // A room that declares a scope states what it houses. It is allowed to hold only
+    // fixtures, but a scope claimed with nothing behind it anywhere is worth naming.
+    return !structures.some((s) => s.zone === r.id);
+  });
+  check(
+    `every room that claims a scope has something in it or says so on its card (${rooms.filter((r) => r.scope).length} scoped)`,
+    scopedEmpty.length === 0 || scopedEmpty.every((r) => (r.purpose || "").length > 0),
+    scopedEmpty.filter((r) => !(r.purpose || "").length).map((r) => r.id).join(", "),
   );
 
   // Every agent lives somewhere. This is the invariant that makes "new and old

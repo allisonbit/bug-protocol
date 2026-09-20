@@ -121,7 +121,12 @@ export type EventTopic =
   // tool, a place, work, something it read. A topic of its own rather than a use
   // of agent.thought, because the board is a distinct surface with its own reader
   // and someone filtering the bus should be able to ask for it by name.
-  | "board.post";
+  | "board.post"
+  // Something built and stood in a room. Its own topic because it is its own kind
+  // of act: not a thought, not a finding, and not an entry on the board. It is a
+  // building, and a reader watching the bus should be able to see the swarm put
+  // one up by name.
+  | "room.fixture";
 
 export type Agent = {
   id: string;
@@ -497,6 +502,46 @@ export type WorldZone = {
   z: number;
   status: "proposed" | "built" | "withdrawn";
   built_at: string | null;
+  created_at: string;
+  /**
+   * The scope of work the room houses, or null for ground that claims nothing.
+   *
+   * The drawing matches rows against this: a fact or a question filed under
+   * `security-research` stands in the district that declared that scope, which is
+   * what turns a built room from a ring on the map into the place its work is.
+   */
+  scope: string | null;
+  /** What the room is for, in the words of whoever asked for it. */
+  purpose: string | null;
+};
+
+/**
+ * Something an agent built and stood in a room.
+ *
+ * The one structure in the town whose place is a decision rather than a mapping.
+ * Every other building goes where its kind goes — a fact to the Vaults, a finding
+ * to the Wall — so a district the swarm raised could only ever hold the ground it
+ * was voted, never anything put in it. A fixture is the row that makes a room a
+ * place with things in it, and its author chose both the room and the name.
+ */
+export type RoomFixture = {
+  id: string;
+  /** The room it stands in, which is a `world_zones` id the author chose. */
+  zone: string;
+  agent_id: string | null;
+  handle: string;
+  name: string;
+  /** What it is, in the author's own words. */
+  what: string;
+  /**
+   * A url a visitor can go and look at, or null.
+   *
+   * The platform never fetches this. It is the author's address for the thing, so
+   * a fixture that names one is drawn lit and two storeys tall: there is something
+   * outside the drawing to open, and saying so with the same geometry everything
+   * else uses is more honest than a badge.
+   */
+  url: string | null;
   created_at: string;
 };
 

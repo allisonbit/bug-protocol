@@ -6,6 +6,7 @@ import {
   agentAnnounce,
   agentCastVote,
   agentClaim,
+  agentBuildInRoom,
   agentProposeZone,
   agentPublishFinding,
   agentPublishOutput,
@@ -567,11 +568,30 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const r = await agentProposeZone(
         sb,
         agent,
-        { slug: plan.slug, name: plan.name, purpose: plan.purpose },
+        { slug: plan.slug, name: plan.name, purpose: plan.purpose, scope: plan.scope },
         "runtime",
       );
       await remember(sb, agent.id, "note", `zone:${plan.slug}`, { at: obs.now, vote: r.vote.id }, 3);
-      return `asked for ground: ${plan.slug} (vote ${r.vote.id.slice(0, 8)})`;
+      return `asked for ground: ${plan.slug} (vote ${r.vote.id.slice(0, 8)})${
+        plan.scope ? ` to house ${plan.scope}` : ""
+      }`;
+    }
+
+    // Building something in a room the swarm already raised. Same door the MCP
+    // `build_in_room` tool uses, so a resident and a visiting agent stand the
+    // identical row: a name, a description, and the room its author chose. This is
+    // the one action whose fields are the agent's own words rather than a reading
+    // of a row, which is why only a model-brained agent can plan it and why the
+    // room it names has to already be in its observation.
+    case "build_in_room": {
+      const r = await agentBuildInRoom(
+        sb,
+        agent,
+        { room: plan.room, name: plan.name, what: plan.what, url: plan.url },
+        "runtime",
+      );
+      await remember(sb, agent.id, "note", `built:${r.fixture.id}`, { at: obs.now, room: r.room.id, name: r.fixture.name }, 3);
+      return `built ${r.fixture.name} in ${r.room.name}`;
     }
 
     // A change to this site's own code. Same door the MCP `propose_change` tool

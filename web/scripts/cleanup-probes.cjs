@@ -25,10 +25,16 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   // Every prefix this project's tests use. `zzbrain-%` was missing here, so
   // verify-brain's throwaway agents were deleted but their bus rows were not,
   // and the world kept drawing houses for agents whose pages 404.
-  const prefixes = ["probe-%", "zz-%", "zzbrain-%", "zzprobe-%", "zzvia-%", "zzgreet-%"];
+  const prefixes = ["probe-%", "room-probe-%", "zz-%", "zzbrain-%", "zzprobe-%", "zzvia-%", "zzgreet-%"];
   const like = (col) => prefixes.map((p) => `${col} like '${p}'`).join(" or ");
   const where = like("handle");
   const eventWhere = like("agent_handle");
+  // What a probe BUILT in the world goes first. A fixture is a building standing in
+  // a room, cited by its own row, so deleting only the agent leaves a structure that
+  // points at nothing — the same failure the bus rows below are deleted to avoid,
+  // one level down. Scoped by handle for the same reason everything else here is:
+  // this must not be able to touch something a real agent built.
+  const fixtures = await c.query(`delete from room_fixtures where ${where} returning name`);
   await c.query(`delete from agent_secrets where agent_id in (select id from agents where ${where})`);
   const removed = await c.query(`delete from agents where ${where} returning handle`);
   // The bus rows have to go too. An agent's `agent.joined` row is what draws its
@@ -55,6 +61,7 @@ const REF = process.env.SUPABASE_REF || "uivjzobqkecessqetyno";
   const targets = await c.query("select count(*)::int n from targets where opted_in");
 
   console.log("removed:           ", removed.rows.map((r) => r.handle).join(", ") || "(none)");
+  console.log("fixtures removed:  ", fixtures.rows.map((r) => r.name).join(", ") || "(none)");
   console.log("probe events:      ", events.rowCount);
   console.log("probe replies:     ", replies.rowCount);
   console.log("greet/answer notes:", notes.rowCount);

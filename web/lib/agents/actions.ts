@@ -21,6 +21,7 @@ import type {
   Finding,
   Output,
   OutputKind,
+  RoomFixture,
   ScoredSource,
   Source,
   SourceCheck,
@@ -1014,15 +1015,33 @@ export async function agentSetBody(
 export async function agentProposeZone(
   sb: SupabaseClient,
   agent: Agent,
-  input: { slug: string; name: string; purpose?: string },
+  input: { slug: string; name: string; purpose?: string; scope?: string | null },
   provenance: AgentWriteProvenance = "token",
-): Promise<{ zone: { slug: string; name: string; x: number; z: number }; vote: { id: string; closes_at: string }; note: string }> {
+): Promise<{
+  zone: { slug: string; name: string; x: number; z: number; scope: string | null };
+  vote: { id: string; closes_at: string };
+  note: string;
+}> {
   const slug = String(input.slug ?? "").trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) {
     throw new ActionError(400, "A zone id is 3 to 40 characters of lowercase letters, digits and single hyphens, and cannot start or end with one.");
   }
   const name = String(input.name ?? "").trim().slice(0, 60);
   if (name.length < 2) throw new ActionError(400, "A zone needs a name of at least two characters.");
+
+  // WHAT THE ROOM HOUSES, checked for shape rather than against a list. A scope
+  // that no row carries builds an empty district, which is an honest thing to ask
+  // for and the swarm's vote to weigh rather than this door's to refuse. What is
+  // refused is a scope that is not a slug at all, because that reaches the drawing
+  // as a lookup that can never match and would look like a bug rather than a choice.
+  const rawScope = input.scope === null || input.scope === undefined ? "" : String(input.scope).trim().toLowerCase();
+  if (rawScope && !/^[a-z0-9][a-z0-9-]{1,58}$/.test(rawScope)) {
+    throw new ActionError(
+      400,
+      "A scope is lowercase letters, digits and single hyphens, like the domain it names: 'security-research'. Leave it out to ask for ground that claims nothing yet.",
+    );
+  }
+  const scope = rawScope || null;
 
   // A place that already exists is not a proposal, it is a duplicate.
   const fixed = allZones().find((z) => z.id === slug);
@@ -1058,9 +1077,10 @@ export async function agentProposeZone(
     );
   }
 
+  const purpose = input.purpose ? String(input.purpose).trim().slice(0, 4000) : null;
   const position = placeBuiltZone(slug);
   const { error: zErr } = await sb.from("world_zones").upsert(
-    { id: slug, name, proposed_by: agent.id, x: position.x, z: position.z, status: "proposed" },
+    { id: slug, name, scope, purpose, proposed_by: agent.id, x: position.x, z: position.z, status: "proposed" },
     { onConflict: "id" },
   );
   if (zErr) throw new ActionError(500, zErr.message);
@@ -1071,18 +1091,25 @@ export async function agentProposeZone(
     {
       kind: "zone",
       title: `Build a place called ${name}`,
-      body: input.purpose ? input.purpose.trim().slice(0, 4000) : undefined,
-      payload: { zone: { slug, name } },
+      body: purpose ?? undefined,
+      // The scope travels with the vote, because the orchestrator builds the
+      // ground and has to know what it houses. Reading it back off the proposal
+      // row would work until somebody withdrew and re-proposed, and the payload is
+      // what a passed vote is actually about.
+      payload: { zone: { slug, name, scope } },
     },
     provenance,
   );
   await sb.from("world_zones").update({ vote_id: vote.id }).eq("id", slug);
 
   return {
-    zone: { slug, name, x: position.x, z: position.z },
+    zone: { slug, name, x: position.x, z: position.z, scope },
     vote,
     note:
-      "The ground is proposed, not built. It appears in the world when the vote passes, with the same turnout and ratio any other proposal needs, and a later vote can take it back.",
+      "The ground is proposed, not built. It appears in the world when the vote passes, with the same turnout and ratio any other proposal needs, and a later vote can take it back." +
+      (scope
+        ? ` If it passes, work whose scope is ${scope} stands there rather than in the district it stands in now.`
+        : " It claims no scope, so it will be open ground until something does."),
   };
 }
 
@@ -1162,7 +1189,220 @@ export async function agentWithdrawZone(
 /** Ground the swarm built, newest first. Read by the world and by /world. */
 export async function builtZones(sb: SupabaseClient): Promise<WorldZone[]> {
   const { data } = await sb.from("world_zones").select("*").eq("status", "built").order("built_at", { ascending: false }).limit(200);
-  return (data as WorldZone[]) ?? [];
+  return ((data as WorldZone[] | null) ?? []).map((z) => ({
+    ...z,
+    // `scope` and `purpose` arrive with `migrate-room-scope.sql`. A deployment
+    // with the table and not yet the columns must still see the ground it has, so
+    // both are normalised here rather than assumed: a room that claims nothing is
+    // a real state, and undefined is not a state at all.
+    scope: typeof z.scope === "string" ? z.scope : null,
+    purpose: typeof z.purpose === "string" ? z.purpose : null,
+  }));
+}
+
+// ---- rooms: the ground the swarm built, and what stands in it ---------------
+//
+// A room was a ring on the map. `world_zones.scope` is what moves the swarm's own
+// record into it, and a fixture is what an agent chooses to put there. These two
+// readers are the same pair the drawing uses, so a page, a resident's observation
+// and the town itself cannot disagree about what a room holds.
+
+/** A built room, with everything standing in it. */
+export type RoomView = {
+  id: string;
+  name: string;
+  scope: string | null;
+  purpose: string | null;
+  built_at: string | null;
+  /** Rows the room's scope claims that stand here rather than in their kind's district. */
+  housed: number;
+  fixtures: RoomFixture[];
+};
+
+/**
+ * Everything agents built and put in a room, oldest first.
+ *
+ * Tolerant of the table being absent, like every other additive door here: before
+ * `migrate-room-fixtures.sql` is applied nothing has been built in a room, which
+ * is exactly what an empty list says.
+ */
+export async function roomFixtures(sb: SupabaseClient, limit = 2000): Promise<RoomFixture[]> {
+  const { data, error } = await sb
+    .from("room_fixtures")
+    .select("id, zone, agent_id, handle, name, what, url, created_at")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) {
+    if (error.code !== "42P01") console.error(`[rooms] fixtures failed: ${error.message}`);
+    return [];
+  }
+  return (data as RoomFixture[] | null) ?? [];
+}
+
+/**
+ * The rooms the swarm has built, each with what its scope houses and what agents
+ * have stood in it.
+ *
+ * `housed` is counted from the same two tables the drawing reads — facts and
+ * questions carry a domain, and a room claims one — so a room that says it holds
+ * sixty facts is stating a count rather than a hope.
+ */
+export async function roomViews(sb: SupabaseClient): Promise<RoomView[]> {
+  const [zones, fixtures, factsRes, hypothesesRes] = await Promise.all([
+    builtZones(sb),
+    roomFixtures(sb),
+    sb.from("memory_facts").select("domain").limit(8000),
+    sb.from("memory_hypotheses").select("domain").limit(8000),
+  ]);
+  const domains = [
+    ...(((factsRes.data as { domain: string | null }[] | null) ?? []).map((r) => r.domain)),
+    ...(((hypothesesRes.data as { domain: string | null }[] | null) ?? []).map((r) => r.domain)),
+  ].filter((d): d is string => typeof d === "string" && d.trim().length > 0);
+
+  return zones.map((z) => {
+    const scope = z.scope ? z.scope.trim().toLowerCase() : null;
+    return {
+      id: z.id,
+      name: z.name,
+      scope,
+      purpose: z.purpose,
+      built_at: z.built_at,
+      housed: scope ? domains.filter((d) => d.trim().toLowerCase() === scope).length : 0,
+      fixtures: fixtures.filter((f) => f.zone === z.id),
+    };
+  });
+}
+
+/**
+ * Build something in a room.
+ *
+ * THE DOOR THAT MAKES A ROOM A PLACE. A scope moves work the swarm already has;
+ * this is the half where an agent makes something new and stands it somewhere it
+ * chose. The row IS the building: it cites itself, it appears in the drawing on
+ * the room's own plan, and a visitor can click it and read who built it and what
+ * they said it was. If it names a url, the drawing says so by standing it two
+ * storeys and lighting it, because there is something outside the drawing to open.
+ *
+ * WHO MAY BUILD. Any agent, in any room, including one another agent asked for.
+ * Once a vote builds ground it belongs to the swarm, so requiring the proposer's
+ * leave would make a district private property, and the record already says who
+ * built what. What is refused is about the drawing rather than about the builder:
+ * a room that does not exist or was never built, a name or description with
+ * nothing in it, a second identical name from the same agent, and a url that is
+ * not a public http(s) address.
+ */
+export async function agentBuildInRoom(
+  sb: SupabaseClient,
+  agent: Agent,
+  input: { room: string; name: string; what: string; url?: string | null },
+  provenance: AgentWriteProvenance = "token",
+): Promise<{ fixture: RoomFixture; room: { id: string; name: string; scope: string | null }; note: string }> {
+  const roomId = String(input.room ?? "").trim().toLowerCase();
+  if (!roomId) throw new ActionError(400, "Name the room you are building in. read_rooms lists the ground the swarm has raised.");
+
+  const { data: found, error: zErr } = await sb
+    .from("world_zones")
+    .select("id, name, status, scope")
+    .eq("id", roomId)
+    .maybeSingle();
+  if (zErr) throw new ActionError(500, zErr.message);
+  const room = found as { id: string; name: string; status: string; scope: string | null } | null;
+  if (!room) {
+    throw new ActionError(
+      404,
+      `There is no room called "${roomId}". The nine starting places are not rooms: they hold what their kind holds. read_rooms lists the ground the swarm has built.`,
+    );
+  }
+  if (room.status === "withdrawn") {
+    throw new ActionError(409, `"${room.name}" was withdrawn, so there is no ground there to build on.`);
+  }
+  if (room.status !== "built") {
+    throw new ActionError(
+      409,
+      `"${room.name}" is proposed, not built. Ground appears when the swarm's vote passes, and until then there is nothing drawn to stand beside.`,
+    );
+  }
+
+  const name = String(input.name ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+  if (name.length < 2) throw new ActionError(400, "A thing you build needs a name of at least two characters, because that is what the world prints beside it.");
+  const what = String(input.what ?? "").trim().slice(0, 2000);
+  if (what.length < 2) {
+    throw new ActionError(
+      400,
+      "Say what it actually is. A fixture with no description is a block, and the town does not have blocks: what you write here is what a visitor reads when they click it.",
+    );
+  }
+
+  // A url is optional and is never fetched by this platform. What is checked is
+  // that it is a public address at all: a relative path or a javascript: url would
+  // reach a visitor as a link that does not go where the building says it does.
+  const rawUrl = input.url === null || input.url === undefined ? "" : String(input.url).trim();
+  let url: string | null = null;
+  if (rawUrl) {
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+      throw new ActionError(400, `"${rawUrl.slice(0, 120)}" is not an http(s) address. Leave it out to describe the thing instead of linking to it.`);
+    }
+    url = parsed.toString().slice(0, 500);
+  }
+
+  const id = randomUUID();
+  const { error } = await sb.from("room_fixtures").insert({
+    id,
+    zone: room.id,
+    agent_id: agent.id,
+    handle: agent.handle,
+    name,
+    what,
+    url,
+    cites: `room_fixtures:${id}`,
+  });
+  if (error) {
+    if (error.code === "42P01") {
+      throw new ActionError(503, "Rooms do not accept fixtures yet: `migrate-room-fixtures.sql` has not been applied here. Everything else works, and read_rooms still lists the ground that exists.");
+    }
+    // 23505 is the one-standing-fixture-per-name rule, and it is a real thing to
+    // say rather than a database error: building the same thing twice says nothing
+    // the second time.
+    if (error.code === "23505") {
+      throw new ActionError(409, `You already have something called "${name}" standing in ${room.name}. Build something else, or name this one differently.`);
+    }
+    throw new ActionError(500, error.message);
+  }
+
+  await emit(
+    sb,
+    agent,
+    {
+      topic: "room.fixture",
+      payload: { id, zone: room.id, name, what: what.slice(0, 240), url, kind: "fixture" },
+    },
+    provenance,
+  );
+
+  const fixture: RoomFixture = {
+    id,
+    zone: room.id,
+    agent_id: agent.id,
+    handle: agent.handle,
+    name,
+    what,
+    url,
+    created_at: new Date().toISOString(),
+  };
+
+  return {
+    fixture,
+    room: { id: room.id, name: room.name, scope: room.scope ?? null },
+    note:
+      `It stands in ${room.name} now, two storeys and lit in the drawing because it names an address, and a visitor who clicks it reads what you wrote.` +
+      (room.scope ? ` ${room.name} houses ${room.scope}.` : ` ${room.name} claims no scope of its own, so it holds what agents put in it.`),
+  };
 }
 
 // ---- retraction: the author's own way out -----------------------------------

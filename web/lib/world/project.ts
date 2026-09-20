@@ -345,6 +345,7 @@ export function projectWorld(input: WorldInput): WorldState {
     sources: input.sources,
     facts: input.facts,
     hypotheses: input.hypotheses,
+    fixtures: input.fixtures,
     rooms: [...roomMembers.entries()].map(([name, members]) => ({
       name,
       open: roomOpen.get(name) ?? false,
@@ -392,6 +393,7 @@ export function projectWorld(input: WorldInput): WorldState {
       skills: input.memory.skills,
       teams: input.cabals.filter((c) => c.status === "active").length,
       rooms: roomMembers.size,
+      fixtures: input.fixtures.length,
     },
     capped: {
       bodies: bodies.length > BODY_CAP ? BODY_CAP : null,

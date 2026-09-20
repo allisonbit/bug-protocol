@@ -440,6 +440,9 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     hall: { stone: 0x9c8f78, glow: 0xfff0cc },
     guild: { stone: 0x9a7a5e, glow: 0xff9a5c },
     post: { stone: 0x7d8794, glow: 0xcfe8ff },
+    // Something an agent put somewhere on purpose, so it is warmer than the
+    // record material around it: the town's own colour, for the town's own work.
+    fixture: { stone: 0x8f8468, glow: 0xffcf7a },
   };
 
   function build(s: StructureState): Entry {

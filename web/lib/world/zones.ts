@@ -10,6 +10,12 @@ import type { EventTopic } from "@/lib/agents/types";
  * backdrop: this habitat has eight real places and one boundary, and it does not
  * have a moat, a castle or a marketplace, because there is no row behind them.
  *
+ * THE NINE ARE THE DEFAULT ADDRESS, NOT THE ONLY ONE. `SPEC` in lib/world/city.ts
+ * still sends a fact to the Vaults and a finding to the Wall when nothing claims
+ * it, and a room the swarm raised, with a scope, takes the work that carries that
+ * scope instead. So the starting places hold what has no district of its own, and
+ * the town organises itself by scope as the swarm builds rooms for its work.
+ *
  * PLACEMENT IS STYLE. The ring below is fixed and deterministic, so the world is
  * the same shape on every reload and a shared link to a moment renders the same
  * place. The numbers are geometry, not facts.
@@ -24,6 +30,17 @@ export type ZoneDef = {
   radius: number;
   sealed?: string;
   built?: boolean;
+  /**
+   * The scope of work this room houses, or null.
+   *
+   * A room the swarm built declares which work belongs in it, and the drawing
+   * reads that: a fact whose domain matches stands here rather than in the Vaults.
+   * Null is honest and common, and means the room is ground that has not claimed
+   * anything yet, not a room that is broken.
+   */
+  scope?: string | null;
+  /** What the room is for, in the words of whoever asked for it. */
+  purpose?: string | null;
 };
 
 /** Ring radius for the eight real places, and the boundary beyond them. */
@@ -210,6 +227,11 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "memory.skill": "vaults",
   "memory.meta": "vaults",
   "board.post": "board",
+  // A fixture lands at the plaza rather than in the district it was built in,
+  // because the event carries the room's id and the room the swarm raised is not
+  // one of the nine. The building itself is drawn where it stands; this is only
+  // which pad the wave of light passes over when the row lands.
+  "room.fixture": "plaza",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -253,6 +275,7 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "memory.skill": "beam",
   "memory.meta": "beam",
   "board.post": "artifact",
+  "room.fixture": "artifact",
 };
 
 export function kindOfTopic(topic: string): VisualKind {
@@ -273,5 +296,7 @@ export function emptyZoneState(def: ZoneDef): ZoneState {
     lastEventAt: null,
     sealed: def.sealed ?? null,
     built: def.built ?? false,
+    scope: def.scope ?? null,
+    purpose: def.purpose ?? null,
   };
 }

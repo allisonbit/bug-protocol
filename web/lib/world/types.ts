@@ -157,6 +157,17 @@ export type ZoneState = {
   sealed: string | null;
   /** True for a zone the swarm proposed and a vote built. */
   built: boolean;
+  /**
+   * The work this room houses, or null.
+   *
+   * A room the swarm built declares a scope, and the drawing reads it: a fact or a
+   * question carrying that scope stands here rather than in the Vaults. Null means
+   * the room claims nothing yet, which is a legitimate kind of ground rather than a
+   * broken room, and the card says so instead of leaving a visitor to guess.
+   */
+  scope: string | null;
+  /** What the room is for, in the words of whoever asked for it. */
+  purpose: string | null;
 };
 
 /**
@@ -180,7 +191,17 @@ export type ZoneState = {
  * follow the tier of the agent that lives in it. So both kinds of growth are
  * real, and neither is invented to fill space.
  */
-export type StructureKind = "house" | "vault" | "lab" | "archive" | "source" | "monument" | "hall" | "guild" | "post";
+export type StructureKind =
+  | "house"
+  | "vault"
+  | "lab"
+  | "archive"
+  | "source"
+  | "monument"
+  | "hall"
+  | "guild"
+  | "post"
+  | "fixture";
 
 export const STRUCTURE_KINDS: StructureKind[] = [
   "house",
@@ -192,6 +213,7 @@ export const STRUCTURE_KINDS: StructureKind[] = [
   "hall",
   "guild",
   "post",
+  "fixture",
 ];
 
 export type StructureState = {
@@ -318,6 +340,7 @@ export type WorldTotals = {
   skills: number;
   teams: number;
   rooms: number;
+  fixtures: number;
 };
 
 export type WorldState = {
@@ -356,14 +379,28 @@ export type WorldInput = {
   events: import("@/lib/agents/types").SwampEvent[];
   /** Every verdict any agent filed, which is what a crane is made of. */
   reviews: { agent_id: string | null; finding_id: string }[];
-  /** The shared brain, as the ladder tests it rather than as it renders. */
-  facts: { source_agent: string | null; key: string }[];
+  /**
+   * The shared brain, as the ladder tests it rather than as it renders.
+   *
+   * `domain` is the scope a fact is filed under, which is what a room the swarm
+   * built matches on: the column already existed on every fact, and reading it is
+   * what lets a founded district hold the work behind it.
+   */
+  facts: { source_agent: string | null; key: string; domain?: string | null }[];
   /**
    * Hypotheses carry their id and their claim as well as their status, because
    * each one becomes a lab and a lab has to cite the row it stands for rather
    * than merely the agent who asked. `claim` is the label over the door.
+   * `domain` is the scope they are filed under, which is what a room matches on.
    */
-  hypotheses: { id: string; claim: string | null; proposed_by: string | null; resolved_by: string | null; status: string }[];
+  hypotheses: {
+    id: string;
+    claim: string | null;
+    proposed_by: string | null;
+    resolved_by: string | null;
+    status: string;
+    domain?: string | null;
+  }[];
   endorsements: { agent_id: string }[];
   /** Counts the projector cannot derive from the capped event window. */
   memory: { facts: number; hypotheses: number; skills: number };
@@ -377,6 +414,24 @@ export type WorldInput = {
    * exists only as events and the window is where those are read.
    */
   rooms: { name: string; open: boolean; at: string | null; members: number }[];
+  /**
+   * Things agents built and stood in a room they chose.
+   *
+   * A fixture is the one structure whose place is a decision rather than a
+   * mapping: everything else in the town goes where its kind goes, and this goes
+   * where its author put it. That is why it carries its room's id rather than a
+   * scope to be matched, and why a fixture whose room was withdrawn falls back to
+   * the Docks instead of vanishing.
+   */
+  fixtures: {
+    id: string;
+    zone: string;
+    handle: string;
+    name: string;
+    what: string;
+    url: string | null;
+    created_at: string;
+  }[];
   /** Project the world as of this seq. This is the whole replay mechanism. */
   untilSeq?: number;
   now: number;

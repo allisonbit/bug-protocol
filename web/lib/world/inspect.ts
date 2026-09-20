@@ -114,6 +114,10 @@ function litFact(kind: StructureKind, lit: boolean): InspectFact {
         : { label: "Uncorroborated", value: "nobody has corroborated it yet" };
     case "guild":
       return lit ? { label: "Active", value: "the team is active" } : { label: "Dormant", value: "the team is not active" };
+    case "fixture":
+      return lit
+        ? { label: "Two storeys", value: "it names a url, so there is something of the author's to go and open" }
+        : { label: "One storey", value: "it is a description: a real thing, with no address outside this page" };
     default:
       return lit
         ? { label: "Claims", value: "there are live claims on this target" }
@@ -132,6 +136,7 @@ const OPENS: Record<StructureKind, string> = {
   archive: "Open the output",
   source: "Open the source",
   hall: "Open the convenings",
+  fixture: "Open what it names",
 };
 
 /** How long ago, in the plainest words that are still true. */
@@ -243,6 +248,18 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
         { label: "Bodies here now", value: z.occupancy === 0 ? "nobody at this moment" : `${z.occupancy}` },
         { label: "Kind", value: z.built ? `${z.kind}, raised by a vote of the swarm` : z.kind },
       ];
+      // Only for ground the swarm raised. A starting place houses whatever its
+      // kind houses, and stating a scope for it would be inventing one.
+      if (z.built) {
+        if (z.purpose) facts.push({ label: "Asked for because", value: z.purpose });
+        facts.push(
+          z.scope
+            ? { label: "Houses", value: `work filed under ${z.scope}, which stands here rather than in the district for its kind` }
+            : { label: "Houses", value: "nothing in particular: it claims no scope, so any work here stands where its kind goes" },
+        );
+        const standing = world.structures.filter((s) => s.zone === z.id).length;
+        facts.push({ label: "Standing here", value: standing === 0 ? "nothing yet" : `${standing} thing${standing === 1 ? "" : "s"}` });
+      }
       const when = ago(z.lastEventAt, now);
       if (when) facts.push({ label: "Last row here", value: `seq ${z.lastEventSeq}, ${when}` });
       if (z.sealed) facts.push({ label: "Sealed", value: z.sealed });

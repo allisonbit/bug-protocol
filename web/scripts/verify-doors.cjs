@@ -83,6 +83,7 @@ function obs(patch = {}) {
     vaults: null,
     zoneSlugs: [],
     zoneAsk: null,
+    rooms: [],
     source: { rev: null, available: false, files: [], unreadable: [] },
     mySourceRead: null,
     openChanges: [],
@@ -102,8 +103,31 @@ function obs(patch = {}) {
 const ASK = {
   slug: "security-research",
   name: "Security Research",
+  scope: "security-research",
   purpose:
     "Work in security-research, with no place standing for it. 6 facts rest in this scope, 2 of them confirmed by nobody but the agent who wrote them, 3 questions asked about them.",
+};
+
+/** A room the swarm has built, with something already standing in it. */
+const ROOM = {
+  id: "literature",
+  name: "Literature",
+  scope: "literature",
+  purpose: "Work in literature, with no place standing for it. 4 facts rest in this scope.",
+  built_at: "2026-09-20T08:32:00.000Z",
+  housed: 4,
+  fixtures: [
+    {
+      id: "ffff4444-0000-0000-0000-000000000001",
+      zone: "literature",
+      agent_id: null,
+      handle: "someone-else",
+      name: "Reading list",
+      what: "Forty papers on the same question, in one place.",
+      url: "https://example.org/reading-list",
+      created_at: "2026-09-20T09:00:00.000Z",
+    },
+  ],
 };
 
 /** A change another agent proposed, waiting on this one's verdict. */
@@ -172,20 +196,22 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "13", "the policy version moved with the rules", policy.POLICY_VERSION);
+  say(policy.POLICY_VERSION === "14", "the policy version moved with the rules", policy.POLICY_VERSION);
 
   // The two doors a reflex brain deliberately does NOT hold are still named in the
   // closed set, because a model brain plans from that same list. If they were
   // dropped from it, "the swarm can rebuild this place" would be a sentence about
   // a door no brain could name.
-  for (const intent of ["read_source", "propose_change", "review_change"]) {
+  for (const intent of ["read_source", "propose_change", "review_change", "build_in_room"]) {
     say(policy.INTENTS.includes(intent), `${intent} is named in the closed set`, "model brain");
     say(
       !policy.REFLEX_RULES.some((r) => r.intent === intent),
       `${intent} is NOT a reflex rule`,
       intent === "read_source"
         ? "a brain with no judgement has nothing to do with a file's bytes"
-        : "a deterministic brain cannot read agent-authored code",
+        : intent === "build_in_room"
+          ? "a fixture is a name, and there is no row to derive one from"
+          : "a deterministic brain cannot read agent-authored code",
     );
     // A reflex rule naming a model-only action is a rule that never fires, which is
     // exactly the silent failure this list exists to catch. Assert the silence
@@ -302,6 +328,14 @@ async function main() {
   say(
     Boolean(groundAsk) && groundAsk.purpose.includes("6 facts"),
     "the purpose is arithmetic over the rows, so it can be checked",
+  );
+  // The scope is the difference between founding a district and buying a name on a
+  // map: it is what the drawing matches rows against, so an ask that carried none
+  // would raise ground with nothing in it, which is every room so far.
+  say(
+    Boolean(groundAsk) && groundAsk.scope === ASK.scope,
+    "the ask carries the scope the room would house",
+    groundAsk?.scope,
   );
   say(
     of(plan("propose_zone", { zoneAsk: null }), "propose_zone").length === 0,

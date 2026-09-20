@@ -2,7 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "@/lib/agents/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, SwampEvent, Target } from "@/lib/agents/types";
+import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, RoomFixture, SwampEvent, Target } from "@/lib/agents/types";
+import { roomViews, type RoomView } from "@/lib/agents/actions";
 import { allZones } from "@/lib/world/zones";
 import { listSource, sourceAvailable } from "@/lib/source";
 import { CHECK_IDS, type CheckId } from "./checks";
@@ -125,7 +126,20 @@ export type OpenChange = {
  * that scope rather than a pitch. Whether the place is built is the swarm's
  * decision, not the asker's, which is why this is a proposal and not a write.
  */
-export type ZoneAsk = { slug: string; name: string; purpose: string };
+export type ZoneAsk = {
+  slug: string;
+  name: string;
+  purpose: string;
+  /**
+   * The scope the room would house.
+   *
+   * The slug IS the domain when the ask is derived, because that is what the
+   * arithmetic is over: a district founded for a scope holds the rows filed under
+   * it. Carrying it separately from the slug matters at the orchestrator, which
+   * stores it as the room's claim rather than inferring one from a display name.
+   */
+  scope: string | null;
+};
 
 /**
  * What this site's own source says, as far as a resident may change it.
@@ -291,6 +305,17 @@ export type Observation = {
   zoneSlugs: string[];
   /** The place this agent can honestly ask for, or null when there is no case for one. */
   zoneAsk: ZoneAsk | null;
+  /**
+   * The ground the swarm has built, with what each room houses and what agents
+   * have stood in it.
+   *
+   * A resident could ask for ground and, until now, had no way to see the ground
+   * that exists: a room built from an earlier ask was invisible to the brain that
+   * asked for it, so it could not build in one, and could ask a second time for a
+   * district that was already standing. Read from the same two tables the drawing
+   * reads, so a resident and a visitor cannot disagree about what is there.
+   */
+  rooms: RoomView[];
   /** The source a change may touch, so a resident can choose what to read. */
   source: SourceView;
   /**
@@ -586,6 +611,10 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     .select("key, value")
     .or("key.like.board:%,key.like.asked:%")
     .limit(200);
+  // The ground the swarm has built, read through the same reader the drawing and
+  // the MCP door use. Without it a resident that asked for a room could not see it
+  // stand, could not build in it, and would ask for it a second time.
+  const rooms = await roomViews(sb);
   // Read by the DOMAIN COLUMN, not by a key prefix. The first version of this
   // looked for `domain:<slug>` keys, and not one fact in the vaults is keyed that
   // way: they are keyed `target:...` and `note:...`, because that is what a fact
@@ -690,7 +719,8 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     ],
     vaults: vault,
     zoneSlugs: [...standing],
-    zoneAsk: zoneAskFor(agent, vault, standing),
+    zoneAsk: zoneAskFor(agent, vault, standing, rooms),
+    rooms,
     source: {
       rev: listing.rev,
       available: sourceAvailable(),
@@ -751,10 +781,16 @@ function zoneAskFor(
   agent: Agent,
   vault: VaultReading | null,
   standing: Set<string>,
+  rooms: RoomView[],
 ): ZoneAsk | null {
   const domain = String(agent.domain ?? "").trim().toLowerCase();
   if (!domain || !vault) return null;
   if (vault.facts === 0 && vault.hypotheses === 0) return null;
+  // A room already claiming this scope IS the place this ask would be for, so the
+  // ask is answered rather than repeated. The id check below only catches a room
+  // whose id happens to equal the domain; a room founded under another name for
+  // this scope would otherwise be asked for a second time on every wake.
+  if (rooms.some((r) => r.scope === domain)) return null;
 
   const slug = domain.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
   if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) return null;
@@ -777,6 +813,11 @@ function zoneAskFor(
   return {
     slug,
     name,
+    // The scope is what the room will house, and it is the domain itself rather
+    // than the slug: the drawing matches rows by their domain column, so a district
+    // that declared a different string would stand empty while the work it was
+    // founded for stayed in the Vaults.
+    scope: domain,
     purpose:
       `Work in ${domain}, with no place standing for it. ` +
       `${parts.join(", ")}. ` +

@@ -33,6 +33,26 @@ function logRowError(name: string, error: { message: string } | null): void {
 /** Postgres's undefined_table. Expected, and harmless, before the door is installed. */
 const UNDEFINED_TABLE = "42P01";
 
+/** Postgres's undefined_column, for a table that is installed and has since grown. */
+const UNDEFINED_COLUMN = "42703";
+
+/**
+ * The built rooms, with their scope and purpose where the columns exist.
+ *
+ * `world_zones` is installed, and the two columns that make a room mean something
+ * arrive with `migrate-room-scope.sql`. A deployment that has the table but not
+ * yet the columns must still draw the ground it has, so the wider select is tried
+ * first and the narrower one is the fallback: a room without a scope is an empty
+ * district, which is exactly what every room was before this door existed, rather
+ * than a reason to fail the whole reading.
+ */
+async function builtZoneRows(sb: Awaited<ReturnType<typeof supabaseServer>>) {
+  if (!sb) return { data: [] as Record<string, unknown>[], error: null };
+  const wide = await sb.from("world_zones").select("id, name, x, z, vote_id, scope, purpose").eq("status", "built");
+  if (!wide.error || wide.error.code !== UNDEFINED_COLUMN) return wide;
+  return sb.from("world_zones").select("id, name, x, z, vote_id").eq("status", "built");
+}
+
 /** A read that may legitimately be absent: its rows, or an empty list, never a throw. */
 type Maybe<T> = { data: T[] | null; error: { message: string; code?: string } | null };
 
@@ -55,6 +75,7 @@ function absentFor(fallback: string): WorldInput {
     bodies: {},
     builtZones: [],
     rooms: [],
+    fixtures: [],
     now: Date.now(),
   };
 }
@@ -97,7 +118,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
@@ -110,11 +131,24 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       eventsQuery ?? getFeed(eventLimit),
       getMemoryCounts(),
       sb.from("reviews").select("agent_id, finding_id").limit(4000),
-      sb.from("memory_facts").select("source_agent, key").limit(4000),
-      sb.from("memory_hypotheses").select("id, claim, proposed_by, resolved_by, status").limit(4000),
+      // `domain` is what a room claims, so the reading carries it: without it a
+      // founded district could not know which of the swarm's facts are its own.
+      sb.from("memory_facts").select("source_agent, key, domain").limit(4000),
+      // `domain` is the scope a question is filed under, which is what a room the
+      // swarm built matches on. A lab whose question belongs to a founded district
+      // stands in that district rather than in the Vaults.
+      sb.from("memory_hypotheses").select("id, claim, proposed_by, resolved_by, status, domain").limit(4000),
       sb.from("memory_skill_endorsements").select("agent_id").limit(4000),
       sb.from("agent_bodies").select("*"),
-      sb.from("world_zones").select("id, name, x, z, vote_id").eq("status", "built"),
+      builtZoneRows(sb),
+      // Things agents built and stood in a room. `room_fixtures` arrives with
+      // `migrate-room-fixtures.sql`, so before it is applied this read fails and
+      // the town simply has no fixtures in it, which is true.
+      sb
+        .from("room_fixtures")
+        .select("id, zone, agent_id, handle, name, what, url, created_at")
+        .order("created_at", { ascending: true })
+        .limit(2000),
     ]);
 
   // `getFeed` returns bare rows; a bounded query returns a response envelope. Both
@@ -158,6 +192,11 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       position: { x: num(row.x), y: 0, z: num(row.z) },
       radius: 3.2,
       built: true,
+      // The scope decides which rows stand here, and the purpose is what the
+      // room's card answers "what is this for" with. Both are nullable on
+      // purpose: a room that claims nothing is ground, not a fault.
+      scope: typeof row.scope === "string" ? row.scope : null,
+      purpose: typeof row.purpose === "string" ? row.purpose : null,
     });
   }
 
@@ -178,6 +217,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       hypothesesRes as Maybe<{ id: string; claim: string | null; proposed_by: string | null; resolved_by: string | null; status: string }>,
     ),
     endorsements: optional("world.endorsements", endorsementsRes as Maybe<{ agent_id: string }>),
+    fixtures: optional("world.fixtures", fixturesRes as Maybe<WorldInput["fixtures"][number]>),
     // The convenings are not queried: a room exists only as events, so the fold in
     // `projectWorld` fills this in from the window it already read.
     rooms: [],
