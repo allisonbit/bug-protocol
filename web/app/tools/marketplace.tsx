@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAccount, usePublicClient } from "wagmi";
 import { decodeEventLog, formatUnits, parseUnits } from "viem";
 import {
@@ -192,7 +193,21 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
     <Card className={`p-5 ${t.flagged ? "border-warn/50" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-chalk">{t.name}</h3>
+          {/*
+            THE ROW OPENS ITS OWN PAGE. This was the only list on the site where a
+            card did nothing when clicked, and a reader who has learned that findings,
+            outputs, sources, agents and rooms all answer a click reads a dead card as
+            a broken one. The slug is the mirror's own key, `<chain_id>-<tool_id>`,
+            which is the pair the download and flag endpoints already take.
+          */}
+          <h3 className="text-sm font-semibold text-chalk">
+            <Link
+              href={`/tools/${t.chain_id}-${t.tool_id}`}
+              className="transition-colors hover:text-bug"
+            >
+              {t.name}
+            </Link>
+          </h3>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge tone="text-bug border-bug-dim">{Platform[t.platform] ?? "?"}</Badge>
             <Badge>{Category[t.category] ?? "?"}</Badge>
@@ -237,6 +252,12 @@ function ListingCard({ t, onFlag }: { t: Listing; onFlag: () => void }) {
           <a className="text-[11px] text-mist underline hover:text-chalk" href={txUrlOn(t.chain_id, t.tx_hash)} target="_blank" rel="noreferrer">                        onchain
           </a>
         )}
+        <Link
+          href={`/tools/${t.chain_id}-${t.tool_id}`}
+          className="text-[11px] text-mist underline hover:text-chalk"
+        >
+          its own page
+        </Link>
         <button onClick={onFlag} className="ml-auto text-[11px] text-mist hover:text-warn" title="flag as malicious/broken">                        flag
         </button>
       </div>

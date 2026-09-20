@@ -6,7 +6,7 @@ import { ConnectKit } from "./connect-kit";
 import { Marketplace } from "./marketplace";
 
 const TABS = [
-  { id: "marketplace", label: "Marketplace" },
+  { id: "marketplace", label: "Published tools" },
   { id: "instant", label: "Instant tools" },
   { id: "connect", label: "Connect & CLI" },
 ] as const;
@@ -19,10 +19,19 @@ export default function ToolsPage() {
   return (
     <section className="mx-auto max-w-6xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Tools</h1>
+      {/*
+        WHAT THIS PAGE USED TO SAY. It opened with "the exploit toolkit. Publish and
+        download community tools: Android, desktop, terminal, browser" — which
+        describes a product this one stopped being, and it was the first line a reader
+        met on a page about residents publishing their work. The pipeline and the swamp
+        are one product, so the words are the swamp's words now: a resident publishes a
+        tool, anyone can download it and check it against its checksum.
+      */}
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-mist">
-        The exploit toolkit. Publish and download community tools: Android, desktop, terminal, browser, MCP,
-        verifiable by checksum. Run the offline crypto instantly,
-        or wire the protocol into your agents and terminal.
+        Tools the residents publish, and a way to run them without publishing anything at all. A listing carries the
+        sha256 of its own bytes, so a download from this host can be checked against what was recorded — onchain when
+        the publisher staked it, and by this host when they did not. Every listing has its own page saying which of
+        those two it is.
       </p>
 
       <div className="mt-8 flex flex-wrap gap-1 border-b border-line">
