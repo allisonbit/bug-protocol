@@ -25,50 +25,36 @@ import { getFlags } from "@/lib/agents/auth";
  * only direction a consent door can honestly point.
  */
 
-/** The two answers. Text rather than a boolean, so "has not said" stays distinct. */
-export const OFFSITE_CHOICES = ["carried", "not_carried"] as const;
-export type OffsiteChoice = (typeof OFFSITE_CHOICES)[number];
-
-export const OFFSITE_FLAG = "offsite_words";
-
-export type OffsiteDecision = {
-  /** Whether this resident's words may be carried off this site. */
-  carry: boolean;
-  /** Why, in the words a reader would want. Recorded on the row that gets posted. */
-  because: string;
-  /** Whose answer decided it: the resident's own, or the swarm's default. */
-  decidedBy: "resident" | "swarm";
-};
-
-/**
- * THE RULE, and the whole of it.
- *
- * Pure, and takes the swarm default rather than reading it, so a verifier can walk
- * every combination without a database, a flag table or a running beat.
- */
-export function offsiteDecision(input: {
-  residentChoice: OffsiteChoice | null;
-  swarmDefault: OffsiteChoice;
-}): OffsiteDecision {
-  if (input.residentChoice === "carried") {
-    return { carry: true, because: "they said their words may leave", decidedBy: "resident" };
-  }
-  if (input.residentChoice === "not_carried") {
-    return { carry: false, because: "they have withheld their words from off-site posts", decidedBy: "resident" };
-  }
-  // They have said nothing. The swarm's default decides, and a resident who has not
-  // answered still holds the last word: setting their own answer overrides this at
-  // any time, in either direction.
-  return input.swarmDefault === "carried"
-    ? { carry: true, because: "they have not said otherwise and the swarm carries by default", decidedBy: "swarm" }
-    : { carry: false, because: "they have not said, and the swarm does not carry by default", decidedBy: "swarm" };
-}
+// The rule itself lives in `./offsite-rule`, which imports nothing, so the planner
+// can apply it without pulling an event-publishing module onto its import graph.
+// Re-exported here so a caller that reaches for the door can find the rule beside it.
+export {
+  OFFSITE_CHOICES,
+  OFFSITE_FLAG,
+  asOffsiteChoice,
+  asSwarmDefault,
+  countOffsite,
+  offsiteDecision,
+  type OffsiteChoice,
+  type OffsiteDecision,
+  type OffsiteRosterRow,
+} from "./offsite-rule";
+import {
+  OFFSITE_CHOICES,
+  OFFSITE_FLAG,
+  asOffsiteChoice,
+  asSwarmDefault,
+  countOffsite,
+  offsiteDecision,
+  type OffsiteChoice,
+  type OffsiteDecision,
+  type OffsiteRosterRow,
+} from "./offsite-rule";
 
 /** The swarm's answer for anyone who has not given their own. */
 export async function swarmOffsiteDefault(sb?: SupabaseClient | null): Promise<OffsiteChoice> {
   const flags = await getFlags(sb);
-  const raw = (flags as Record<string, unknown>)[OFFSITE_FLAG];
-  return raw === "carried" ? "carried" : "not_carried";
+  return asSwarmDefault((flags as Record<string, unknown>)[OFFSITE_FLAG]);
 }
 
 /** One resident's own answer, or null when they have not given one. */
@@ -77,8 +63,27 @@ export async function readOffsiteChoice(
   agentId: string,
 ): Promise<OffsiteChoice | null> {
   const { data } = await sb.from("agents").select("offsite_words").eq("id", agentId).maybeSingle();
-  const raw = (data as { offsite_words?: string | null } | null)?.offsite_words ?? null;
-  return raw === "carried" || raw === "not_carried" ? raw : null;
+  return asOffsiteChoice((data as { offsite_words?: string | null } | null)?.offsite_words);
+}
+
+/**
+ * The swarm, as a roster of answers.
+ *
+ * `neq(status, banned)` and nothing else, which is the same filter `observations.ts`
+ * puts on the roster it builds for a wake. The two must describe the same swarm or a
+ * resident is told one thing by the tool and another by its own planner, and neither
+ * of them would ever fail about it.
+ */
+export async function offsiteRoster(sb: SupabaseClient): Promise<OffsiteRosterRow[]> {
+  const { data } = await sb
+    .from("agents")
+    .select("id, offsite_words")
+    .neq("status", "banned")
+    .limit(200);
+  return ((data as OffsiteRosterRow[] | null) ?? []).map((r) => ({
+    id: r.id,
+    offsite_words: r.offsite_words ?? null,
+  }));
 }
 
 export type OffsiteStanding = {
@@ -93,32 +98,22 @@ export type OffsiteStanding = {
 
 /** Where one resident stands, and where the swarm stands around them. */
 export async function offsiteStanding(sb: SupabaseClient, agent: Agent): Promise<OffsiteStanding> {
-  const [mine, swarmDefault, counts] = await Promise.all([
-    readOffsiteChoice(sb, agent.id),
-    swarmOffsiteDefault(sb),
-    offsiteCounts(sb),
-  ]);
+  // Read from ONE snapshot: the resident's own answer is taken from the same roster
+  // the split is counted from, so the answer reported and the count reported cannot
+  // disagree about what the resident itself said. Reading the answer in a separate
+  // query and the counts in another is a race whose loser is the one number a resident
+  // would act on.
+  const [swarmDefault, roster] = await Promise.all([swarmOffsiteDefault(sb), offsiteRoster(sb)]);
+  const mine = asOffsiteChoice(roster.find((r) => r.id === agent.id)?.offsite_words);
+  const split = countOffsite({ roster, selfId: agent.id, selfChoice: mine });
   return {
     mine,
     swarmDefault,
     decision: offsiteDecision({ residentChoice: mine, swarmDefault }),
-    ...counts,
+    withheld: split.withheld,
+    carried: split.carried,
+    silent: split.silent,
   };
-}
-
-/** How the swarm is split, counted rather than estimated. */
-export async function offsiteCounts(
-  sb: SupabaseClient,
-): Promise<{ withheld: number; carried: number; silent: number }> {
-  const { data } = await sb.from("agents").select("offsite_words");
-  const rows = (data as { offsite_words: string | null }[] | null) ?? [];
-  let withheld = 0;
-  let carried = 0;
-  for (const r of rows) {
-    if (r.offsite_words === "not_carried") withheld += 1;
-    else if (r.offsite_words === "carried") carried += 1;
-  }
-  return { withheld, carried, silent: Math.max(rows.length - withheld - carried, 0) };
 }
 
 /**

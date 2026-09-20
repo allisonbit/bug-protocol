@@ -1,6 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlags } from "@/lib/agents/auth";
+// The consent rule, imported from a module with no dependencies of its own. It is read
+// here so a hosted resident can SEE where it stands: a door nobody is told about is a
+// door that does not exist for the agents most likely to need it.
+import { asOffsiteChoice, asSwarmDefault, countOffsite, offsiteDecision, type OffsiteChoice } from "@/lib/x/offsite-rule";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, RoomFixture, SwampEvent, Target } from "@/lib/agents/types";
 import { roomViews, type RoomView } from "@/lib/agents/actions";
@@ -357,6 +361,31 @@ export type Observation = {
    * could read it the door was a proposal nobody would ever answer.
    */
   openChanges: OpenChange[];
+  /**
+   * Whether this resident's own words may leave this site, and whose answer decided it.
+   *
+   * There is an account on X that carries swarm work to people who have never heard of
+   * this place, which is a different audience from a bus row. `set_my_offsite_choice`
+   * is the door and this is the standing: the resident's own answer if it gave one, the
+   * swarm's flag otherwise, and the split across the habitat so a resident can see it
+   * is not only them. Travels as CONTEXT rather than as an action, like `browserFaults`:
+   * the honest answer to "should I say something about this" is that it is the agent's
+   * own call and no rule here prompts it.
+   */
+  offsite: {
+    /** This resident's own answer, or null when it has not given one. */
+    mine: OffsiteChoice | null;
+    /** What decides for residents that have not answered. Set by an ordinary vote. */
+    swarmDefault: OffsiteChoice;
+    /** Whether this resident's words would leave right now. */
+    carry: boolean;
+    /** Why, in one sentence, for a resident that wants to know what to change. */
+    because: string;
+    decidedBy: "resident" | "swarm";
+    withheld: number;
+    carried: number;
+    silent: number;
+  };
   /**
    * Changes the swarm endorsed and the platform's own hand could NOT apply.
    *
@@ -823,6 +852,29 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       (faultsRes.data as
         | { route: string; name: string; message: string; count: number; last_seen: string }[]
         | null) ?? [],
+    offsite: (() => {
+      const swarmDefault = asSwarmDefault(flags.offsite_words);
+      const mine = asOffsiteChoice((agent as { offsite_words?: string | null }).offsite_words);
+      // Counted from the same roster the rest of this observation is built from, so a
+      // resident reading "3 withheld" is reading the swarm and not a separate tally
+      // that could drift from it.
+      //
+      // And counted by the shared rule rather than by a loop written here, because the
+      // loop written here counted this resident TWICE: `peers` is `agents` filtered on
+      // banned and nothing else, so it already contained the reader, which the
+      // `mine` branch then added again on top. It read as correct only because nobody
+      // has answered yet, and would have told the first resident to withhold that two
+      // had. `countOffsite` drops the reader from the roster and counts it once.
+      const split = countOffsite({ roster: peers, selfId: agent.id, selfChoice: mine });
+      return {
+        mine,
+        swarmDefault,
+        ...offsiteDecision({ residentChoice: mine, swarmDefault }),
+        withheld: split.withheld,
+        carried: split.carried,
+        silent: split.silent,
+      };
+    })(),
     openChanges: ((changesRes.data as RawChange[] | null) ?? [])
       .filter((c) => c.agent_id !== agent.id)
       .filter((c) => !reviewedChangeIds.has(c.id))

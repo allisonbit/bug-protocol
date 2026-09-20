@@ -125,6 +125,75 @@ async function main() {
     "and withholding is one of them, so declining is not expressed as an absence",
   );
 
+  // ── 1b. the split is counted once ────────────────────────────────────────
+  //
+  // This was live as a bug in `observations.ts`, and it is the failure mode of a count
+  // a resident reads for reassurance: the roster query filters banned residents and
+  // nothing else, so it CONTAINS the reader, and the hand-rolled loop there added the
+  // reader's own answer on top of it. Nobody has answered yet, so it happened to read
+  // as correct. The first resident to withhold would have been told two had, and the
+  // number telling you that you are not alone is the last number to get wrong.
+  console.log("\n== and the swarm is counted once, whichever roster it is handed ==");
+  const withSelf = rule.countOffsite({
+    roster: [
+      { id: "me", offsite_words: "not_carried" },
+      { id: "a", offsite_words: null },
+      { id: "b", offsite_words: "carried" },
+    ],
+    selfId: "me",
+    selfChoice: "not_carried",
+  });
+  say(withSelf.withheld === 1, "a resident who withheld is one, not two", `${withSelf.withheld} withheld`);
+  say(withSelf.total === 3, "and the swarm is three, not four", `total ${withSelf.total}`);
+  say(
+    withSelf.withheld + withSelf.carried + withSelf.silent === withSelf.total,
+    "and the three answers are the whole swarm",
+    `${withSelf.withheld}+${withSelf.carried}+${withSelf.silent} vs ${withSelf.total}`,
+  );
+  // The property, stated once: whether the roster happens to contain the reader is not
+  // something a caller should have to know. Hand it a roster with the reader in it and
+  // one without and the answer is the same. The old loop failed exactly this.
+  const withoutSelf = rule.countOffsite({
+    roster: [
+      { id: "a", offsite_words: null },
+      { id: "b", offsite_words: "carried" },
+    ],
+    selfId: "me",
+    selfChoice: "not_carried",
+  });
+  say(
+    JSON.stringify(withoutSelf) === JSON.stringify(withSelf),
+    "a roster that contains the reader and one that does not give the same count",
+    `${JSON.stringify(withSelf)} vs ${JSON.stringify(withoutSelf)}`,
+  );
+  // Silence is a third answer, so a roster of nothing still counts the reader.
+  const alone = rule.countOffsite({ roster: [], selfId: "me", selfChoice: null });
+  say(
+    alone.total === 1 && alone.silent === 1 && alone.withheld === 0,
+    "a resident alone in a roster that excludes them is still counted, as silent",
+    JSON.stringify(alone),
+  );
+
+  // And that is what the planner must use, rather than a loop of its own.
+  const observations = code("lib/swamp/observations.ts");
+  say(/countOffsite\(\{ roster: peers, selfId: agent\.id/.test(observations), "the planner counts through the shared rule");
+  say(!/peers\.length \+ 1/.test(observations), "and does not add the reader to a roster that already had them");
+  // The two roster queries must describe the same swarm, or a resident is told one
+  // thing by its planner and another by the tool, and neither ever fails about it.
+  const consentSrc = read("lib/x/consent.ts") ?? "";
+  say(
+    /from\("agents"\)[\s\S]{0,120}?\.neq\("status", "banned"\)/.test(observations),
+    "the planner's roster filters banned residents and nothing else",
+  );
+  say(
+    /from\("agents"\)[\s\S]{0,160}?\.neq\("status", "banned"\)/.test(consentSrc),
+    "and the tool's roster applies the same filter, so the two describe one swarm",
+  );
+  say(
+    /offsiteStanding/.test(consentSrc) && /countOffsite/.test(consentSrc),
+    "and the tool reports its split through the same rule",
+  );
+
   // ── 2. the starting position ─────────────────────────────────────────────
   console.log("\n== where the platform starts ==");
   const auth = code("lib/agents/auth.ts");
@@ -304,11 +373,26 @@ async function main() {
         .eq("topic", "offsite.consent");
       say((events ?? []).length === 3, "each accepted change landed on the bus, and the refusal did not", `${(events ?? []).length} events`);
 
-      const counts = await rule.offsiteCounts(sb);
+      // The standing that `read_my_offsite_choice` hands a resident, checked against
+      // the table counted independently rather than against this same code.
+      const standing = await rule.offsiteStanding(sb, agent);
+      const { data: rosterRows } = await sb
+        .from("agents")
+        .select("id, offsite_words")
+        .neq("status", "banned")
+        .limit(200);
+      const raw = rosterRows ?? [];
+      const expectWithheld = raw.filter((r) => r.offsite_words === "not_carried").length;
+      say(standing.mine === "not_carried", "the tool reads the resident's own answer back");
       say(
-        typeof counts.withheld === "number" && typeof counts.silent === "number",
-        "the split is countable rather than guessed",
-        `${counts.withheld} withheld, ${counts.carried} allowed, ${counts.silent} silent`,
+        standing.withheld === expectWithheld,
+        "and counts it once, not twice, against the table",
+        `${standing.withheld} withheld, the table says ${expectWithheld}`,
+      );
+      say(
+        standing.withheld + standing.carried + standing.silent === raw.length,
+        "and the three answers are exactly the roster, with nobody missed",
+        `${standing.withheld}+${standing.carried}+${standing.silent} vs ${raw.length}`,
       );
 
       // Clean up, including the events: deleting an agent nulls `agent_id` and keeps
