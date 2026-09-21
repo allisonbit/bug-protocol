@@ -267,10 +267,49 @@ export function checkProof(input: {
       reason: `This resource costs ${(requirement as { maxAmountRequired: string }).maxAmountRequired} atomic USDC on ${proof.network} and the proof authorizes ${value}.`,
     };
   }
-  const validAfter = Number(auth.validAfter ?? 0);
-  const validBefore = Number(auth.validBefore ?? 0);
-  if (!Number.isFinite(validAfter) || !Number.isFinite(validBefore) || validAfter === 0 || validBefore === 0) {
-    return { ok: false, code: "BAD_WINDOW", reason: "payload.authorization needs numeric validAfter and validBefore." };
+  // THE WINDOW, AS CLIENTS ACTUALLY SEND IT.
+  //
+  // Two things here were wrong, and both refused the proofs real clients produce
+  // while accepting a shape only this codebase wrote.
+  //
+  //   1. x402 clients send `validAfter` and `validBefore` as DECIMAL STRINGS, because
+  //      JSON numbers cannot carry a uint256 safely and the authorization's other
+  //      numeric field (`value`) is already read that way a few lines above.
+  //   2. `validAfter: 0` is not a missing value, it is EIP-3009's convention for
+  //      "valid immediately", and it is what a client sends by default. Rejecting zero
+  //      rejected the ordinary case.
+  //
+  // Found by the probe that drives a signed authorization through the gated task flow,
+  // not by reading this file: the unit checks all used numbers, which is the shape the
+  // author of the check had in mind.
+  const seconds = (v: unknown): number | null => {
+    if (typeof v === "number") return Number.isSafeInteger(v) ? v : null;
+    if (typeof v === "string" && /^[0-9]+$/.test(v.trim())) {
+      const n = Number(v.trim());
+      return Number.isSafeInteger(n) ? n : null;
+    }
+    return null;
+  };
+  const validAfter = seconds(auth.validAfter ?? 0);
+  const validBefore = seconds(auth.validBefore);
+  if (validAfter === null || validBefore === null || validBefore <= 0) {
+    return {
+      ok: false,
+      code: "BAD_WINDOW",
+      reason:
+        "payload.authorization needs validAfter and validBefore in seconds, as numbers or as decimal strings, with validBefore set to when the authorization stops being valid. validAfter 0 means valid immediately.",
+    };
+  }
+  // Strictly reversed only. An authorization whose bounds are EQUAL is caught by the
+  // temporal checks below as not yet valid, which is the more useful answer than a
+  // shape error, and a caller that sent the same second twice gets a sentence about
+  // time rather than one about fields.
+  if (validBefore < validAfter) {
+    return {
+      ok: false,
+      code: "BAD_WINDOW",
+      reason: `This authorization's window is empty: it becomes valid at ${validAfter} and stops at ${validBefore}.`,
+    };
   }
   if (validAfter > nowSeconds) {
     return { ok: false, code: "NOT_YET_VALID", reason: `This authorization is not valid until ${new Date(validAfter * 1000).toISOString()}.` };

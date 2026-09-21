@@ -72,6 +72,45 @@ const path = require("path");
   check("a refusal reads payment-failed", refused["x402.payment.status"] === "payment-failed");
   check("with the extension's error code", refused["x402.payment.error"].code === "DUPLICATE_NONCE");
 
+  console.log("\nthe window, in the shape a real client sends it");
+  // This is a REGRESSION CHECK with a story. The door used to require validAfter and
+  // validBefore as JSON numbers and to reject a zero validAfter, which refused every
+  // proof an actual x402 client produces: clients send decimal strings, because JSON
+  // numbers cannot carry a uint256 safely, and EIP-3009's convention for "valid
+  // immediately" is zero. The offline checks all used numbers, so nothing caught it;
+  // the probe driving a signed authorization through the gated flow did.
+  const payment = await import("../lib/payments/x402.ts");
+  const savedPayTo = process.env.X402_PAY_TO;
+  process.env.X402_PAY_TO = "0x1111111111111111111111111111111111111111";
+  const requirements = payment.paymentRequirements();
+  const term = requirements.accepts.find((a) => a.network === "base") ?? requirements.accepts[0];
+  const payload = (over = {}) => ({
+    x402Version: 1,
+    scheme: "exact",
+    network: term.network,
+    payload: {
+      signature: `0x${"ab".repeat(65)}`,
+      authorization: {
+        from: "0x2222222222222222222222222222222222222222",
+        to: term.payTo,
+        value: term.maxAmountRequired,
+        validAfter: "0",
+        validBefore: String(Math.floor(Date.now() / 1000) + 600),
+        nonce: `0x${"cd".repeat(32)}`,
+        ...over,
+      },
+    },
+  });
+  const now = Math.floor(Date.now() / 1000);
+  check("a zero validAfter as a string is valid immediately, not missing", payment.checkProof({ proof: payload(), catalogue: requirements, nowSeconds: now }).ok === true);
+  check("and so is the whole window sent as numbers", payment.checkProof({ proof: payload({ validAfter: 0, validBefore: now + 600 }), catalogue: requirements, nowSeconds: now }).ok === true);
+  check("a window that has already closed is expired", payment.checkProof({ proof: payload({ validAfter: 0, validBefore: now - 1 }), catalogue: requirements, nowSeconds: now }).code === "EXPIRED");
+  check("a window that has not opened is refused", payment.checkProof({ proof: payload({ validAfter: String(now + 60), validBefore: String(now + 600) }), catalogue: requirements, nowSeconds: now }).code === "NOT_YET_VALID");
+  check("an empty window is refused", payment.checkProof({ proof: payload({ validAfter: String(now + 600), validBefore: String(now + 60) }), catalogue: requirements, nowSeconds: now }).code === "BAD_WINDOW");
+  check("a missing validBefore is refused", payment.checkProof({ proof: payload({ validBefore: undefined }), catalogue: requirements, nowSeconds: now }).code === "BAD_WINDOW");
+  if (savedPayTo === undefined) delete process.env.X402_PAY_TO;
+  else process.env.X402_PAY_TO = savedPayTo;
+
   console.log("\nthe settlement note, which distinguishes verifying from moving money");
   check("with no settlement enabled it says so", /No funds move/.test(ext.settlementNote()), ext.settlementNote());
   process.env.X402_SETTLE = "1";

@@ -52,7 +52,10 @@ const path = require("path");
   // resolver reads, so the http check applies to the services that are endpoints and the
   // DID is asserted separately.
   const endpoints = erc.registrationEndpoints(file);
-  check("every non-DID service is an absolute http(s) url", endpoints.length === file.services.length - 1, `${endpoints.length} of ${file.services.length - 1}`);
+  const templated = erc.templatedServices(file);
+  check("every resolvable service is an absolute http(s) url", endpoints.length === file.services.length - 2, `${endpoints.length} of ${file.services.length - 2}`);
+  check("a templated endpoint is marked as one rather than left to 404", templated.length === 1 && file.services.find((s) => s.name === "OASF").templated === true, templated.join(","));
+  check("the DID service is named as a DID", file.services.find((s) => s.name === "DID")?.endpoint?.startsWith("did:web:"));
   const hosts = new Set(endpoints.map((e) => new URL(e).host));
   check("and every one is on this deployment", hosts.size === 1, [...hosts].join(","));
   check("the DID is the platform's own", file.services.find((s) => s.name === "DID").endpoint === did.platformDid());
@@ -96,12 +99,39 @@ const path = require("path");
     console.log(`\nlive against ${base}: the endpoints the file names`);
     for (const endpoint of endpoints) {
       const target = endpoint.replace(/^https?:\/\/[^/]+/, base);
+      // An endpoint is probed the way it is SPOKEN TO. The A2A door is JSON-RPC over
+      // POST and answers a GET with 405, which is a route that exists rather than a
+      // service that does not, so probing it with a GET would report a working door as
+      // broken. The request sent is a read (`tasks/list`), because a probe must not
+      // write anything into the record it is checking.
+      const isA2A = /\/api\/a2a$/.test(endpoint);
       try {
-        const res = await fetch(target, { method: "GET", headers: { accept: "application/json" } });
+        const res = await fetch(target, isA2A
+          ? {
+              method: "POST",
+              headers: { "content-type": "application/json", accept: "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tasks/list", params: {} }),
+            }
+          : { method: "GET", headers: { accept: "application/json, text/html;q=0.9" } });
         check(`${endpoint} answers`, res.status < 400, `status ${res.status}`);
       } catch (e) {
         check(`${endpoint} answers`, false, e instanceof Error ? e.message : "unreachable");
       }
+    }
+    // And one resolved per-agent file, because that is where the templated service
+    // becomes a real address, and where the file stops being about the deployment.
+    const agentFile = `${base}/agents/buffy-codebuff/agent-registration.json`;
+    try {
+      const res = await fetch(agentFile);
+      const body = await res.json();
+      check("a resolved agent file is served", res.status === 200, `status ${res.status}`);
+      const resolved = erc.registrationEndpoints(body);
+      const trust = body.services.find((s) => s.name === "OASF")?.endpoint;
+      check("its trust service names a real handle rather than a template", Boolean(trust) && !trust.includes("{"), trust);
+      check("and that record answers", (await fetch(trust)).status < 400, trust);
+      check("every endpoint in it is on this deployment", resolved.every((e) => new URL(e).host === new URL(base).host), resolved.join(","));
+    } catch (e) {
+      check("a resolved agent file is readable", false, e instanceof Error ? e.message : "unreachable");
     }
     try {
       const res = await fetch(`${base}/.well-known/agent-registration.json`);

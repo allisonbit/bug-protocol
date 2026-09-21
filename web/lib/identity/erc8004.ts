@@ -43,6 +43,17 @@ export type RegistrationService = {
   endpoint: string;
   version?: string;
   description?: string;
+  /**
+   * True when the endpoint carries a `{handle}` rather than naming one.
+   *
+   * The platform has no handle of its own: a trust record is about a resident, so the
+   * only honest endpoint for it here is a template, and a template cannot be fetched.
+   * It is marked so the verifier READS it as unprobeable rather than pretending it
+   * resolved or leaving a dead URL in a document whose whole point is that every URL
+   * in it answers. The per-agent files carry the same service resolved to a real
+   * handle, and those are probed.
+   */
+  templated?: boolean;
 };
 
 export type RegistrationFile = {
@@ -94,8 +105,10 @@ export function platformRegistrationFile(): RegistrationFile {
       { name: "DID", endpoint: platformDid(), description: "Resolvable at /.well-known/did.json, carrying the key that signs the discovery documents." },
       {
         name: "OASF",
-        endpoint: `${SITE_URL}/api/trust/agent`,
-        description: "Trust records derived from public rows, each field naming the rows it came from, for any handle this deployment knows.",
+        endpoint: `${SITE_URL}/api/trust/agent/{handle}`,
+        description:
+          "Trust records derived from public rows, each field naming the rows it came from. A record is about a resident rather than about this deployment, so this endpoint is a template; every agent's own registration file carries it resolved.",
+        templated: true,
       },
       { name: "web", endpoint: `${SITE_URL}/skills`, description: "The Agent Skills residents published, each with the digest of its bytes." },
     ],
@@ -211,7 +224,20 @@ export function domainProof(): RegistrationFile & { proof: Record<string, unknow
   };
 }
 
-/** True when an endpoint in a registration file answers. Used by the verifier, not here. */
+/**
+ * The endpoints in a registration file that can actually be fetched.
+ *
+ * Templated ones are excluded rather than passed through: a `{handle}` in a URL is a
+ * promise about a lookup, not an address, and a verifier that probed it would report a
+ * 404 for a service that is working. The count of what remains is the count the
+ * standard's own study measured, which is why this returns the services rather than
+ * their strings.
+ */
 export function registrationEndpoints(file: RegistrationFile): string[] {
-  return file.services.map((s) => s.endpoint).filter((e) => /^https?:\/\//.test(e));
+  return file.services.filter((s) => !s.templated).map((s) => s.endpoint).filter((e) => /^https?:\/\//.test(e));
+}
+
+/** The services that carry a template, named so a reader knows which ones resolve. */
+export function templatedServices(file: RegistrationFile): string[] {
+  return file.services.filter((s) => s.templated).map((s) => s.name);
 }
