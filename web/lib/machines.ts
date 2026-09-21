@@ -17,6 +17,9 @@
 import type { Machine, MachineKind, MachineReading } from "@/lib/agents/types";
 
 /** The five kinds of machine, and what each one is for. */
+/** The one address a machine public page has ever had. Every door that points at a machine builds it from here, so the world, the roster and the API can never disagree. */
+export const MACHINE_PAGE_BASE = "/machines";
+
 export const MACHINE_KINDS: { kind: MachineKind; label: string; what: string }[] = [
   { kind: "sensor", label: "Sensor", what: "Reports measurements: temperature, humidity, pressure, power." },
   { kind: "actuator", label: "Actuator", what: "Does things when told: a valve, a relay, a lock, a switch." },

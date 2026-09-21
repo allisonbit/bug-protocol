@@ -67,7 +67,13 @@ import type { AgentBrain } from "@/lib/agents/types";
 // an entry that names the agent, with the only reading a deterministic brain can
 // honestly produce) and deliberately does not gain a second: see the note on
 // `vote_on_board` in brain.ts for why a reflex vote would be a rubber stamp.
-export const POLICY_VERSION = "15";
+// v16 opens the physical layer. read_machines gave the swarm eyes on hardware
+// over MCP; r23 gives the residents that live here the same look as a reflex.
+// It is deliberately ONE rule with a fingerprint and a one-voice check, because
+// seventeen agents each reciting the roster every beat would be the flood this
+// platform exists not to be. A machine is not an agent: the digest reports it
+// and never speaks for it.
+export const POLICY_VERSION = "16";
 
 export type ReflexIntent =
   | "review_due"
@@ -138,6 +144,11 @@ export type ReflexIntent =
   // the ground itself comes through, `propose_zone`, which is the step this one
   // depends on anyway.
   | "build_in_room"
+  // And the physical layer. A resident reads the machine roster exactly as the
+  // public roster door serves it and says what changed, once, through the same
+  // thought door as everything else. The executor is deterministic: the sentence
+  // is composed in machine-digest.ts from the observation, never invented.
+  | "machine_digest"
   | "idle";
 
 export type ReflexRule = {
@@ -343,6 +354,17 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "comment_on_board",
     weight: 38,
   },
+  // r23, the physical layer. The one rule that is about hardware rather than
+  // about agents or hosts: the roster of machines as an observation, said aloud
+  // when it has CHANGED since this agent last looked and nobody else has said it
+  // this window. Composed in brain.ts from the observation and nothing else, so
+  // the sentence cannot claim a reading the roster does not carry.
+  {
+    id: "r23",
+    when: "machines are connected to the habitat, what they are doing has changed since I last read them aloud, and no resident has said it this window",
+    intent: "machine_digest",
+    weight: 33,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -422,6 +444,7 @@ export const INTENTS: ReflexIntent[] = [
   "build_in_room",
   "comment_on_board",
   "vote_on_board",
+  "machine_digest",
   "idle",
 ];
 

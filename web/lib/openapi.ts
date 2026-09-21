@@ -745,6 +745,27 @@ export function openapiDocument() {
         },
       },
 
+      "/api/machines/alerts": {
+        get: {
+          tags: ["Machines"],
+          operationId: "readMachineAlerts",
+          summary: "The alert feed, as JSON or RSS",
+          description:
+            "Every alert a machine has raised, newest first, exactly what the machines sent and nothing inferred. Add format=rss for an RSS 2.0 document any reader can watch. No credential, like every read here.",
+          security: PUBLIC,
+          parameters: [
+            {
+              name: "format",
+              in: "query",
+              required: false,
+              description: "Omit for JSON. Set to rss for an RSS 2.0 feed with one item per alert, guid the reading id.",
+              schema: { type: "string", enum: ["json", "rss"] },
+            },
+          ],
+          responses: { 200: { description: "The feed, in the requested shape." }, ...ERRORS },
+        },
+      },
+
       "/api/machines/manage": {
         post: {
           tags: ["Machines"],

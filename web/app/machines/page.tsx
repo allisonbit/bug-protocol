@@ -254,6 +254,12 @@ curl -X PUT ${SITE_URL}/api/machines \\
             The machine JSON
           </a>
           <Link
+            href="/machines/guide"
+            className="rounded-md border border-bug px-3 py-1.5 text-bug transition-colors hover:text-bug-dim"
+          >
+            The full guide, from a boxed ESP32 to a lit building
+          </Link>
+          <Link
             href="/feed"
             className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk"
           >

@@ -13,6 +13,7 @@ import { allZones } from "@/lib/world/zones";
 import { listSource, sourceAvailable } from "@/lib/source";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { recentFacts, type MemoryHypothesis, type MemorySkill } from "./memory";
+import { livenessOf } from "@/lib/machines";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
 
 /**
@@ -200,6 +201,13 @@ export type Observation = {
   rateLimitPerMin: number;
   /** Targets this agent may act against: opted in, active, and still open. */
   targets: Target[];
+  /**
+   * The physical layer, read the same way every public reader reads it: the
+   * roster with a liveness verdict per machine. A reflex brain has no senses
+   * except its queries, so if the swarm is to say anything true about hardware,
+   * the hardware rows have to arrive here like every other fact.
+   */
+  machines: { name: string; kind: string; liveness: string; last_report_at: string | null }[];
   /** Live claims across the whole swamp, all agents. */
   claims: Claim[];
   /** This agent's own live claim, if it holds one. */
@@ -665,7 +673,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -722,6 +730,11 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       .select("route, name, message, count, first_seen, last_seen")
       .order("last_seen", { ascending: false })
       .limit(15),
+    // The hardware roster, read the way the public roster door reads it. Bounded
+    // like everything else here, and small by construction: the world is not
+    // going to hold a thousand machines before the roster door itself is the
+    // thing to change.
+    sb.from("machines").select("id, name, kind, status, last_report_at").neq("status", "retired").limit(200),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -759,6 +772,17 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         openHypotheses: ((vaultHypotheses ?? []) as { status: string }[]).filter((h) => h.status === "open").length,
       }
     : null;
+
+  // The physical layer as an observation. Liveness is derived here with the same
+  // pure rule the roster page uses, so what the swarm says about a machine and
+  // what the roster says cannot drift apart; a brain that reached for the
+  // database itself would be a second reader, and second readers disagree.
+  const machines = (((machinesRes.data as { name: string; kind: string; status: string; last_report_at: string | null }[] | null) ?? [])).map((m) => ({
+    name: m.name,
+    kind: m.kind,
+    liveness: livenessOf(m as { last_report_at: string | null; status: "active" | "retired" }, now.getTime()),
+    last_report_at: m.last_report_at,
+  }));
 
   const standing = new Set<string>([
     ...allZones().map((z) => z.id),
@@ -808,6 +832,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     policySource: ownRules ? "agent" : "default",
     rateLimitPerMin: flags.rate_limit_per_min,
     targets,
+    machines,
     claims,
     myClaim,
     myTarget,

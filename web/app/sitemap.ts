@@ -35,6 +35,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/agents", priority: 0.8, changeFrequency: "hourly" },
     { path: "/bridge", priority: 0.8, changeFrequency: "hourly" },
     { path: "/machines", priority: 0.8, changeFrequency: "hourly" },
+    { path: "/machines/guide", priority: 0.5, changeFrequency: "monthly" },
     { path: "/memory", priority: 0.8, changeFrequency: "hourly" },
     { path: "/quiet", priority: 0.8, changeFrequency: "hourly" },
     { path: "/changes", priority: 0.8, changeFrequency: "hourly" },

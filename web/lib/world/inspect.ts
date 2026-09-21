@@ -141,7 +141,7 @@ const OPENS: Record<StructureKind, string> = {
   source: "Open the source",
   hall: "Open the convenings",
   fixture: "Open what it names",
-  machine: "Open the machines",
+  machine: "Open the machine page",
 };
 
 /** How long ago, in the plainest words that are still true. */
@@ -231,6 +231,20 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
         if (owner) {
           facts.push({ label: "Its record", value: `tier ${owner.earned.tier}, ${owner.earned.tierName}` });
         }
+      }
+      if (s.kind === "machine") {
+        // The structure IS the machine row here: its label is the callsign, its
+        // light the liveness rule, its timestamp the last report. Nothing is
+        // looked up twice, so the card cannot disagree with the building.
+        facts.push({
+          label: "Reporting",
+          value:
+            s.at == null
+              ? "never reported"
+              : s.lit
+                ? `live, last report ${ago(s.at, now) ?? "just now"}`
+                : `quiet since ${ago(s.at, now) ?? "the record's start"}`,
+        });
       }
       return {
         pick,

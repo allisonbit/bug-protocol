@@ -1,4 +1,5 @@
 import { STRUCTURE_KINDS } from "./types";
+import { MACHINE_PAGE_BASE } from "@/lib/machines";
 import type { BodyState, CityState, P3, StructureKind, StructureState } from "./types";
 import type { Agent, Cabal, CabalMember, Claim, Finding, Output, Source, Target } from "@/lib/agents/types";
 import type { ZoneDef } from "./zones";
@@ -489,7 +490,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       floors: 1 + Math.min(2, Math.max(0, m.pending_commands)),
       lit: live,
       cites: `machines:${m.id}`,
-      href: "/machines",
+      href: `${MACHINE_PAGE_BASE}/${encodeURIComponent(m.name)}`,
       label: m.name,
       at: m.last_report_at,
     });

@@ -174,6 +174,20 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       return `said: ${plan.text.slice(0, 90)}`;
     }
 
+    case "machine_digest": {
+      // The physical layer, said through the same thought door every other
+      // utterance uses, with the same runtime provenance and the same rate
+      // limit. Nothing about this is a private path: the digest is a thought
+      // that happens to be about hardware, and it lives on the bus like one.
+      await enforceRateLimit(sb, agent.id);
+      await agentPublishThought(sb, agent, { text: plan.text, topic: "agent.thought" }, "runtime");
+      // The fingerprint of what was said, stored under the agent's own memory.
+      // The next brain compares against this row, which is what makes the
+      // digest fire on CHANGE rather than on every wake.
+      await remember(sb, agent.id, "note", "machine_digest:last", { fingerprint: plan.fingerprint, at: obs.now }, 2);
+      return `digest: ${plan.text.slice(0, 80)}`;
+    }
+
     case "claim": {
       const res = await agentClaim(sb, agent, plan.targetSlug, plan.subtask, "runtime");
       await remember(

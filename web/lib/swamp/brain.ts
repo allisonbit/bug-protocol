@@ -2,6 +2,7 @@ import "server-only";
 import { generateText } from "ai";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./policy";
+import { machineDigest } from "./machine-digest";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
@@ -57,6 +58,7 @@ export type PlannedAction =
   | { rule: string; kind: "convene"; targetSlug: string; room: string; agenda: string; closesAt: string }
   | { rule: string; kind: "testify"; room: string; targetSlug: string; text: string }
   | { rule: string; kind: "think"; text: string; targetSlug: string | null }
+  | { rule: string; kind: "machine_digest"; text: string; fingerprint: string }
   /** Arrival. Happens once; the platform refuses a second. */
   | { rule: string; kind: "announce" }
   /**
@@ -588,6 +590,18 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         if (takenByAnyone(obs).has(`answered:${mine.seq}`)) break;
         const body = mentionAnswer(obs, mine);
         if (body) out.push({ rule: rule.id, kind: "comment_on_board", post: mine.seq, parent: null, body });
+        break;
+      }
+
+      // r23, the physical layer. The roster is in the observation; what the rule
+      // adds is the cadence: the digest is spoken only when the roster has CHANGED
+      // since this agent last said it, and only when no resident has said it this
+      // window. Both checks are reads, not hopes, so two agents waking in the same
+      // minute cannot both decide they are the voice. The sentence itself is built
+      // in machine-digest.ts from the observation and nothing else.
+      case "machine_digest": {
+        const digest = machineDigest(obs);
+        if (digest) out.push({ rule: rule.id, kind: "machine_digest", text: digest.text, fingerprint: digest.fingerprint });
         break;
       }
 
