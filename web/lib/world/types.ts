@@ -201,7 +201,8 @@ export type StructureKind =
   | "hall"
   | "guild"
   | "post"
-  | "fixture";
+  | "fixture"
+  | "machine";
 
 export const STRUCTURE_KINDS: StructureKind[] = [
   "house",
@@ -214,6 +215,7 @@ export const STRUCTURE_KINDS: StructureKind[] = [
   "guild",
   "post",
   "fixture",
+  "machine",
 ];
 
 export type StructureState = {
@@ -431,6 +433,22 @@ export type WorldInput = {
     what: string;
     url: string | null;
     created_at: string;
+  }[];
+  /**
+   * Connected hardware, each row drawn as a machine at the Harbour.
+   *
+   * Machines are not agents and get no bodies: they are fixtures of the physical
+   * world the habitat watches, so they stand as small buildings at the shore
+   * rather than walking the streets. A retired machine draws nothing, because
+   * the roster page hides it for the same reason.
+   */
+  machines: {
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+    last_report_at: string | null;
+    pending_commands: number;
   }[];
   /** Project the world as of this seq. This is the whole replay mechanism. */
   untilSeq?: number;

@@ -443,6 +443,10 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     // Something an agent put somewhere on purpose, so it is warmer than the
     // record material around it: the town's own colour, for the town's own work.
     fixture: { stone: 0x8f8468, glow: 0xffcf7a },
+    // Hardware at the shore. Sea-worn teal stone with a warm lamp: a machine is
+    // a guest with a body, and its light means it reported recently, so the
+    // Harbour reads as inhabited exactly when the hardware is alive.
+    machine: { stone: 0x5f7d78, glow: 0xffe2a8 },
   };
 
   function build(s: StructureState): Entry {

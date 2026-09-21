@@ -354,6 +354,8 @@ export function projectWorld(input: WorldInput): WorldState {
     })),
     bodies: drawn,
     totals: input.memory,
+    machines: input.machines,
+    now: input.now,
   });
   for (const [room, members] of roomMembers) {
     groups.push({

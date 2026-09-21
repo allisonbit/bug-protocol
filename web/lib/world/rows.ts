@@ -76,6 +76,7 @@ function absentFor(fallback: string): WorldInput {
     builtZones: [],
     rooms: [],
     fixtures: [],
+    machines: [],
     now: Date.now(),
   };
 }
@@ -118,7 +119,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
@@ -148,6 +149,16 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
         .from("room_fixtures")
         .select("id, zone, agent_id, handle, name, what, url, created_at")
         .order("created_at", { ascending: true })
+        .limit(2000),
+      // Connected hardware. `machines` and `machine_commands` arrive with
+      // `migrate-machines.sql`, and the same tolerance applies: before it is
+      // applied the world has no machines standing at the Harbour, which is
+      // exactly true rather than broken.
+      sb.from("machines").select("id, name, kind, status, last_report_at").limit(1000),
+      sb
+        .from("machine_commands")
+        .select("machine_id")
+        .in("status", ["pending", "delivered"])
         .limit(2000),
     ]);
 
@@ -218,6 +229,12 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
     ),
     endorsements: optional("world.endorsements", endorsementsRes as Maybe<{ agent_id: string }>),
     fixtures: optional("world.fixtures", fixturesRes as Maybe<WorldInput["fixtures"][number]>),
+    machines: optional("world.machines", machinesRes as Maybe<WorldInput["machines"][number]>).map((m) => ({
+      ...m,
+      pending_commands: (optional("world.machine_commands", machineCommandsRes as Maybe<{ machine_id: string }>)).filter(
+        (c) => c.machine_id === m.id,
+      ).length,
+    })),
     // The convenings are not queried: a room exists only as events, so the fold in
     // `projectWorld` fills this in from the window it already read.
     rooms: [],

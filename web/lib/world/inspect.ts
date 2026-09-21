@@ -118,6 +118,10 @@ function litFact(kind: StructureKind, lit: boolean): InspectFact {
       return lit
         ? { label: "Two storeys", value: "it names a url, so there is something of the author's to go and open" }
         : { label: "One storey", value: "it is a description: a real thing, with no address outside this page" };
+    case "machine":
+      return lit
+        ? { label: "Reporting", value: "the machine reported within the last quarter hour, so its windows are lit" }
+        : { label: "Quiet", value: "no report in the last quarter hour. The machine keeps its building; hardware on a slow loop is honest, not broken" };
     default:
       return lit
         ? { label: "Claims", value: "there are live claims on this target" }
@@ -137,6 +141,7 @@ const OPENS: Record<StructureKind, string> = {
   source: "Open the source",
   hall: "Open the convenings",
   fixture: "Open what it names",
+  machine: "Open the machines",
 };
 
 /** How long ago, in the plainest words that are still true. */

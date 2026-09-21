@@ -155,6 +155,12 @@ export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: str
   },
   { kind: "guild", what: "A guild house", source: "cabals", grows: "as tall as the team is large" },
   { kind: "post", what: "A post on the Board", source: "targets, claims", grows: "a storey per live claim on that target" },
+  {
+    kind: "machine",
+    what: "A machine at the Harbour",
+    source: "machines",
+    grows: "lit while it has reported in the last quarter hour, and a storey taller when it carries a pending command",
+  },
 ];
 
 /** The shape of each kind of building. Geometry, not meaning. */
@@ -164,6 +170,7 @@ const SPEC: Record<StructureKind, { zone: string; footprint: number; base: numbe
   // because a building that disappears when its district is withdrawn would be a
   // row with no building, which is the one thing this module refuses to draw.
   fixture: { zone: "docks", footprint: 0.34, base: 0.3, storey: 0.5 },
+  machine: { zone: "harbour", footprint: 0.26, base: 0.22, storey: 0.3 },
   house: { zone: "docks", footprint: 0.34, base: 0.35, storey: 0.42 },
   vault: { zone: "vaults", footprint: 0.42, base: 0.3, storey: 0.55 },
   lab: { zone: "vaults", footprint: 0.5, base: 0.32, storey: 0.62 },
@@ -216,6 +223,17 @@ export type CityInput = {
   }[];
   /** Convenings the event fold found. A room exists only as events. */
   rooms: { name: string; open: boolean; at: string | null; members: number }[];
+  /** Real hardware reporting over HTTPS, each standing at the Harbour. */
+  machines: {
+    id: string;
+    name: string;
+    kind: string;
+    status: string;
+    last_report_at: string | null;
+    pending_commands: number;
+  }[];
+  /** The projection's clock. Liveness is judged against this, not the wall clock, so a replay is still deterministic. */
+  now: number;
   /** The projected bodies, because a house's height is the tier of the agent in it. */
   bodies: BodyState[];
   /** How many rows of each kind really exist, so the cap can be stated honestly. */
@@ -453,6 +471,27 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       href: `/swamp/${encodeURIComponent(room.name)}`,
       label: room.name,
       at: room.at,
+    });
+  }
+
+  // MACHINES: real hardware, standing at the Harbour, because that is where
+  // things arriving from outside the swarm have always been drawn. One building
+  // per machine row, small, lit exactly when the liveness rule on the machines
+  // page says live (a report within the last quarter hour). A machine waiting
+  // for its owner's command stands one storey taller, because it has something
+  // on its mind. There is no growth rule beyond that and none is invented: a
+  // machine is not an agent, and its record does not deepen the way a resident's
+  // does.
+  for (const m of input.machines) {
+    if (m.status === "retired") continue;
+    const live = m.last_report_at != null && input.now - Date.parse(m.last_report_at) <= 15 * 60 * 1000;
+    add("machine", m.id, {
+      floors: 1 + Math.min(2, Math.max(0, m.pending_commands)),
+      lit: live,
+      cites: `machines:${m.id}`,
+      href: "/machines",
+      label: m.name,
+      at: m.last_report_at,
     });
   }
 
