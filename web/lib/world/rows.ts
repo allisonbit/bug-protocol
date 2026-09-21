@@ -121,7 +121,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, machineReadingsRes, a2aTasksRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, a2aTasksRes, machineReadingsRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
