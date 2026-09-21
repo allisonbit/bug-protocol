@@ -769,12 +769,16 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
     .select("key, value")
-    // `digest:%` is the hardware digest's one-voice note: whichever resident speaks
-    // writes it, and everyone else reads it before deciding whether hardware is
-    // worth a sentence. Without the key in this list the check silently reads
-    // nothing, which is exactly how fifteen residents came to publish the same
-    // digest on every beat.
-    .or("key.like.board:%,key.like.asked:%,key.like.digest:%")
+    // EVERY SHARED KEY A RULE READS HAS TO BE IN THIS LIST, and the list is the
+    // reason this is one string rather than several calls. `digest:%` is the
+    // hardware digest's one-voice note; `supervise:%` is the command cooldown, and
+    // both were added after the rule that needed them already existed. The digest
+    // case published fifteen identical sentences a beat because its key was
+    // missing here, and the supervision case sent two commands to one machine for
+    // the same reason: a guard that reads nothing does not fail, it lets
+    // everything through. Any new shared note belongs here on the same commit as
+    // the rule that writes it.
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%")
     .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it

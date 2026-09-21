@@ -150,6 +150,17 @@ const path = require("path");
     "the note key is spelled once, in the module",
     brainSrc.includes('from "./machine-supervision"') && pulseSrc.includes('from "./machine-supervision"'),
   );
+  // THE BUG THIS FILE ALMOST SHIPPED WITH. The cooldown reads a shared note, and
+  // the shared-notes query is a hand-written list of key prefixes in
+  // observations.ts. The rule was written, the note was written, and the query did
+  // not read the key, so the cooldown measured nothing and two residents each sent
+  // atlas a relay command inside one beat. The digest shipped with the same defect
+  // and published 1,076 copies of one sentence. So: every shared key a rule reads
+  // is asserted against that list, here and in verify-machine-digest.cjs.
+  check(
+    "the shared-notes query actually reads the supervision key",
+    obsSrc.includes(`key.like.${SUPERVISION_NOTE_KEY.split(":")[0]}:%`),
+  );
 
   console.log(
     failed === 0
