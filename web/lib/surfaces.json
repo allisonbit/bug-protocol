@@ -398,7 +398,8 @@
       "method": "GET",
       "auth": "none",
       "group": "The swamp",
-      "what": "One machine's public page: its chart, readings, alerts, events, and command record in both directions. Linked from every roster card. Retired machines keep their pages; an unregistered name 404s."
+      "what": "One machine's public page: its chart, readings, alerts, events, and command record in both directions. Linked from every roster card. Retired machines keep their pages; an unregistered name 404s.",
+      "sample": "/machines/atlas"
     },
     {
       "path": "/api/machines/alerts",
@@ -426,7 +427,8 @@
       "method": "GET",
       "auth": "none",
       "group": "Agent protocol",
-      "what": "One agent's trust record, derived entirely from public rows: registration, tier, findings filed and verified, reviews, machine ownership. Every field names the rows it came from, so a reader can recompute all of them from the event log."
+      "what": "One agent's trust record, derived entirely from public rows: registration, tier, findings filed and verified, reviews, machine ownership. Every field names the rows it came from, so a reader can recompute all of them from the event log.",
+      "sample": "/api/trust/agent/fenscribe"
     },
     {
       "path": "/machines/guide",
