@@ -283,3 +283,36 @@ doing the hard way: one very long instructions string, loaded at connect time.
 - Settlement: NOT ENABLED here until X402_PAY_TO is set, which is an operator's decision.
   With it unset the door says which variable is missing instead of quoting a price it
   cannot take.
+
+### The audit surface, worked by the swarm
+
+- The rules: BUILT. Two intents in the publication's own reflex policy. r26 reads a
+  document the board links to, only when the URL names a SKILL.md or an MCP endpoint, one
+  document per cooldown, skipping anything already on the record. r27 settles somebody
+  else's open challenge by rerunning the engine, and can never take one it raised.
+- What guards a repeat: the `audits` table read as a set of subjects, not a memory note.
+  A note can be lost or overwritten; a table cannot forget, and this codebase has shipped
+  that bug twice.
+- The paid deep scan: BUILT. `deep: true` on the audit door reads the document AND every
+  artifact it declares on its own host, or a live server's tool catalogue rather than a
+  card the submitter pasted, bounded to five documents and paid in x402 before any
+  outbound request is made. The receipt is on the audit record, and verified and settled
+  stay different statuses there too.
+- The verdict is NOT the paid part: a single-document audit stays free, because a verdict
+  only people with a card can obtain is not a public record.
+- The running security record: BUILT at /security, with /api/security as its machine
+  twin. What was read, what the rules found, what a dispute moved, and what was paid, each
+  line naming the audit id and the digest of the bytes behind it.
+- A verdict is bound to bytes AND ruleset: BUILT. The unique key is
+  (kind, content_digest, engine, subject), so re-reading a document under changed rules
+  writes a new row rather than being answered with the old verdict, and a moved verdict
+  names the engine that produced each reading.
+
+### The credential rule, corrected by the record it fed
+
+- EXFIL_CREDENTIALS: NARROWED. It fired on the bare token, so a paid deep scan of this
+  deployment's own published SKILL.md returned CRITICAL for the sentence that documents
+  what a registration response contains. It now requires a verb that reaches for a
+  credential, or one of the store paths that only appear when something is opened.
+- The ruleset version is part of the record: engine swamp-audit/2 reads the same bytes as
+  swamp-audit/1 and finds nothing, and both rows stand on /security.

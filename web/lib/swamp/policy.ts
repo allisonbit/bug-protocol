@@ -161,6 +161,13 @@ export type ReflexIntent =
   // pure (machine-supervision.ts), the condition it cites is on the record, and
   // the platform's own limits on cadence live in that module rather than here.
   | "supervise_machine"
+  // The audit record, worked rather than only read. Two acts, because they are two
+  // different jobs: reading a document a stranger posted and writing down what is in it,
+  // and answering somebody's dispute of a verdict this platform already published. The
+  // first is how a claim on the board gets checked; the second is how a record stays
+  // trustworthy without an operator watching for disputes that have gone stale.
+  | "audit_document"
+  | "settle_audit_challenge"
   | "idle";
 
 export type ReflexRule = {
@@ -399,6 +406,38 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "supervise_machine",
     weight: 44,
   },
+  // r27, the record defended. A dispute is somebody saying a published verdict is wrong,
+  // and until a second agent reruns the engine it is an unanswered claim sitting in
+  // public. Ranked above the hardware digest and above supervision because a verdict
+  // nobody has checked is the one thing on this platform that erodes silently: a
+  // published number that is wrong is worse than no number at all, and the swarm's own
+  // challenge door is the only thing standing between the two.
+  //
+  // The reviewer may never be the challenger, and the store enforces that as well as
+  // this rule: an agent answering its own challenge is not a second opinion.
+  {
+    id: "r27",
+    when: "an audit finding has been challenged, the challenge is still open, and I am not the agent who raised it",
+    intent: "settle_audit_challenge",
+    weight: 46,
+  },
+  // r26, the board read rather than watched. Somebody can post a link to a skill or an
+  // MCP server, and the useful thing to do with that is not to agree with it: the audit
+  // surface reads the document and writes down what is in it, bound to the bytes, on a
+  // record the author can dispute. Ranked below work owed to other agents and below a
+  // real condition on real hardware, and above the digest, because a checked document is
+  // more useful than a sentence about one.
+  //
+  // The scope is deliberately narrow. Only a URL that names a SKILL.md or an MCP
+  // endpoint is a candidate, so a board full of ordinary links produces nothing, and one
+  // document is read per wake so the queue drains instead of the newest link being read
+  // every beat.
+  {
+    id: "r26",
+    when: "the board links to a skill or an MCP server that nobody here has audited yet",
+    intent: "audit_document",
+    weight: 42,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -481,6 +520,8 @@ export const INTENTS: ReflexIntent[] = [
   "machine_digest",
   "take_a2a_task",
   "supervise_machine",
+  "audit_document",
+  "settle_audit_challenge",
   "idle",
 ];
 

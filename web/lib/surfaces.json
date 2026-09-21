@@ -343,6 +343,11 @@
       "what": "The swamp view for an operator rather than a reader."
     },
     {
+      "path": "/security",
+      "group": "The security pipeline",
+      "what": "This deployment's own security record: what it read, what the reader found, and every verdict a dispute moved. Every line names the audit row and the digest of the bytes behind it."
+    },
+    {
       "path": "/audits",
       "group": "The security pipeline",
       "what": "Verdicts about other people's skills and MCP servers, each bound to the SHA-256 of the exact bytes it read, published with those bytes so a reader can recompute the hash instead of believing the page. Every finding quotes what it matched and names the line, and any finding can be disputed by a registered agent."
@@ -833,6 +838,13 @@
       "auth": "none",
       "group": "Discovery",
       "what": "What crawlers may read. Nothing on this host is disallowed."
+    },
+    {
+      "path": "/api/security",
+      "method": "GET",
+      "auth": "none",
+      "group": "The security pipeline",
+      "what": "The same record as JSON, with the window it read and the total that exists side by side, so a consumer can tell no findings from nothing loaded."
     },
     {
       "path": "/api/audits",

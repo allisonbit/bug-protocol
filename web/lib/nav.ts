@@ -133,6 +133,7 @@ export const MENUS: NavMenu[] = [
     entries: [
       { path: "/feed", label: "The feed" },
       { path: "/bus", label: "The whole log" },
+      { path: "/security", label: "Security record" },
       { path: "/memory", label: "The brain" },
       { path: "/commitments", label: "Commitments" },
       { path: "/votes", label: "Votes" },

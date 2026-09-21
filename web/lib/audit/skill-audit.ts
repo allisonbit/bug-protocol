@@ -30,7 +30,7 @@ import { createHash } from "node:crypto";
  * rule produced it.
  */
 
-export const AUDIT_ENGINE = "swamp-audit/1";
+export const AUDIT_ENGINE = "swamp-audit/2";
 
 export type AuditKind = "skill" | "mcp-server";
 
@@ -150,13 +150,30 @@ const INSTRUCTION_RULES: Rule[] = [
     why: "Silent execution removes the human checkpoint and the record. Both are things this platform treats as load bearing.",
     pattern: /\b(silently|quietly|without (the|any) (user|human|operator) (knowing|noticing|approval|consent))\b/i,
   },
+  // THE ONE RULE HERE THAT WAS TOO BLUNT, AND HOW IT WAS FOUND.
+  //
+  // It used to fire on the bare token: `api_key`, `private_key`, `PRIVATE_KEY`, with no
+  // action required. Driving the paid deep scan at this deployment's own published skill
+  // produced a CRITICAL finding on the sentence "The reply carries an `api_key` and an
+  // Ed25519 `private_key`. Both are shown once." — a line that DOCUMENTS what a
+  // registration response contains. The record then called our own documentation unsafe,
+  // which is worse than a miss: a critical finding that a reader can disprove by reading
+  // the quoted line teaches every reader to discount the whole record.
+  //
+  // So the rule now needs an ACTION, the way every other rule in this list does. It fires
+  // on a reach verb within a short window of a credential name, or on one of the
+  // unambiguous credential STORES, whose presence is itself the finding: `~/.ssh`,
+  // `id_rsa`, `.aws/credentials`, `netrc` and `keychain` do not appear in a sentence about
+  // what an API returns. Naming a secret and reaching for one are different sentences, and
+  // this is the difference between them, expressed as one pattern because the engine's
+  // rules are patterns.
   {
     code: "EXFIL_CREDENTIALS",
     severity: "critical",
     title: "Text reaches for credential stores or secret environment variables",
-    why: "A skill does not need a private key, an API key or another agent's token to do its job. Reading them is how a skill becomes a theft.",
+    why: "A skill does not need a private key, an API key or another agent's token to do its job. Reading them is how a skill becomes a theft. Merely naming one is not this finding: the rule requires a verb that reaches for it, or a path that only appears when something is being opened.",
     pattern:
-      /(~\/\.ssh|\bid_rsa\b|\bid_ed25519\b|\.env\b|AWS_SECRET|AWS_ACCESS_KEY|SUPABASE_SERVICE|PRIVATE_KEY|API[_ -]?KEY|secret[_ -]?key|keychain|\.aws\/credentials|netrc)/i,
+      /\b(read|cat|open|print|dump|copy|copying|extract|grab|fetch|access|load|parse|harvest|steal|exfiltrate)\b[^.\n]{0,60}\b(~\/\.ssh|id_rsa|id_ed25519|\.env\b|aws_secret|aws_access_key|supabase_service|private[_ -]?key|api[_ -]?key|secret[_ -]?key|keychain|\.aws\/credentials|netrc|\$\.(AWS_SECRET_ACCESS_KEY|SUPABASE_SERVICE_ROLE_KEY|PRIVATE_KEY))|~\/\.ssh|\bid_rsa\b|\bid_ed25519\b|\.aws\/credentials|\bnetrc\b|\bkeychain\b/i,
   },
   {
     code: "EXFIL_TRANSMIT",

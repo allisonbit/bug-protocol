@@ -26,6 +26,16 @@ import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
 import { DIGEST_NOTE_KEY } from "./machine-digest";
 import { SUPERVISION_NOTE_KEY } from "./machine-supervision";
+// The audit rules, worked rather than read: the guarded fetch, the store that binds a
+// verdict to the bytes it read, and the two shared notes that hold the swarm to one
+// document and one challenge per window.
+import {
+  AUDIT_NOTE_KEY,
+  CHALLENGE_NOTE_KEY,
+  auditNoteValue,
+  challengeNoteValue,
+} from "@/lib/audit/candidates";
+import { claimChallenge, recordAudit, resolveChallenge, runAudit } from "@/lib/audit/store";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
 import { declareSkill, proposeHypothesis } from "./memory";
 import { policyFor } from "./policy";
@@ -263,6 +273,58 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // the speaker silences the rest for the rest of it.
       await remember(sb, agent.id, "note", DIGEST_NOTE_KEY, { fingerprint: plan.fingerprint, at: obs.now }, 2);
       return `digest: ${plan.text.slice(0, 80)}`;
+    }
+
+    // r26, the board read. The document is fetched under the audit door's own guard and
+    // the verdict is recorded against the resident that read it, which is what puts a
+    // resident's name on a verdict rather than the platform's. Two things are written
+    // besides the audit row: the shared note that holds the swarm to one document per
+    // window, and the `audit.recorded` event, which the store emits itself so the bus row
+    // and the record cannot disagree about what was found.
+    //
+    // A refusal is not an error here. The guard refuses exactly what it should: a private
+    // address, plain http, our own host. The note is still written, so the same URL is
+    // not re-attempted by every resident on every beat, and the reason is stored in the
+    // agent's own memory where its page can answer "why did you not read that?".
+    case "audit_document": {
+      const run = await runAudit({ kind: plan.subject, url: plan.url, content: null });
+      await remember(sb, agent.id, "note", AUDIT_NOTE_KEY, auditNoteValue({ url: plan.url, subject: plan.subject }, obs.now), 2);
+      if (!run.ok) {
+        await remember(sb, agent.id, "note", `audit_failed:${plan.seq}`, { url: plan.url, code: run.code, reason: run.reason, at: obs.now }, 1);
+        return `did not read ${plan.url}: ${run.code}`;
+      }
+      const recorded = await recordAudit(sb, {
+        result: run.result,
+        subject: run.result.subject,
+        source: run.source,
+        content: run.text,
+        submittedBy: agent.handle,
+        agent: { id: agent.id, handle: agent.handle },
+      });
+      if (!recorded.ok) throw new ActionError(500, recorded.reason);
+      await remember(sb, agent.id, "semantic", `audited:${recorded.audit.id}`, { url: plan.url, verdict: recorded.audit.verdict, why: plan.why, at: obs.now }, 3);
+      return `${recorded.deduped ? "re-read" : "audited"} ${plan.url} (${recorded.audit.verdict})`;
+    }
+
+    // r27, the record defended. Claiming and settling are separate writes because they
+    // are separate guarantees: the claim is an update guarded on the open status, so two
+    // residents waking in one beat cannot both hold the challenge, and the settlement
+    // reruns the engine over the bytes the audit recorded. Neither step decides anything
+    // by opinion, which is what makes this a job a reflex brain can do honestly.
+    //
+    // A claim that loses the race returns null rather than an error: another resident
+    // got there first, which is the system working.
+    case "settle_audit_challenge": {
+      const claimed = await claimChallenge(sb, { challengeId: plan.challengeId, reviewer: agent.handle });
+      if (!claimed.ok) return null;
+      await remember(sb, agent.id, "note", CHALLENGE_NOTE_KEY, challengeNoteValue({ challengeId: plan.challengeId, auditId: plan.auditId }, obs.now), 2);
+      const settled = await resolveChallenge(sb, {
+        challengeId: plan.challengeId,
+        reviewer: agent.handle,
+        agent: { id: agent.id, handle: agent.handle },
+      });
+      if (!settled.ok) throw new ActionError(500, settled.reason);
+      return `settled a challenge to ${plan.findingCode} on audit ${plan.auditId.slice(0, 8)}: ${settled.outcome}`;
     }
 
     case "supervise_machine": {

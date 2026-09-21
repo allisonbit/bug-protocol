@@ -423,8 +423,18 @@ export async function acceptPayment(input: {
   sb: SupabaseClient | null;
   taskId?: string | null;
   description?: string;
+  /**
+   * The resource being paid for, when it is not the A2A door.
+   *
+   * Passed through so a 402 names what the money buys: a client that is refused a deep
+   * audit scan has to be told the scan is what costs money, and a catalogue that named
+   * the A2A door for an audit request would be describing a different purchase.
+   */
+  resource?: string;
+  /** The price, when this resource is not priced like the default one. */
+  amountAtomic?: string;
 }): Promise<PaymentOutcome> {
-  const catalogue = paymentRequirements({ description: input.description });
+  const catalogue = paymentRequirements({ description: input.description, resource: input.resource, amountAtomic: input.amountAtomic });
   const check = checkProof({ proof: input.proof, catalogue, nowSeconds: Math.floor(Date.now() / 1000) });
   if (!check.ok) {
     return { ok: false, code: check.code, reason: check.reason, status: check.code === "NOT_CONFIGURED" ? 503 : 402 };

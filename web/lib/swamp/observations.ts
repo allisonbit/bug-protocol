@@ -235,6 +235,26 @@ export type Observation = {
    * rules whether to take one, exactly like a target.
    */
   openTasks: { id: string; caller: string; text: string; created_at: string }[];
+  /**
+   * Disputed audit findings nobody has taken, oldest first.
+   *
+   * A challenge is a claim somebody made about a verdict this platform published, and
+   * it waits for a second agent to settle it by rerunning the engine. Reading them here
+   * is what lets a resident do that without an operator noticing one had gone stale: the
+   * absence of a reviewer is otherwise invisible, because an open challenge looks
+   * exactly like a settled one from every public page until it is resolved.
+   */
+  openChallenges: { id: string; audit_id: string; challenger: string; finding_code: string; claim: string; created_at: string }[];
+  /**
+   * Every document this deployment has already audited, by its subject.
+   *
+   * The guard against auditing the same thing forever, and it is a READ of the record
+   * rather than a memory note on purpose: a note can be lost, overwritten or never
+   * learned, and this codebase has now shipped that bug twice (a digest key that was
+   * never read published 1,076 copies of one sentence; a cooldown read from a key nobody
+   * wrote let two residents command one machine). A table cannot forget.
+   */
+  auditedSubjects: string[];
   /** Live claims across the whole swamp, all agents. */
   claims: Claim[];
   /** This agent's own live claim, if it holds one. */
@@ -700,7 +720,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes, auditChallengesRes, auditsRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -765,6 +785,21 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // Tasks the world handed in over A2A and nobody has taken. Oldest first, so
     // the first resident able to take one takes the one that has waited longest.
     sb.from("a2a_tasks").select("id, caller, message, created_at").eq("state", "submitted").order("created_at", { ascending: true }).limit(10),
+    // Disputed audit findings waiting for a second agent. Oldest first, because the
+    // one that has waited longest is the one most likely to have been forgotten, and
+    // a challenge nobody takes is a verdict that stays contested in public forever.
+    sb
+      .from("audit_challenges")
+      .select("id, audit_id, challenger, finding_code, claim, created_at")
+      .eq("status", "open")
+      .order("created_at", { ascending: true })
+      .limit(10),
+    // What has already been read. Bounded, and the bound is stated rather than hidden:
+    // past a few hundred subjects the oldest audits fall out of this window, which is
+    // the right failure for a guard like this one, because the cost of a redundant audit
+    // is a repeated fetch and the cost of a shrinking window would be a stale "already
+    // done" that never expires.
+    sb.from("audits").select("subject").not("subject", "is", null).order("created_at", { ascending: false }).limit(300),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -778,7 +813,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // the same reason: a guard that reads nothing does not fail, it lets
     // everything through. Any new shared note belongs here on the same commit as
     // the rule that writes it.
-    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%")
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%")
     .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it
@@ -884,6 +919,24 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     created_at: t.created_at,
   }));
 
+  // The challenges a resident may take, flattened to what a brain can read. The claim
+  // text is included because a reviewer is entitled to know what it is answering, and
+  // the audit id because the rerun happens against that record.
+  const openChallenges = ((auditChallengesRes.data as { id: string; audit_id: string; challenger: string; finding_code: string; claim: string; created_at: string }[] | null) ?? []).map((c) => ({
+    id: c.id,
+    audit_id: c.audit_id,
+    challenger: c.challenger,
+    finding_code: c.finding_code,
+    claim: c.claim.slice(0, 400),
+    created_at: c.created_at,
+  }));
+
+  // The documents already on the record. A null subject means bytes were submitted with
+  // no URL claimed, which is not a subject anything can be compared against.
+  const auditedSubjects = ((auditsRes.data as { subject: string | null }[] | null) ?? [])
+    .map((r) => r.subject)
+    .filter((s): s is string => typeof s === "string" && s.length > 0);
+
   const standing = new Set<string>([
     ...allZones().map((z) => z.id),
     ...(((zonesRes.data as { id: string }[] | null) ?? []).map((z) => z.id)),
@@ -935,6 +988,8 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     machines,
     machineWatch,
     openTasks,
+    openChallenges,
+    auditedSubjects,
     claims,
     myClaim,
     myTarget,

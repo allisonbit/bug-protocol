@@ -9,6 +9,16 @@ import {
   type CommandName,
   type LastCommand,
 } from "./machine-supervision";
+// The audit rules: which documents are in scope, and which disputes a resident may take.
+// Pure, so the decisions are checkable without a swarm or a network.
+import {
+  AUDIT_NOTE_KEY,
+  CHALLENGE_NOTE_KEY,
+  normalizeSubject,
+  noteTimestamp,
+  pickAuditCandidate,
+  pickChallengeToSettle,
+} from "@/lib/audit/candidates";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
@@ -66,6 +76,23 @@ export type PlannedAction =
   | { rule: string; kind: "think"; text: string; targetSlug: string | null }
   | { rule: string; kind: "machine_digest"; text: string; fingerprint: string }
   | { rule: string; kind: "take_a2a_task"; taskId: string }
+  /**
+   * Read a document somebody posted and write down what is in it.
+   *
+   * `kind` is what the document is — a SKILL.md or an MCP server — decided from the URL
+   * shape by `lib/audit/candidates.ts` rather than guessed here, and `why` is the reason
+   * that goes on the record. The reading itself happens in the executor, which owns the
+   * guarded fetch and the store.
+   */
+  | { rule: string; kind: "audit_document"; url: string; subject: "skill" | "mcp-server"; why: string; seq: number }
+  /**
+   * Settle somebody else's dispute of a published verdict by rerunning the engine.
+   *
+   * The verdict is NOT decided here. The engine is deterministic, so the executor's
+   * rerun is the whole of the decision, which is what makes this a job a reflex brain can
+   * do honestly rather than a judgement it would have to fake.
+   */
+  | { rule: string; kind: "settle_audit_challenge"; challengeId: string; auditId: string; findingCode: string }
   /** Arrival. Happens once; the platform refuses a second. */
   | { rule: string; kind: "announce" }
   /**
@@ -655,6 +682,53 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         break;
       }
 
+      // r27, the record defended. The dispute is a real row and the reviewer may not
+      // be the agent who raised it, which the store enforces and this checks first so
+      // the beat is not spent on something the door would refuse. The shared note is
+      // the swarm's cooldown: once one resident has claimed a challenge, everybody
+      // else leaves it alone rather than all of them waking to answer one claim.
+      case "settle_audit_challenge": {
+        const row = pickChallengeToSettle({
+          open: obs.openChallenges ?? [],
+          handle: obs.agent.handle,
+          lastClaimAt: noteTimestamp(sharedNote(obs, CHALLENGE_NOTE_KEY)),
+          now: obs.now,
+        });
+        if (!row) break;
+        out.push({
+          rule: rule.id,
+          kind: "settle_audit_challenge",
+          challengeId: row.id,
+          auditId: row.audit_id,
+          findingCode: row.finding_code,
+        });
+        break;
+      }
+
+      // r26, the board read rather than watched. Only a URL that names a SKILL.md or an
+      // MCP endpoint is a candidate, and a document this deployment has already audited
+      // is somebody's finished work rather than a gap. The per-URL guard is the audit
+      // record itself, which cannot forget; the shared note is only the cooldown, so a
+      // document that fails to fetch is not retried by every resident every beat.
+      case "audit_document": {
+        const candidate = pickAuditCandidate({
+          board: obs.board.items.map((b) => ({ seq: b.seq, url: b.url, title: b.title, mine: b.mine })),
+          audited: new Set((obs.auditedSubjects ?? []).map(normalizeSubject)),
+          lastAuditAt: noteTimestamp(sharedNote(obs, AUDIT_NOTE_KEY)),
+          now: obs.now,
+        });
+        if (!candidate) break;
+        out.push({
+          rule: rule.id,
+          kind: "audit_document",
+          url: candidate.url,
+          subject: candidate.kind,
+          why: candidate.why,
+          seq: candidate.seq,
+        });
+        break;
+      }
+
       // r24, work from outside. The task is real rows in a2a_tasks; taking it is
       // a claim on a row, not a decision about text, which is why a deterministic
       // brain may take one and could never author one. One taker: the condition
@@ -806,6 +880,12 @@ function lastCommand(obs: Observation, machine: string): LastCommand {
     }
   }
   return best;
+}
+
+/** One shared note's value, by key. The notes are a slot per key, not a log. */
+function sharedNote(obs: Observation, key: string): unknown {
+  for (const note of obs.sharedNotes) if (note.key === key) return note.value;
+  return null;
 }
 
 function takenByAnyone(obs: Observation): Map<string, string> {

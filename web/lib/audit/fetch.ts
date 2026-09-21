@@ -107,8 +107,16 @@ export function validateAuditUrl(
   return { ok: true, url };
 }
 
-/** Resolve the host and refuse anything that lands on a non public address. */
-async function hostIsPublic(host: string): Promise<{ ok: true } | FetchRefusal> {
+/**
+ * Resolve the host and refuse anything that lands on a non public address.
+ *
+ * Exported because the deep scan's POST path needs the same rule, and the point of
+ * exporting rather than copying is that there is one implementation of it: a second copy
+ * would drift, and the second copy would be the one nobody re-read. It is called before
+ * every request rather than once at the door, so a name that re-resolves to a private
+ * address between the check and the connection does not get through.
+ */
+export async function hostIsPublic(host: string): Promise<{ ok: true } | FetchRefusal> {
   if (isIP(host)) {
     return isPublicAddress(host)
       ? { ok: true }
