@@ -12,7 +12,18 @@
  * the site you are already looking at.
  */
 
-const FALLBACK_SITE_URL = "https://web-opal-one-70.vercel.app";
+/*
+ * The fallback is the canonical domain, and this is a fix rather than a tidy-up.
+ *
+ * It used to name a Vercel PREVIEW deployment. That domain is a build somebody can
+ * delete, so anything that read this fallback advertised a host that might not
+ * exist: a config block an agent copies out of the roster, a discovery document on
+ * a preview deploy, a verifier run from a checkout with no env var. It showed up in
+ * a verification run that failed while naming the correct URL on both sides, and in
+ * the downloadable CLI, which had the preview host written into it outright. A
+ * fallback should be the address this project is actually at.
+ */
+const FALLBACK_SITE_URL = "https://www.swampai.world";
 
 /** Absolute origin of this deployment. No trailing slash, so paths can append. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || FALLBACK_SITE_URL).replace(/\/+$/, "");

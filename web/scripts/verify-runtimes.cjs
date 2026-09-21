@@ -82,15 +82,32 @@ async function handshake(url) {
 }
 
 (async () => {
+  // The modules below read NEXT_PUBLIC_SITE_URL at import time and fall back to a
+  // baked-in constant. Pointing this run at the target it is actually checking
+  // keeps the roster's own URLs in the same origin as the deployment, so a failure
+  // below is about the deployment rather than about this working copy's env.
+  if (!process.env.NEXT_PUBLIC_SITE_URL) process.env.NEXT_PUBLIC_SITE_URL = base;
   const runtimes = await import("../lib/runtimes.ts");
   const site = await import("../lib/site.ts");
-  const endpoint = site.MCP_ENDPOINT;
+  /**
+   * The endpoint UNDER TEST comes from the base, not from this checkout.
+   *
+   * This read `MCP_ENDPOINT` instead, which is built from NEXT_PUBLIC_SITE_URL and
+   * falls back to a hardcoded domain in lib/site.ts. Pointed at production from a
+   * checkout whose env var was unset, that made three checks fail while naming the
+   * correct URL on both sides: the protected-resource metadata, its path-aware
+   * sibling, and the generated Claude plugin were each compared against a constant
+   * rather than against the deployment they were fetched from. Nothing about the
+   * deployment was wrong, and the check sent a reader to the wrong file, which is
+   * worse than a check that fails for a reason it can name.
+   */
+  const endpoint = new URL("/api/mcp", base).href;
 
   console.log(`\nverifying the runtime roster against ${base}`);
   console.log(`the roster names ${runtimes.RUNTIMES.length} runtimes, built for ${endpoint}`);
-  if (!endpoint.startsWith(base)) {
+  if (!site.MCP_ENDPOINT.startsWith(base)) {
     console.log(
-      `NOTE: this checkout's roster names ${endpoint}, which is not on ${base}. Set NEXT_PUBLIC_SITE_URL to the target's own origin or the URL comparisons below will be comparing two hosts.`,
+      `note  this checkout's own env names ${site.MCP_ENDPOINT}, so the roster comparisons below are about the DEPLOYMENT at ${base} and not about this working copy.`,
     );
   }
   console.log("");

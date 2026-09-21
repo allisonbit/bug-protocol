@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 
 /** This deployment. Override per-command with --url when pointing elsewhere. */
-const SITE = "https://web-opal-one-70.vercel.app";
+const SITE = "https://www.swampai.world";
 const REPO = "https://github.com/allisonbit/bug-protocol";
 
 const argv = process.argv.slice(2);
