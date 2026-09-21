@@ -36,15 +36,22 @@ export default async function MachinesPage() {
   let machines: Machine[] = [];
   let readings: MachineReading[] = [];
   let commands: MachineCommand[] = [];
+  let history: { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[] = [];
   if (sb) {
-    const [m, r, c] = await Promise.all([
+    const [m, r, h, c] = await Promise.all([
       sb.from("machines").select("*").eq("status", "active").order("last_report_at", { ascending: false, nullsFirst: false }).limit(100),
       sb.from("machine_readings").select("*").order("created_at", { ascending: false }).limit(40),
+      sb.from("machine_readings")
+        .select("machine_id, kind, metric, value, unit, created_at")
+        .in("kind", ["telemetry"])
+        .order("created_at", { ascending: false })
+        .limit(1200),
       sb.from("machine_commands").select("*").order("created_at", { ascending: false }).limit(20),
     ]);
     machines = (m.data as Machine[] | null) ?? [];
     readings = (r.data as MachineReading[] | null) ?? [];
     commands = (c.data as MachineCommand[] | null) ?? [];
+    history = (h.data as { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[] | null) ?? [];
   }
 
   const live = machines.filter((m) => livenessOf(m, now) === "live").length;
@@ -101,6 +108,7 @@ export default async function MachinesPage() {
             const liveness = livenessOf(m, now);
             const latest = readings.filter((r) => r.machine_id === m.id).slice(0, 3);
             const pending = commands.filter((c) => c.machine_id === m.id && c.status === "pending").length;
+            const series = telemetrySeries(history, m.id, now);
             return (
               <li key={m.id} className="rounded-xl bg-ink-soft p-4">
                 <div className="flex items-center gap-4">
@@ -152,6 +160,20 @@ export default async function MachinesPage() {
                       </span>
                     ))}
                   </div>
+                )}
+                {series && (
+                  <figure className="mt-3 border-t border-line pt-3">
+                    <Sparkline points={series.points} min={series.min} max={series.max} />
+                    <figcaption className="mt-1 flex flex-wrap items-center gap-x-3 text-[10px] text-mist">
+                      <span className="font-mono text-chalk">
+                        {series.metric} {series.last} {series.unit}
+                      </span>
+                      <span>
+                        last {series.points.length} readings over {series.spanMinutes} min, {series.min} to {series.max}
+                      </span>
+                      {series.gap && <span className="text-warn">gap in the record: quiet hours are hours, not points</span>}
+                    </figcaption>
+                  </figure>
                 )}
                 {m.description && <p className="mt-2 text-xs leading-relaxed text-mist">{m.description}</p>}
               </li>
@@ -261,5 +283,86 @@ curl -X PUT ${SITE_URL}/api/machines \\
         </ul>
       </section>
     </main>
+  );
+}
+
+/**
+ * The telemetry history for one machine, oldest first, grouped by metric.
+ *
+ * Drawn from the deeper history read rather than the latest-readings slice, so
+ * the line shows the shape of the day and not just its last three points. A
+ * gap longer than three times the median spacing is marked in the caption
+ * rather than smoothed over: hours where a machine said nothing are hours,
+ * not points, and joining across them would invent a flat line that never
+ * existed.
+ */
+function telemetrySeries(
+  history: { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[],
+  machineId: string,
+  now: number,
+) {
+  const mine = history
+    .filter((r) => r.machine_id === machineId && typeof r.value === "number" && Number.isFinite(r.value))
+    .map((r) => ({ v: r.value as number, at: Date.parse(r.created_at), metric: r.metric ?? "value", unit: r.unit ?? "" }));
+  if (mine.length < 3) return null;
+  const byMetric = new Map<string, typeof mine>();
+  for (const p of mine) {
+    const list = byMetric.get(p.metric) ?? [];
+    list.push(p);
+    byMetric.set(p.metric, list);
+  }
+  // The metric with the most points is the machine's main channel.
+  let best = { metric: "", points: [] as typeof mine };
+  for (const [metric, points] of byMetric) {
+    if (points.length > best.points.length) best = { metric, points };
+  }
+  if (best.points.length < 3) return null;
+  const points = best.points.sort((a, b) => a.at - b.at).slice(-120);
+  const values = points.map((p) => p.v);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // Median spacing, so one slow report does not invent a gap.
+  const gaps = points.slice(1).map((p, i) => p.at - points[i].at).sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)] ?? 0;
+  const spanMinutes = Math.max(1, Math.round((points[points.length - 1].at - points[0].at) / 60000));
+  const gap = points.slice(1).some((p, i) => p.at - points[i].at > Math.max(median * 3, 10 * 60 * 1000));
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    metric: best.metric,
+    unit: best.points[best.points.length - 1].unit,
+    last: round1(values[values.length - 1]),
+    min: round1(min),
+    max: round1(max),
+    points: values,
+    spanMinutes,
+    gap,
+  };
+}
+
+/**
+ * A sparkline as plain SVG, no client JS and no chart library.
+ *
+ * Server-rendered because the page is server-rendered: a reading that was true
+ * when the page was drawn is the reading the page shows, and the next visitor
+ * gets the next page. The area under the line is filled so a single flat series
+ * still reads as a shape rather than as a hairline.
+ */
+function Sparkline({ points, min, max }: { points: number[]; min: number; max: number }) {
+  const W = 560;
+  const H = 56;
+  const PAD = 3;
+  const span = max - min || 1;
+  const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
+  const y = (v: number) => H - PAD - ((v - min) / span) * (H - PAD * 2);
+  const line = points.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${H - PAD} L${x(0).toFixed(1)},${H - PAD} Z`;
+  const lastX = x(points.length - 1).toFixed(1);
+  const lastY = y(points[points.length - 1]).toFixed(1);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full" preserveAspectRatio="none" role="img" aria-label="recent telemetry">
+      <path d={area} className="fill-bug/10" />
+      <path d={line} fill="none" className="stroke-bug" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+      <circle cx={lastX} cy={lastY} r={2.4} className="fill-bug" />
+    </svg>
   );
 }
