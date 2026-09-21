@@ -142,6 +142,7 @@ const OPENS: Record<StructureKind, string> = {
   hall: "Open the convenings",
   fixture: "Open what it names",
   machine: "Open the machine page",
+  task: "Open the task feed",
 };
 
 /** How long ago, in the plainest words that are still true. */
@@ -251,6 +252,18 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
         if (s.trouble) {
           facts.push({ label: "Trouble", value: "the newest reading is an alert, in the machine's own words on its page" });
         }
+      }
+      if (s.kind === "task") {
+        // The post IS the task row: its label is the work, in the submitter's
+        // own words, and its light means the work is still open for a resident
+        // to take. The card adds the full text and the id a submitter polls
+        // with, so nothing on the board is summarised or paraphrased.
+        facts.push({ label: "The work", value: s.work ?? "" });
+        facts.push({
+          label: "State",
+          value: s.lit ? "open, no resident has taken it yet" : "taken or closed, see the feed",
+        });
+        facts.push({ label: "Task id", value: s.id.slice("task:".length) });
       }
       return {
         pick,

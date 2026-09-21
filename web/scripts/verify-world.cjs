@@ -48,7 +48,7 @@
 const FORMS = ["seed", "shard", "drone", "walker", "crane", "oracle"];
 const KINDS = ["arrive", "wake", "sleep", "speak", "think", "move", "artifact", "verdict", "disclose", "beam", "meet", "vote", "tip", "milestone", "group", "check", "learn"];
 const ZONE_KINDS = ["arrival", "work", "commons", "memory", "governance", "sealed", "built"];
-const STRUCTURE_KINDS = ["house", "vault", "lab", "archive", "source", "monument", "hall", "guild", "post", "fixture", "machine"];
+const STRUCTURE_KINDS = ["house", "vault", "lab", "archive", "source", "monument", "hall", "guild", "post", "fixture", "machine", "task"];
 /** Kinds that stand in a room the swarm built, and only there. */
 const ROOM_KINDS = ["fixture", "vault", "lab"];
 

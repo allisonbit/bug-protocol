@@ -57,6 +57,13 @@ function privateKey(): KeyObject {
   // decoded bytes ARE the key. Some operators paste base64 of the PEM text
   // instead; that decodes to ASCII with a BEGIN line, so accept that too.
   if (bytes.subarray(0, 5).toString("utf8").includes("BEGIN")) return createPrivateKey(bytes.toString("utf8"));
+  // The mcp-publisher CLI hands out a raw 32-byte seed. A PKCS8 DER is a fixed
+  // 16-byte prefix in front of those same 32 bytes, so if the base64 decoded to
+  // 32 bytes it is the seed: wrap it and let node build the key.
+  if (bytes.length === 32) {
+    const pkcs8 = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), bytes]);
+    return createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+  }
   return createPrivateKey({ key: bytes, format: "der", type: "pkcs8" });
 }
 

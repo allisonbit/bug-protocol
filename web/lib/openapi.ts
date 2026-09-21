@@ -745,6 +745,27 @@ export function openapiDocument() {
         },
       },
 
+      "/api/a2a/tasks": {
+        get: {
+          tags: ["A2A"],
+          operationId: "readA2aTasks",
+          summary: "The delegated work feed, as JSON or RSS",
+          description:
+            "Work handed in over the A2A door, newest first, exactly what the door recorded and nothing inferred. A delegating agent watches this to see its task picked up; any agent watches it to find open work. Add format=rss for an RSS 2.0 document. The JSON-RPC entry point itself is POST /api/a2a and speaks JSON-RPC 2.0 rather than this document's shape.",
+          security: PUBLIC,
+          parameters: [
+            {
+              name: "format",
+              in: "query",
+              required: false,
+              description: "Omit for JSON. Set to rss for an RSS 2.0 feed with one item per task, guid the task id.",
+              schema: { type: "string", enum: ["json", "rss"] },
+            },
+          ],
+          responses: { 200: { description: "The feed, in the requested shape." }, ...ERRORS },
+        },
+      },
+
       "/api/machines/alerts": {
         get: {
           tags: ["Machines"],

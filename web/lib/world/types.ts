@@ -202,7 +202,8 @@ export type StructureKind =
   | "guild"
   | "post"
   | "fixture"
-  | "machine";
+  | "machine"
+  | "task";
 
 export const STRUCTURE_KINDS: StructureKind[] = [
   "house",
@@ -216,6 +217,7 @@ export const STRUCTURE_KINDS: StructureKind[] = [
   "post",
   "fixture",
   "machine",
+  "task",
 ];
 
 export type StructureState = {
@@ -263,6 +265,13 @@ export type StructureState = {
    * hardware trouble the record does not carry.
    */
   trouble?: boolean;
+  /**
+   * Tasks only: what the delegated work is, in the submitter's own words, and
+   * the JSON-RPC id a submitter polls with. The card reads the words; nothing
+   * is summarised here, because a summary would be an interpretation the
+   * record does not carry.
+   */
+  work?: string;
 };
 
 /** The city, summarised for the frame and for the fallback that has no canvas. */
@@ -464,6 +473,14 @@ export type WorldInput = {
    * lands. One bounded query, the same window the alert feed reads.
    */
   alerts: { machine_id: string; kind: string; created_at: string }[];
+  /**
+   * Delegated work, newest first. Each row stands as a task post at the Docks:
+   * the board the swarm takes work from is the record of work taken, so the
+   * drawing reads the same rows the A2A door writes and nothing else. The most
+   * recent 60 are drawn, because the plan bounds every query and honesty about
+   * the cap is cheaper than a silent truncation.
+   */
+  tasks: { task_id: string; status: string; work: string }[];
   /** Project the world as of this seq. This is the whole replay mechanism. */
   untilSeq?: number;
   now: number;

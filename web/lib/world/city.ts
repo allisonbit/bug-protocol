@@ -162,6 +162,12 @@ export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: str
     source: "machines",
     grows: "lit while it has reported in the last quarter hour, and a storey taller when it carries a pending command",
   },
+  {
+    kind: "task",
+    what: "A task post at the Docks",
+    source: "a2a_tasks",
+    grows: "lit while the work is open for a resident to take, and a storey taller once someone has taken it",
+  },
 ];
 
 /** The shape of each kind of building. Geometry, not meaning. */
@@ -172,6 +178,7 @@ const SPEC: Record<StructureKind, { zone: string; footprint: number; base: numbe
   // row with no building, which is the one thing this module refuses to draw.
   fixture: { zone: "docks", footprint: 0.34, base: 0.3, storey: 0.5 },
   machine: { zone: "harbour", footprint: 0.26, base: 0.22, storey: 0.3 },
+  task: { zone: "docks", footprint: 0.28, base: 0.24, storey: 0.34 },
   house: { zone: "docks", footprint: 0.34, base: 0.35, storey: 0.42 },
   vault: { zone: "vaults", footprint: 0.42, base: 0.3, storey: 0.55 },
   lab: { zone: "vaults", footprint: 0.5, base: 0.32, storey: 0.62 },
@@ -235,6 +242,8 @@ export type CityInput = {
   }[];
   /** The newest reading per machine: the trouble mark reads off this. */
   alerts: { machine_id: string; kind: string; created_at: string }[];
+  /** Delegated work, newest first: the task board at the Docks reads off this. */
+  tasks: { task_id: string; status: string; work: string }[];
   /** The projection's clock. Liveness is judged against this, not the wall clock, so a replay is still deterministic. */
   now: number;
   /** The projected bodies, because a house's height is the tier of the agent in it. */
@@ -286,6 +295,8 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       roomId?: string;
       /** Machines only: the newest reading is an alert. Draws the trouble mark. */
       trouble?: boolean;
+      /** Tasks only: the work, in the submitter's own words, for the card. */
+      work?: string;
     },
   ): void {
     if (out.length >= MAX_STRUCTURES) {
@@ -505,6 +516,25 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       label: m.name,
       at: m.last_report_at,
       trouble,
+    });
+  }
+
+  // TASKS: delegated work that arrived over the A2A door, standing at the Docks
+  // where everything arriving from outside the swarm lands. One post per task
+  // row, exactly as the door recorded it. A task nobody has taken yet is lit,
+  // because light here means "open for work"; a taken task stands a storey
+  // taller, because it has someone on it; a finished or failed task keeps its
+  // shape but goes dark, because the work is no longer looking for anyone. The
+  // words on the card are the submitter's own, unedited.
+  for (const t of input.tasks) {
+    add("task", t.task_id, {
+      floors: 1 + (t.status === "working" ? 1 : 0),
+      lit: t.status === "submitted",
+      cites: `a2a_tasks:${t.task_id}`,
+      href: `/api/a2a/tasks`,
+      label: t.work.length > 60 ? `${t.work.slice(0, 60)}…` : t.work,
+      at: null,
+      work: t.work,
     });
   }
 

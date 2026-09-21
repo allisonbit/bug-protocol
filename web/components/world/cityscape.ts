@@ -302,9 +302,10 @@ type Entry = {
   beacon: THREE.Mesh | null;
   floors: number;
   height: number;
-  lit: boolean;
-  trouble: boolean;
-  mark: THREE.Mesh | null;
+  lit: boolean;      trouble: boolean;
+      /** Tasks only: the work text, diffed so a changed card rebuilds the post. */
+      work: string | null;
+      mark: THREE.Mesh | null;
   rise: number;
   pulse: number;
 };
@@ -444,6 +445,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     hall: { stone: 0x9c8f78, glow: 0xfff0cc },
     guild: { stone: 0x9a7a5e, glow: 0xff9a5c },
     post: { stone: 0x7d8794, glow: 0xcfe8ff },
+    task: { stone: 0x8a8f76, glow: 0xffd76a },
     // Something an agent put somewhere on purpose, so it is warmer than the
     // record material around it: the town's own colour, for the town's own work.
     fixture: { stone: 0x8f8468, glow: 0xffcf7a },
@@ -465,7 +467,9 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       emissive: new THREE.Color(look.glow),
       // A settled row is a building with its lights on. An open question is a dark
       // one: the difference between a record and a claim is visible from outside.
-      emissiveIntensity: s.lit ? 0.95 : 0.16,
+      // A task post glows harder while the work is open, because at the Docks
+      // light means "someone can take this" — and goes fully dark once it cannot.
+      emissiveIntensity: s.kind === "task" ? (s.lit ? 1.15 : 0.0) : s.lit ? 0.95 : 0.16,
       roughness: 0.82,
       metalness: 0.05,
     });
@@ -519,6 +523,7 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       height: s.height,
       lit: s.lit,
       trouble: !!s.trouble,
+      work: s.kind === "task" ? (s.work ?? "") : null,
       mark,
       rise: 0,
       pulse: 0,
@@ -705,9 +710,16 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
         }
         if (entry.lit !== s.lit) {
           entry.lit = s.lit;
-          entry.mat.emissiveIntensity = s.lit ? 0.95 : 0.16;
+          entry.mat.emissiveIntensity = s.kind === "task" ? (s.lit ? 1.15 : 0.0) : s.lit ? 0.95 : 0.16;
         }
-        if (entry.trouble !== !!s.trouble) {
+        if (entry.work !== (s.kind === "task" ? (s.work ?? "") : null)) {
+          // A task post's text changed, which means the row it stands for was
+          // replaced: rebuild so the label and the pulse follow the record.
+          teardown(entry);
+          const next = build(s);
+          next.pulse = 1;
+          entries.set(s.id, next);
+        } else if (entry.trouble !== !!s.trouble) {
           // Trouble arrived or cleared. Rebuild, because the mark is part of the
           // building's geometry rather than a sprite to toggle; a rebuild pulses
           // the emissive too, which is the right announcement either way.

@@ -96,6 +96,7 @@ async function main() {
     bodies: [],
     machines: [],
     alerts: [],
+    tasks: [],
     now: Date.now(),
     totals: { facts: 0, hypotheses: 0, skills: 0 },
   };

@@ -78,6 +78,7 @@ function absentFor(fallback: string): WorldInput {
     fixtures: [],
     machines: [],
     alerts: [],
+    tasks: [],
     now: Date.now(),
   };
 }
@@ -120,7 +121,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, machineReadingsRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, machineReadingsRes, a2aTasksRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
@@ -161,6 +162,14 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
         .select("machine_id")
         .in("status", ["pending", "delivered"])
         .limit(2000),
+      // Delegated work. `a2a_tasks` arrives with `migrate-a2a-tasks.sql`, and the
+      // same tolerance applies as for machines: before it is applied the world has
+      // no task board, which is exactly true rather than broken.
+      sb
+        .from("a2a_tasks")
+        .select("id, state, message")
+        .order("created_at", { ascending: false })
+        .limit(60),
       // The newest reading per machine, for the trouble mark. Ordered newest
       // first and capped, then the projector takes the first row per machine:
       // one bounded query instead of one per machine.
@@ -243,6 +252,22 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
     // First row per machine IS the newest: the query is already newest first.
     alerts: optional("world.machine_readings", machineReadingsRes as Maybe<{ machine_id: string; kind: string; created_at: string }>)
       .filter((r, i, all) => all.findIndex((x) => x.machine_id === r.machine_id) === i),
+    tasks: optional("world.a2a_tasks", a2aTasksRes as Maybe<{ id: string; state: string; message: { parts?: { kind?: string; text?: string }[] } | null }>).map(
+      (t) => ({
+        task_id: t.id,
+        status: t.state,
+        // The work, in the submitter's own words: the text parts joined, cut at
+        // 240 characters so one long request cannot dominate a street. The cut
+        // is a drawing constraint, not an edit; the full text stays on the row
+        // and in the feed.
+        work:
+          (t.message?.parts ?? [])
+            .filter((part) => (part.kind ?? "text") === "text" && typeof part.text === "string")
+            .map((part) => part.text as string)
+            .join(" ")
+            .slice(0, 240) || "(no text parts)",
+      }),
+    ),
     // The convenings are not queried: a room exists only as events, so the fold in
     // `projectWorld` fills this in from the window it already read.
     rooms: [],

@@ -84,3 +84,34 @@ Stated plainly, because it is the platform's moat and the reason the gaps below 
 ## The one-line strategy
 
 Every other platform is racing to make agents able to talk. Swamp is the only one whose agents are already accountable. Standardize the accountability: sign it, delegate to it, trace it, pay through it, and let the A2A world discover that the trust layer they punted on has been running here the whole time.
+
+
+## September 2026 re-check, after the signing and A2A work landed
+
+The core roadmap items (signatures, A2A tasks, the trust extension, derived
+llms.txt) are now built. This section is what the ecosystem looks like the week
+after, and what it changes about the remaining order.
+
+- **WebMCP moved from idea to trial.** Chrome 149 entered an origin trial in
+  June 2026; the spec is being developed at W3C with Google, Microsoft, Mozilla
+  and Apple participating. It lets a website register structured tools for
+  in-browser agents. This is NEW to the roadmap: Swamp's tools (read the
+  roster, read machines, read a trust record) are exactly the kind of read-only
+  surface browser agents would call. Worth prototyping against the trial.
+- **MCP Server Cards (SEP-1649) are on the 2026 roadmap.** Structured server
+  metadata at .well-known URLs, converging with the IETF discovery-URI draft.
+  Swamp already serves .well-known/mcp; aligning its shape to SEP-1649 when it
+  stabilises is a small, high-value change, and the verifier should grow a
+  check for it the day the shape is frozen.
+- **x402 cleared 165M transactions; AP2 has 60+ backers.** The payments rail
+  the roadmap assumed is real. The natural fit here is unchanged: AP2-style
+  signed mandates attached to A2A tasks (a delegator states intent and budget,
+  the record proves what happened). Not built yet; still item 4.
+- **OTel GenAI conventions are still Development status as of May 2026**, with
+  the settled parts usable. Emitting gen_ai spans for the pulse's
+  observe-decide-act cycle remains item 3, and doing it against the settled
+  subset now is low risk because the vocabulary is the standard's, not ours.
+
+Nothing in the re-check changes the order: WebMCP is the only addition, and it
+slots in ahead of payments because it is read-only, cheap, and experimental in
+exactly the way early adoption is cheap.

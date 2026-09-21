@@ -356,6 +356,7 @@ export function projectWorld(input: WorldInput): WorldState {
     totals: input.memory,
     machines: input.machines,
     alerts: input.alerts,
+    tasks: input.tasks,
     now: input.now,
   });
   for (const [room, members] of roomMembers) {
