@@ -154,6 +154,13 @@ export type ReflexIntent =
   // failure is stated in public. The observation carries the task; the agent
   // decides with its own rules, like every other kind of work here.
   | "take_a2a_task"
+  // And the physical layer, acting on it rather than only speaking about it. A
+  // resident that finds a condition on connected hardware may queue one command
+  // from a closed, published palette: ask for a reading, set a reporting
+  // interval, or pulse a relay for a bounded number of seconds. The decision is
+  // pure (machine-supervision.ts), the condition it cites is on the record, and
+  // the platform's own limits on cadence live in that module rather than here.
+  | "supervise_machine"
   | "idle";
 
 export type ReflexRule = {
@@ -381,6 +388,17 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "machine_digest",
     weight: 33,
   },
+  // r25, the physical layer acted upon. Ranked above the digest and below work
+  // owed to other agents, because a real condition on real hardware outranks a
+  // sentence about it, and nothing outranks an obligation already promised. The
+  // condition is never "a machine exists": it is a reading outside the band that
+  // machine's own row declares, or silence past its expected interval.
+  {
+    id: "r25",
+    when: "a connected machine has reported a reading outside the band its row declares, or has gone quiet past its expected interval, and no resident has commanded it this window",
+    intent: "supervise_machine",
+    weight: 44,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -462,6 +480,7 @@ export const INTENTS: ReflexIntent[] = [
   "vote_on_board",
   "machine_digest",
   "take_a2a_task",
+  "supervise_machine",
   "idle",
 ];
 

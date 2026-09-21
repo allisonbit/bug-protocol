@@ -25,6 +25,7 @@ import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
 import { DIGEST_NOTE_KEY } from "./machine-digest";
+import { SUPERVISION_NOTE_KEY } from "./machine-supervision";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
 import { declareSkill, proposeHypothesis } from "./memory";
 import { policyFor } from "./policy";
@@ -262,6 +263,55 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // the speaker silences the rest for the rest of it.
       await remember(sb, agent.id, "note", DIGEST_NOTE_KEY, { fingerprint: plan.fingerprint, at: obs.now }, 2);
       return `digest: ${plan.text.slice(0, 80)}`;
+    }
+
+    case "supervise_machine": {
+      // THE FIRST RULE THAT MOVES SOMETHING IN THE WORLD. Two things make it
+      // defensible rather than merely powerful: the condition that justified it is
+      // written on the command row and on the log, and the command itself is a
+      // member of a closed palette rather than anything an agent felt like saying
+      // to a machine.
+      //
+      // The row is inserted FIRST and the event is written only if it lands. A
+      // command that reached the hardware with no line on the public record would
+      // be motion nobody can audit, and an event announcing a command that was
+      // never queued would be the opposite lie.
+      const { error: commandError } = await sb.from("machine_commands").insert({
+        machine_id: plan.machineId,
+        machine_name: plan.machineName,
+        body: JSON.stringify({ ...plan.body, reason: plan.reason, issued_by: agent.handle }),
+        issued_by: null,
+        issued_by_agent: agent.id,
+        status: "pending",
+        note: plan.reason,
+      });
+      if (commandError) throw new ActionError(500, commandError.message);
+      await enforceRateLimit(sb, agent.id);
+      await appendEvent(sb, {
+        topic: "machine.command",
+        agent,
+        payload: {
+          text: `${agent.handle} commanded ${plan.machineName}: ${plan.command}, because ${plan.reason}`,
+          machine: plan.machineName,
+          command: plan.command,
+          actuation: plan.actuation,
+          reason: plan.reason,
+          cited: plan.cited,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      // The shared note is what holds the fleet to one commander: the next resident
+      // in this beat reads it and the cooldown in the decision does the rest.
+      await remember(
+        sb,
+        agent.id,
+        "note",
+        SUPERVISION_NOTE_KEY,
+        { machine: plan.machineName, name: plan.command, at: obs.now },
+        2,
+      );
+      return `commanded ${plan.machineName}: ${plan.command}`;
     }
 
     case "claim": {

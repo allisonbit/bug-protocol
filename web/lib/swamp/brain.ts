@@ -3,6 +3,12 @@ import { generateText } from "ai";
 import { CHECK_IDS, type CheckId } from "./checks";
 import { MODEL_INSTRUCTION, REFLEX_RULES, policyFor, type ReflexRule } from "./policy";
 import { machineDigest } from "./machine-digest";
+import {
+  supervisionDecision,
+  SUPERVISION_NOTE_KEY,
+  type CommandName,
+  type LastCommand,
+} from "./machine-supervision";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
@@ -189,6 +195,17 @@ export type PlannedAction =
    * is published with it: a rejection that does not say why teaches nobody.
    */
   | { rule: string; kind: "review_change"; changeId: string; verdict: "endorse" | "reject"; note: string }
+  | {
+      rule: string;
+      kind: "supervise_machine";
+      machineId: string;
+      machineName: string;
+      command: CommandName;
+      body: Record<string, unknown>;
+      reason: string;
+      cited: { metric?: string; value?: number | null; band?: [number, number]; quiet_secs?: number };
+      actuation: boolean;
+    }
   /**
    * Take a copy of one file this site serves.
    *
@@ -606,6 +623,38 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         break;
       }
 
+      // r25, the physical layer acted upon. The decision is pure and lives in
+      // machine-supervision.ts: a reading outside the band the machine's own row
+      // declares, or silence past its expected interval, and only from a closed
+      // palette of three commands. What this case adds is the record's own two
+      // limits: the shared note that says another resident commanded this machine
+      // inside the cooldown, and the count of questions this machine has not
+      // answered, because a second question on top of an outstanding one is not
+      // supervision, it is noise aimed at hardware.
+      case "supervise_machine": {
+        for (const machine of obs.machineWatch) {
+          const last = lastCommand(obs, machine.name);
+          const decision = supervisionDecision({ machine, nowIso: obs.now, last, pending: machine.pending });
+          if (!decision) continue;
+          out.push({
+            rule: rule.id,
+            kind: "supervise_machine",
+            machineId: machine.id,
+            machineName: machine.name,
+            command: decision.name,
+            body: decision.body,
+            reason: decision.reason,
+            cited: decision.cited,
+            actuation: decision.actuation,
+          });
+          // One command per wake, not one per machine: a resident with three
+          // machines out of band reports what it did rather than emptying a
+          // palette at the rack in a single beat.
+          break;
+        }
+        break;
+      }
+
       // r24, work from outside. The task is real rows in a2a_tasks; taking it is
       // a claim on a row, not a decision about text, which is why a deterministic
       // brain may take one and could never author one. One taker: the condition
@@ -736,6 +785,29 @@ function openQuestion(obs: Observation): { claim: string; targetSlug: string; ta
  * agent wakes first writes the note the rest look for, which is the same rule the
  * welcome already uses for `greeted:<handle>`.
  */
+/**
+ * What the swarm last commanded this machine, read from the shared note.
+ *
+ * One key (`supervise:last`) written by whoever commands, read by everyone, which
+ * is the only shape that holds inside a single beat: the pulse rebuilds each
+ * agent's observation before it decides, so the first commander's note is visible
+ * to the next resident and the fleet does not all reach for the same rack. The
+ * cooldown itself is per machine, not per agent, and is enforced in the decision.
+ */
+function lastCommand(obs: Observation, machine: string): LastCommand {
+  let best: LastCommand = null;
+  for (const note of obs.sharedNotes) {
+    if (note.key !== SUPERVISION_NOTE_KEY) continue;
+    const value = note.value as { machine?: unknown; name?: unknown; at?: unknown } | null;
+    if (value?.machine !== machine) continue;
+    if (typeof value.name !== "string" || typeof value.at !== "string") continue;
+    if (!best || Date.parse(value.at) > Date.parse(best.at)) {
+      best = { machine, name: value.name as CommandName, at: value.at };
+    }
+  }
+  return best;
+}
+
 function takenByAnyone(obs: Observation): Map<string, string> {
   const out = new Map<string, string>();
   for (const n of obs.sharedNotes) {

@@ -5,6 +5,7 @@ import { getFlags } from "@/lib/agents/auth";
 // here so a hosted resident can SEE where it stands: a door nobody is told about is a
 // door that does not exist for the agents most likely to need it.
 import { asOffsiteChoice, asSwarmDefault, countOffsite, offsiteDecision, type OffsiteChoice } from "@/lib/x/offsite-rule";
+import { parseThresholds, type MachineReading, type SupervisedMachine } from "./machine-supervision";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { Agent, AgentMemory, Cabal, CabalMember, Claim, Finding, Output, RoomFixture, SwampEvent, Target } from "@/lib/agents/types";
 import { roomViews, type RoomView } from "@/lib/agents/actions";
@@ -208,6 +209,13 @@ export type Observation = {
    * the hardware rows have to arrive here like every other fact.
    */
   machines: { name: string; kind: string; liveness: string; last_report_at: string | null }[];
+  /**
+   * The same machines with what acting on them needs: declared band, newest
+   * reading, and questions still unanswered. Kept beside `machines` rather than
+   * replacing it, because the digest is a reading of the roster and supervision is
+   * a reading of the condition, and a reader should be able to tell which it has.
+   */
+  machineWatch: (SupervisedMachine & { pending: number })[];
   /**
    * Filled by the model brain when its LLM call runs, read by the pulse when it
    * writes the beat's span. Undefined on a reflex-only wake, which is honest:
@@ -811,6 +819,55 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     last_report_at: m.last_report_at,
   }));
 
+  // SUPERVISION DATA. What a resident needs in order to act on hardware rather
+  // than only speak about it: the band each machine's own row declares, its newest
+  // reading, and how many of our questions it has not answered yet. Three bounded
+  // queries over every machine at once, so this costs the same on one machine as
+  // on fifty. A machine whose row declares no band is still carried here, and the
+  // decision function will only ever ask it for a reading.
+  const { data: machineRows } = await sb.from("machines").select("id, name, thresholds").limit(200);
+  const machineIds = ((machineRows as { id: string; name: string }[] | null) ?? []).map((m) => m.id);
+  const [readingsRes, pendingRes] = machineIds.length
+    ? await Promise.all([
+        sb
+          .from("machine_readings")
+          .select("machine_id, kind, metric, value, unit, created_at")
+          .in("machine_id", machineIds)
+          .order("created_at", { ascending: false })
+          .limit(200),
+        sb
+          .from("machine_commands")
+          .select("machine_id")
+          .in("machine_id", machineIds)
+          .in("status", ["pending", "delivered"])
+          .limit(200),
+      ])
+    : [{ data: [] as Record<string, unknown>[] }, { data: [] as Record<string, unknown>[] }];
+
+  const latestByMachine = new Map<string, MachineReading>();
+  for (const r of (readingsRes.data as (MachineReading & { machine_id: string })[] | null) ?? []) {
+    // Newest first, so the first row per machine is its newest reading.
+    if (!latestByMachine.has(r.machine_id)) latestByMachine.set(r.machine_id, r);
+  }
+  const pendingByMachine = new Map<string, number>();
+  for (const c of (pendingRes.data as { machine_id: string }[] | null) ?? []) {
+    pendingByMachine.set(c.machine_id, (pendingByMachine.get(c.machine_id) ?? 0) + 1);
+  }
+  const machineWatch: (SupervisedMachine & { pending: number })[] =
+    ((machineRows as { id: string; name: string; thresholds: unknown }[] | null) ?? []).map((row) => {
+      const live = machines.find((m) => m.name === row.name);
+      return {
+        id: row.id,
+        name: row.name,
+        kind: live?.kind ?? "sensor",
+        liveness: live?.liveness ?? "never",
+        last_report_at: live?.last_report_at ?? null,
+        thresholds: parseThresholds(row.thresholds),
+        latest: latestByMachine.get(row.id) ?? null,
+        pending: pendingByMachine.get(row.id) ?? 0,
+      };
+    });
+
   // The A2A queue, flattened to what a brain can read. The task's text is the
   // first text part; that is what a resident decides on.
   const openTasks = ((tasksRes.data as { id: string; caller: string; message: { parts?: { kind?: string; text?: string }[] }; created_at: string }[] | null) ?? []).map((t) => ({
@@ -872,6 +929,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     rateLimitPerMin: flags.rate_limit_per_min,
     targets,
     machines,
+    machineWatch,
     openTasks,
     claims,
     myClaim,
