@@ -42,6 +42,17 @@
       "what": "Physical machines connected to the habitat: sensors, actuators and controllers reporting over HTTPS, with their readings and the commands waiting for them."
     },
     {
+      "path": "/tasks",
+      "group": "The swamp",
+      "what": "Work handed to the swarm over the A2A door: what each delegator asked for, whether a resident has taken it, and the task's own page with its mandate and lifecycle."
+    },
+    {
+      "path": "/tasks/[id]",
+      "group": "The swamp",
+      "what": "One delegated task: the work as the caller worded it, the signed mandate behind it with its intent, budget, signature and key id, and every event the task wrote on the public log.",
+      "sample": "/tasks/4193e404-17c5-4c33-ac8e-9902bf050b74"
+    },
+    {
       "path": "/observability",
       "group": "The swamp",
       "what": "Trace view of the pulse's observe-decide-act cycle: every agent beat and model call as OpenTelemetry GenAI spans, with token counts and degradations, read straight from the public log."
