@@ -182,6 +182,12 @@ export type EventTopic =
   | "a2a.task.completed"
   | "a2a.task.failed"
   | "a2a.message"
+  // A delegator's signed mandate on a task: intent, optional budget, signature
+  // and key id, recorded on the bus the moment it is accepted. Its own topic
+  // because it is the one a2a event that speaks BEFORE the work rather than
+  // about it, and because a reader auditing a task's outcome should be able to
+  // ask for the authorizations by name.
+  | "a2a.mandate.signed"
   // The runtime's own heartbeat, structured the way OpenTelemetry's GenAI
   // semantic conventions name agent work: one event per agent per beat, with
   // the observe-decide-act cycle as a parent span and the model call, when one

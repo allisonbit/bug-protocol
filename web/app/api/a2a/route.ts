@@ -39,6 +39,31 @@ export const dynamic = "force-dynamic";
 
 const MAX_MESSAGE_CHARS = 4000;
 
+/**
+ * THE MANDATE (swamp.ap2/0.1).
+ *
+ * A caller may attach a mandate to message/send: intent (required, 1..1000
+ * chars), budget (optional JSON, shape agreed between caller and checker),
+ * signature and keyId (required). The signature is a detached signature over
+ * the canonical JSON of {caller, intent, budget} with the key keyId names;
+ * the platform records the mandate and does NOT verify the signature, because
+ * the key that made it is the caller's, and checking it is the job of whoever
+ * audits the task's outcome. The record exists so that check is possible,
+ * which is the whole point: a delegator states what it asked for, and the log
+ * proves what happened.
+ */
+type MandateInput = { intent: string; budget: unknown; signature: string; keyId: string };
+
+function mandateOf(params: Record<string, unknown>): MandateInput | null | "invalid" {
+  const m = params.mandate as { intent?: unknown; budget?: unknown; signature?: unknown; keyId?: unknown } | undefined;
+  if (m === undefined) return null;
+  const intent = typeof m.intent === "string" ? m.intent.trim() : "";
+  const signature = typeof m.signature === "string" ? m.signature.trim() : "";
+  const keyId = typeof m.keyId === "string" ? m.keyId.trim() : "";
+  if (!intent || intent.length > 1000 || !signature || signature.length > 4096 || !keyId || keyId.length > 200) return "invalid";
+  return { intent, budget: m.budget ?? null, signature, keyId };
+}
+
 function rpc(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id, result }, { headers: { "cache-control": "no-store", "access-control-allow-origin": "*" } });
 }
@@ -84,7 +109,8 @@ export async function POST(req: Request) {
   if (method === "message/send") return messageSend(id, params, sb);
   if (method === "tasks/get") return tasksGet(id, params, sb);
   if (method === "tasks/list") return tasksList(id, sb);
-  return rpcError(id, -32601, `Unknown method "${method}". This door serves message/send, tasks/get and tasks/list.`);
+  if (method === "mandates/get") return mandatesGet(id, params, sb);
+  return rpcError(id, -32601, `Unknown method "${method}". This door serves message/send, tasks/get, tasks/list and mandates/get.`);
 }
 
 // ---- message/send ------------------------------------------------------------
@@ -96,6 +122,13 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
   }
   const caller = typeof params.caller === "string" && params.caller.trim() ? params.caller.trim().slice(0, 80) : "anonymous-caller";
   const externalId = typeof params.id === "string" && params.id.trim() ? params.id.trim().slice(0, 120) : null;
+
+  // The mandate is validated BEFORE anything is written: a caller that sent a
+  // malformed one gets a clean error, not a half-recorded task.
+  const mandate = mandateOf(params);
+  if (mandate === "invalid") {
+    return rpcError(id, -32602, "params.mandate, when present, needs intent (1..1000 chars), signature and keyId. budget is optional JSON.");
+  }
 
   const { data: taskRow, error: insertError } = await sb
     .from("a2a_tasks")
@@ -127,6 +160,46 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
     })
     .then(undefined, () => null);
 
+  // The mandate lands after the task, because it references it. A refused
+  // mandate write is reported to the caller in the error, with the task id it
+  // can still read at tasks/get: both facts belong to the caller, hiding
+  // either would be the kind of silence this platform exists to prevent.
+  let mandateState: "recorded" | "refused" | null = null;
+  let mandateError: string | null = null;
+  if (mandate) {
+    const { error: mandateInsert } = await sb.from("a2a_mandates").insert({
+      task_id: task.id,
+      caller,
+      intent: mandate.intent,
+      budget: mandate.budget,
+      signature: mandate.signature,
+      key_id: mandate.keyId,
+    });
+    if (mandateInsert) {
+      mandateState = "refused";
+      mandateError = mandateInsert.message;
+    } else {
+      mandateState = "recorded";
+      await sb
+        .from("events")
+        .insert({
+          topic: "a2a.mandate.signed",
+          agent_id: null,
+          agent_handle: null,
+          payload: {
+            text: `mandate signed by ${caller} for task ${task.id.slice(0, 8)}: ${mandate.intent.slice(0, 200)}`,
+            task_id: task.id,
+            caller,
+            key_id: mandate.keyId,
+          },
+          signature: null,
+          signed_ok: false,
+          provenance: "system",
+        })
+        .then(undefined, () => null);
+    }
+  }
+
   return rpc(id, {
     task: {
       id: task.id,
@@ -136,6 +209,7 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
       // the URL, because the task's history is the public log.
       url: `${SITE_URL}/tasks/${task.id}`,
     },
+    ...(mandate ? { mandate: { state: mandateState, ...(mandateError ? { error: mandateError } : {}) } } : {}),
     note: "Submitted and public. A resident may take it on a later beat; nothing is promised, and the task's state is readable at tasks/get the whole time.",
   });
 }
@@ -164,6 +238,9 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
     text: typeof (e.payload as { text?: string })?.text === "string" ? (e.payload as { text?: string }).text : "",
   }));
 
+  const { data: mandateRows } = await sb.from("a2a_mandates").select("*").eq("task_id", task.id).order("created_at", { ascending: true }).limit(5);
+  const mandates = (mandateRows as { id: string; caller: string; intent: string; budget: unknown; signature: string; key_id: string; state: string; created_at: string; consumed_at: string | null }[] | null) ?? [];
+
   return rpc(id, {
     task: {
       id: task.id,
@@ -171,12 +248,49 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
       caller: task.caller,
       message: task.message,
       result: task.result ?? undefined,
+      ...(mandates.length
+        ? {
+            mandates: mandates.map((m) => ({
+              intent: m.intent,
+              ...(m.budget != null ? { budget: m.budget } : {}),
+              signature: m.signature,
+              keyId: m.key_id,
+              state: m.state,
+            })),
+          }
+        : {}),
       createdAt: task.created_at,
       updatedAt: task.updated_at,
       completedAt: task.completed_at ?? undefined,
       history,
       url: `${SITE_URL}/tasks/${task.id}`,
     },
+  });
+}
+
+// ---- mandates/get ------------------------------------------------------------
+
+async function mandatesGet(id: unknown, params: Record<string, unknown>, sb: NonNullable<ReturnType<typeof supabaseAdmin>>) {
+  const taskId = typeof params.id === "string" ? params.id.trim() : "";
+  if (!/^[0-9a-f-]{36}$/i.test(taskId)) return rpcError(id, -32602, "mandates/get needs params.id set to a task id (uuid).");
+  const { data: rows, error } = await sb.from("a2a_mandates").select("*").eq("task_id", taskId).order("created_at", { ascending: true });
+  if (error) return rpcError(id, -32000, `Mandates could not be read: ${error.message}`, 500);
+  const mandates = (rows as { id: string; caller: string; intent: string; budget: unknown; signature: string; key_id: string; state: string; created_at: string; consumed_at: string | null }[] | null) ?? [];
+  return rpc(id, {
+    task_id: taskId,
+    mandates: mandates.map((m) => ({
+      id: m.id,
+      caller: m.caller,
+      intent: m.intent,
+      ...(m.budget != null ? { budget: m.budget } : {}),
+      signature: m.signature,
+      keyId: m.key_id,
+      state: m.state,
+      createdAt: m.created_at,
+      ...(m.consumed_at ? { consumedAt: m.consumed_at } : {}),
+    })),
+    note: mandates.length === 0 ? "No mandate on this task. One is optional: message/send with params.mandate." : undefined,
+    spec: "swamp.ap2/0.1",
   });
 }
 

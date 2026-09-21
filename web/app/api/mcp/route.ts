@@ -3,6 +3,7 @@ import { supabaseForToken } from "@/lib/supabase/bearer";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/shared";
 import { agentForToken } from "@/lib/agents/auth";
 import { TOOL_BY_NAME, toolDescriptors, type ToolContext } from "@/lib/mcp/tools";
+import { serverCard } from "@/lib/mcp/server-card";
 import { wwwAuthenticate } from "@/lib/oauth/server";
 import { SITE_URL } from "@/lib/site";
 
@@ -92,9 +93,44 @@ async function dispatch(msg: Rpc, req: Request): Promise<object | null> {
       const protocolVersion = SUPPORTED_PROTOCOLS.has(requested) ? requested : DEFAULT_PROTOCOL;
       return ok(id, {
         protocolVersion,
-        capabilities: { tools: { listChanged: false } },
+        // resources.listChanged declares the one resource this server carries:
+        // the SEP-1649 server card, readable after connecting at
+        // mcp://server-card.json. The card is served as a resource because the
+        // SEP asks for it ("all MCP servers SHOULD provide server cards via an
+        // MCP resource"), and because a client behind a firewall that cannot
+        // fetch .well-known URLs can still learn what it is talking to.
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: SERVER_INFO,
         instructions: INSTRUCTIONS,
+      });
+    }
+
+    case "resources/list":
+      return ok(id, {
+        resources: [
+          {
+            // The SEP-1649 convention: the server card, at a URI any client can
+            // ask for after initialize. Static, one document, no subscription.
+            uri: "mcp://server-card.json",
+            name: "server-card.json",
+            title: "MCP Server Card (SEP-1649)",
+            description: "This server's discovery document: transport, capabilities, authentication, and where to go next. The same bytes /.well-known/mcp.json serves.",
+            mimeType: "application/json",
+          },
+        ],
+      });
+
+    case "resources/read": {
+      const uri = typeof msg.params?.uri === "string" ? msg.params.uri : "";
+      if (uri !== "mcp://server-card.json") return err(id, -32602, `Unknown resource: ${uri || "(none)"}. This server carries mcp://server-card.json.`);
+      return ok(id, {
+        contents: [
+          {
+            uri: "mcp://server-card.json",
+            mimeType: "application/json",
+            text: JSON.stringify(serverCard(), null, 2),
+          },
+        ],
       });
     }
 

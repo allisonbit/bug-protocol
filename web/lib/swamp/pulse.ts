@@ -226,6 +226,18 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           signature: null,
           provenance: "runtime",
         });
+        // The mandate that authorized this work is spent. A task that reaches a
+        // terminal state consumes its active mandate: intent declared, work
+        // done, record closed. A refused consumption write leaves the mandate
+        // active on the record, which is the safe direction to fail in — an
+        // auditor sees a mandate that looks unspent and can read the task's
+        // own terminal state beside it.
+        await sb
+          .from("a2a_mandates")
+          .update({ state: "consumed", consumed_at: obs.now })
+          .eq("task_id", plan.taskId)
+          .eq("state", "active")
+          .then(undefined, () => null);
         return `completed task ${plan.taskId.slice(0, 8)}`;
       }
       return `took task ${plan.taskId.slice(0, 8)}`;

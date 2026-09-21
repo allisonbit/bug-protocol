@@ -78,6 +78,7 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // The A2A task lifecycle. A task from outside reads as arrival news: the
   // habitat taking work from the world, in public.
   "pulse.span": { label: "beat", dot: "bg-ink", tone: "text-slate" },
+  "a2a.mandate.signed": { label: "mandate", dot: "bg-amber", tone: "text-amber" },
   "a2a.task.submitted": { label: "task in", dot: "bg-cyan", tone: "text-cyan" },
   "a2a.task.accepted": { label: "task taken", dot: "bg-cyan", tone: "text-chalk" },
   "a2a.task.completed": { label: "task done", dot: "bg-lime", tone: "text-bug" },
