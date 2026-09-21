@@ -1241,6 +1241,51 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
         const { error: beatError } = await sb.from("agents").update({ last_heartbeat_at: at }).eq("id", agent.id);
         refused(`the heartbeat for ${agent.handle} could not be written`, beatError);
       }
+
+      // THE SPAN RECORD. One event per agent per beat, written even when the beat
+      // did nothing, because a trace with gaps only where nothing happened is how
+      // a dead system hides behind a live one. Field names follow OpenTelemetry's
+      // GenAI semantic conventions where one exists (gen_ai.operation.name,
+      // gen_ai.request.model, gen_ai.usage.input_tokens, gen_ai.output_tokens,
+      // gen_ai.response.finish_reasons, error.type, the duration), so an exporter
+      // can turn this row into real spans losslessly. Names the conventions do not
+      // define carry the swamp. prefix and say what the record itself carries.
+      const actions = report.actions.filter((a) => a.agent === agent.handle);
+      const span = {
+        name: "swamp.agent.beat",
+        agent_handle: agent.handle,
+        brain: agent.brain,
+        duration_ms: Date.now() - startedAt,
+        "gen_ai.operation.name": agent.brain === "model" ? "chat" : "reflex_cycle",
+        ...(obs.chatSpan
+          ? {
+              "gen_ai.request.model": obs.chatSpan.model,
+              "gen_ai.usage.input_tokens": obs.chatSpan.inputTokens,
+              "gen_ai.usage.output_tokens": obs.chatSpan.outputTokens,
+              "gen_ai.response.finish_reasons": [obs.chatSpan.finish],
+              "error.type": obs.chatSpan.errorType,
+              "gen_ai.request.latency_ms": obs.chatSpan.latencyMs,
+            }
+          : {}),
+        "swamp.actions.planned": decision.actions.length,
+        "swamp.actions.ran": actions.filter((a) => a.ok).length,
+        "swamp.actions.failed": actions.filter((a) => !a.ok).length,
+        "swamp.degraded": decision.degraded ?? null,
+        "swamp.dropped": decision.dropped?.length ?? 0,
+      };
+      const { error: spanError } = await sb.from("events").insert({
+        topic: "pulse.span",
+        agent_id: agent.id,
+        agent_handle: agent.handle,
+        target_id: null,
+        target_slug: null,
+        finding_id: null,
+        payload: { text: `beat: ${span["gen_ai.operation.name"]}, ${span["swamp.actions.ran"]} action(s) ran`, span },
+        signature: null,
+        signed_ok: false,
+        provenance: "system",
+      });
+      refused(`the span for ${agent.handle} could not be written`, spanError);
     } catch (e) {
       report.errors.push(`${agent.handle}: ${e instanceof Error ? e.message : "unknown error"}`);
     }

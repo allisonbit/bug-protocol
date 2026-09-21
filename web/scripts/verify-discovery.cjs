@@ -588,6 +588,85 @@ async function checkSignatures() {
   }
 }
 
+/**
+ * The SEP-1649 Server Card. Shape, CORS, and signature.
+ *
+ * MCP Server Cards (SEP-1649) are the MCP ecosystem's answer to "what is here
+ * before I connect": a .well-known document a client can fetch, validate against
+ * a pinned schema, and cache. The card went to that shape, so the checks follow
+ * the spec's own MUSTs: the schema pin, the serverInfo block, the transport, the
+ * CORS headers browser discovery requires, and — when this deployment carries a
+ * signing key — the same detached JWS every other discovery document carries.
+ */
+async function checkServerCard() {
+  console.log("\n== The MCP Server Card (SEP-1649) ==");
+
+  const r = await get("/.well-known/mcp.json");
+  if (r.status !== 200) {
+    bad("/.well-known/mcp.json answers", String(r.status));
+    return;
+  }
+  check("/.well-known/mcp.json answers 200", true);
+
+  let card;
+  try {
+    card = JSON.parse(r.text);
+  } catch (e) {
+    bad("the card parses as JSON", e.message);
+    return;
+  }
+
+  check("the card pins the SEP-1649 schema", card.$schema === "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json", card.$schema);
+  check("the card carries version 1.0", card.version === "1.0", card.version);
+  check("the card names the protocol version it serves", typeof card.protocolVersion === "string" && card.protocolVersion.length > 0, card.protocolVersion);
+
+  const si = card.serverInfo ?? {};
+  check("serverInfo carries name, title and version", typeof si.name === "string" && si.name.length > 0 && typeof si.title === "string" && typeof si.version === "string", si.name);
+  check("serverInfo.name matches the registry listing", si.name === "world.swampai/swamp", si.name);
+
+  const t = card.transport ?? {};
+  check("the transport is streamable-http", t.type === "streamable-http", t.type);
+  const endpointOk = (typeof t.endpoint === "string" && t.endpoint.endsWith("/api/mcp")) || (typeof t.url === "string" && t.url.endsWith("/api/mcp"));
+  check("the transport points at /api/mcp", endpointOk, t.url ?? t.endpoint);
+
+  check("the primitives are dynamic or listed", card.tools === "dynamic" || Array.isArray(card.tools), typeof card.tools);
+  check("reads need no credential", card.authentication && card.authentication.required === false, JSON.stringify(card.authentication ?? {}));
+
+  const cors = r.headers.get("access-control-allow-origin");
+  check("CORS allows browser discovery (SEP-1649 MUST)", cors === "*", cors ?? "absent");
+
+  // The signature, when the deployment has a key. Unsigned is a note, not a
+  // failure: fresh checkouts are unsigned, production is not, the same rule
+  // the registry proof follows.
+  const jws = r.headers.get("x-swamp-signature");
+  if (!jws) {
+    const jwksProbe = await get("/.well-known/jwks.json");
+    if (jwksProbe.status !== 200) {
+      console.log("note  the card is unsigned: no signing key configured on this deployment.");
+      return;
+    }
+    bad("the card carries a signature header", "a key is configured but x-swamp-signature is missing");
+    return;
+  }
+  try {
+    const jwks = await get("/.well-known/jwks.json");
+    const jwksDoc = JSON.parse(jwks.text);
+    const key = (jwksDoc.keys ?? []).find((k) => k.kty === "OKP" && k.crv === "Ed25519");
+    const crypto = require("node:crypto");
+    const [h64, , s64] = jws.split(".");
+    const header = JSON.parse(Buffer.from(h64, "base64url").toString("utf8"));
+    const digestOk = header.digest && header.digest["sha-256"] === crypto.createHash("sha256").update(r.text, "utf8").digest("base64url");
+    const rawB64 = key.x.replace(/-/g, "+").replace(/_/g, "/") + "==";
+    const der = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from(rawB64, "base64")]);
+    const keyObj = crypto.createPublicKey({ key: der, format: "der", type: "spki" });
+    const sigOk = crypto.verify(null, Buffer.from(h64, "ascii"), keyObj, Buffer.from(s64, "base64url"));
+    check("the card signature binds the served bytes", !!digestOk);
+    check("the card signature verifies against the JWKS", sigOk);
+  } catch (e) {
+    bad("the card signature parses", e.message);
+  }
+}
+
 (async () => {
   console.log(`verify-discovery: ${base}`);
   await walkConventions();
@@ -596,6 +675,7 @@ async function checkSignatures() {
   await checkRegistry();
   await checkRegistryProof();
   await checkSignatures();
+  await checkServerCard();
   console.log(`\n${passed} passed, ${failed} failed.`);
   if (failed > 0) process.exitCode = 1;
 })();

@@ -289,12 +289,22 @@ function stable(w) {
     // a building that was not yet raised is not in the past, and a storey that had
     // not been earned is not in the past either. This is the check that keeps the
     // city from being a skyline generated to look busy.
+    //
+    // Halls are the one exception, and the reason is the fold's bounded event
+    // window rather than any asymmetry in the drawing: a hall is as tall as the
+    // agents who have actually spoken in its convening, and that membership is
+    // read from the newest N events. As the live log grows, an old convening's
+    // speak events slide out of the window and its hall fades, so hall storeys
+    // are not monotone in the log by design. Every window-independent quantity
+    // stays strict here: the building count, the frontier ring, and the storeys
+    // of everything that is not a hall.
+    const storeysOf = (w, skip) => (w.structures || []).filter((x) => x.kind !== skip).reduce((n, x) => n + x.floors, 0);
     check(
       `the town at seq ${mid} is no larger and no further out than it is now`,
       (atMid.city?.buildings ?? 0) <= (city.buildings ?? 0) &&
-        (atMid.city?.storeys ?? 0) <= (city.storeys ?? 0) &&
+        storeysOf(atMid, "hall") <= storeysOf(w, "hall") &&
         (atMid.city?.phase ?? 0) <= (city.phase ?? 0),
-      `${atMid.city?.buildings}/${atMid.city?.storeys}/ring${atMid.city?.phase} at ${mid} vs ${city.buildings}/${city.storeys}/ring${city.phase} now`,
+      `${atMid.city?.buildings}/${storeysOf(atMid, "hall")}/ring${atMid.city?.phase} at ${mid} vs ${city.buildings}/${storeysOf(w, "hall")}/ring${city.phase} now`,
     );
   }
 

@@ -181,7 +181,15 @@ export type EventTopic =
   | "a2a.task.accepted"
   | "a2a.task.completed"
   | "a2a.task.failed"
-  | "a2a.message";
+  | "a2a.message"
+  // The runtime's own heartbeat, structured the way OpenTelemetry's GenAI
+  // semantic conventions name agent work: one event per agent per beat, with
+  // the observe-decide-act cycle as a parent span and the model call, when one
+  // happened, as a child with the conventions' attribute names. Emitted by the
+  // runtime, not by an agent, so it is the one voice on this bus that is nobody's
+  // resident. A reader can turn these into real OTel spans losslessly, because
+  // the field names ARE the conventions' names.
+  | "pulse.span";
 
 export type Agent = {
   id: string;

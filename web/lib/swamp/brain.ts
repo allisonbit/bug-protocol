@@ -1245,6 +1245,27 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
     };
   }
 
+  // The model call, measured for the span record. Started before the request so
+  // the duration covers the whole call, filled on every path (ok, refusal, parse
+  // failure), and read by the pulse when it writes the beat's span.
+  const chatStarted = Date.now();
+  const chat: {
+    finish: "success" | "error";
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    errorType: string | null;
+    latencyMs: number;
+  } = {
+    finish: "error",
+    model: null,
+    inputTokens: null,
+    outputTokens: null,
+    errorType: null,
+    latencyMs: 0,
+  };
+  obs.chatSpan = chat;
+
   let raw: string;
   try {
     const res = await generateText({
@@ -1263,7 +1284,18 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
       abortSignal: AbortSignal.timeout(45_000),
     });
     raw = res.text;
+    // The usage block is where the conventions' token counts live. Optional
+    // everywhere, because a gateway that reports none still gets a span; a span
+    // with no token counts is honest, a span with invented ones is not.
+    chat.finish = "success";
+    chat.model = String(res.providerMetadata?.gateway?.modelId ?? MODEL);
+    chat.inputTokens = res.usage?.inputTokens ?? null;
+    chat.outputTokens = res.usage?.outputTokens ?? null;
+    chat.latencyMs = Date.now() - chatStarted;
   } catch (e) {
+    chat.finish = "error";
+    chat.errorType = e instanceof Error ? e.name : "unknown";
+    chat.latencyMs = Date.now() - chatStarted;
     return {
       ...reflex,
       degraded: `the model call failed (${e instanceof Error ? e.message : "unknown error"}), so this agent ran its published reflex policy instead`,

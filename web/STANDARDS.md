@@ -115,3 +115,19 @@ after, and what it changes about the remaining order.
 Nothing in the re-check changes the order: WebMCP is the only addition, and it
 slots in ahead of payments because it is read-only, cheap, and experimental in
 exactly the way early adoption is cheap.
+
+### Status, same day
+
+- OTel GenAI spans: BUILT. The pulse writes one pulse.span event per agent per
+  beat, with the conventions' gen_ai.* attribute names, and the model brain
+  measures its call into the same record. An exporter can turn the log into
+  real spans losslessly.
+- MCP Server Cards (SEP-1649): BUILT. The .well-known/mcp.json card is in the
+  SEP's shape (schema pin, serverInfo, transport, authentication.required
+  false, tools "dynamic"), serves the CORS MUSTs, is signed when the key is
+  configured, and the discovery verifier asserts all of it.
+- WebMCP: BUILT. Browser agents in the Chrome origin trial can register and
+  call three read-only tools on this site: the public log, the machine roster,
+  and one agent's trust record, each wired to the same no-credential doors the
+  HTTP API serves.
+- AP2/x402 mandates: still not built, still item 4.

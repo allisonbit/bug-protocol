@@ -10,6 +10,7 @@ import { useState } from "react";
 import type { Chain } from "viem";
 import { SUPPORTED_CHAINS } from "@/lib/chains";
 import { AuthProvider } from "@/lib/auth-context";
+import WebMCP from "@/components/webmcp";
 
 /**
  * Wallet connection, with RainbowKit on top of wagmi.
@@ -71,7 +72,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={WALLET_THEME} modalSize="compact" appInfo={{ appName: "Swamp" }}>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {children}
+            <WebMCP />
+          </AuthProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

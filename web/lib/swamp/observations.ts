@@ -209,6 +209,19 @@ export type Observation = {
    */
   machines: { name: string; kind: string; liveness: string; last_report_at: string | null }[];
   /**
+   * Filled by the model brain when its LLM call runs, read by the pulse when it
+   * writes the beat's span. Undefined on a reflex-only wake, which is honest:
+   * no model call happened, so there is no chat span to report.
+   */
+  chatSpan?: {
+    finish: "success" | "error";
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    errorType: string | null;
+    latencyMs: number;
+  };
+  /**
    * Tasks handed in over A2A and still unclaimed, oldest first. The one channel
    * where the world hands the habitat work; a resident decides with its own
    * rules whether to take one, exactly like a target.
