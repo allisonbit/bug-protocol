@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { randomToken, sha256Hex } from "@/lib/agents/crypto";
-import { getFlags } from "@/lib/agents/auth";
 import { appendEvent } from "@/lib/agents/ingest";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
@@ -14,6 +13,8 @@ import {
   parseReport,
   readingSummary,
 } from "@/lib/machines";
+import { checkReport } from "@/lib/machines/identity";
+import { keysFor, machineForToken, machineToken } from "@/lib/machines/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,32 +60,9 @@ function fail(code: string, message: string, status: number, details?: Record<st
   );
 }
 
-/** Pull the machine token from a request: `Authorization: Bearer <t>` or `X-Machine-Token`. */
-function machineToken(req: Request): string | null {
-  const h = req.headers.get("authorization") ?? "";
-  if (h.toLowerCase().startsWith("bearer ")) return h.slice(7).trim() || null;
-  const x = req.headers.get("x-machine-token");
-  return x?.trim() || null;
-}
-
-/** Resolve a raw token to its live machine, honouring the kill switch. */
-async function machineForToken(token: string | null): Promise<
-  { ok: true; machine: Machine; sb: NonNullable<ReturnType<typeof supabaseAdmin>> } | { ok: false; status: number; code: string; message: string }
-> {
-  const sb = supabaseAdmin();
-  if (!sb) return { ok: false, status: 503, code: "BACKEND_UNCONFIGURED", message: "The swamp backend isn't configured on this deployment yet." };
-  if (!token) return { ok: false, status: 401, code: "NO_TOKEN", message: "Missing machine token. Send it as X-Machine-Token." };
-  const flags = await getFlags(sb);
-  if (flags.killswitch) return { ok: false, status: 503, code: "KILLSWITCH", message: "The swamp is paused by the platform kill switch. Nothing is accepting writes." };
-
-  const { data: secret } = await sb.from("machine_secrets").select("machine_id").eq("api_token_hash", sha256Hex(token)).maybeSingle();
-  if (!secret) return { ok: false, status: 401, code: "BAD_TOKEN", message: "Unrecognized machine token." };
-  const { data: machine } = await sb.from("machines").select("*").eq("id", (secret as { machine_id: string }).machine_id).maybeSingle();
-  if (!machine) return { ok: false, status: 401, code: "BAD_TOKEN", message: "Token is not linked to a machine." };
-  const m = machine as Machine;
-  if (m.status === "retired") return { ok: false, status: 403, code: "RETIRED", message: "This machine has been retired by its owner." };
-  return { ok: true, machine: m, sb };
-}
+// The token and kill-switch check lives in `lib/machines/auth.ts` now that more than
+// one device door needs it. Two copies of a token check is two places for one of them
+// to drift, and the drift would be silent.
 
 // ---- POST: register ---------------------------------------------------------
 
@@ -103,7 +81,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") return fail("JSON_REQUIRED", "Send a JSON body with a `name` and a `kind`.", 400, { example: { name: "greenhouse-1", kind: "sensor", description: "roof temperature and humidity" } });
+  if (!body || typeof body !== "object")    return fail("JSON_REQUIRED", "Send a JSON body with a `name` and a `kind`.", 400, {
+      example: { name: "greenhouse-1", kind: "sensor", description: "roof temperature and humidity", hardware: "esp32-s3" },
+      hardware: "Optional, and worth setting: the exact board this runs on, matched literally against a firmware release's `hardware` when the fleet offers an update.",
+    });
 
   const nameCheck = checkMachineName((body as Record<string, unknown>).name);
   if (!nameCheck.ok) return fail("INVALID_NAME", nameCheck.error, 400);
@@ -122,6 +103,11 @@ export async function POST(req: Request) {
   const description = clean((body as Record<string, unknown>).description, 300);
   const location = clean((body as Record<string, unknown>).location, 200);
   const firmware = clean((body as Record<string, unknown>).firmware, 120);
+  // The board or body, in the maker's own words. It is matched literally against a
+  // release's `hardware` when the fleet offers firmware, so it is recorded at
+  // registration rather than discovered at rollout time: a robot whose board we do
+  // not know cannot be told which image is for it.
+  const hardware = clean((body as Record<string, unknown>).hardware, 120);
 
   // Writes go through the service role, not the session client: these tables
   // take public READ policies only, so the session-scoped key (anon by RLS)
@@ -135,7 +121,7 @@ export async function POST(req: Request) {
   const token = randomToken();
   const { data: machine, error } = await admin
     .from("machines")
-    .insert({ name: nameCheck.name, kind, description, location, firmware, owner: user.id })
+    .insert({ name: nameCheck.name, kind, description, location, firmware, hardware, owner: user.id })
     .select("*")
     .single();
   if (error) {
@@ -188,6 +174,8 @@ export async function POST(req: Request) {
         report: `PUT ${SITE_URL}/api/machines with X-Machine-Token: <token> and a body { readings: [...] }. Telemetry needs metric+value+unit; events need state or message; alerts need a message.`,
         commands: "The same PUT returns any pending commands. Acknowledge one with PATCH /api/machines { id, ok } from the machine.",
         cadence: "At most one report every 5 seconds; batch readings (up to " + MAX_READINGS_PER_REPORT + " per report) rather than sending one per request.",
+        identity: `PUT ${SITE_URL}/api/machines/keys with the same token and { public_key } registers an Ed25519 key, after which reports may be signed and the record says which were. The DID document is at ${SITE_URL}/api/machines/${m.name}/did.json.`,
+        firmware: `GET ${SITE_URL}/api/machines/releases?machine=${m.name} answers what firmware this machine is offered, with the SHA-256 it must check before flashing, and POST ${SITE_URL}/api/machines/releases/report says what actually happened.`,
         public_page: `${SITE_URL}/machines`,
       },
     },
@@ -206,6 +194,58 @@ export async function PUT(req: Request) {
   const parsed = parseReport(body);
   if (!parsed.ok) return fail("BAD_REPORT", parsed.error, 400, parsed.details);
   const { readings, alerts, events } = parsed.report;
+
+  // THE SIGNATURE, CHECKED BEFORE ANYTHING IS WRITTEN.
+  //
+  // A signed report is verified against the key bound to this machine, and the verdict
+  // is recorded on every reading it produced. An unsigned report is still accepted and
+  // stored with the reason, because an unsigned reading is not the same thing as a bad
+  // one and a record that dropped the unsigned half would flatter itself. A report that
+  // names a signature we cannot judge at all (a malformed one, a missing nonce) is
+  // refused outright: writing those rows would imply we checked something.
+  const rawSignature = (body as Record<string, unknown> | null)?.signature;
+  const signatureInput =
+    rawSignature && typeof rawSignature === "object"
+      ? (rawSignature as { kid?: unknown; signature?: unknown; nonce?: unknown; ts?: unknown })
+      : (body as Record<string, unknown> | null);
+  const keys = await keysFor(sb, machine.id);
+  const verdict = checkReport({
+    machine: machine.name,
+    // The bytes the device signed are the readings AS SENT, canonicalised by the same
+    // function the device uses. Re-serialising our parsed rows would change the message
+    // and every signature would fail.
+    readings: (body as Record<string, unknown> | null)?.readings,
+    signature: signatureInput,
+    keys,
+    nowMs: Date.now(),
+  });
+  if (!verdict.ok) return fail(verdict.code, verdict.reason, 400);
+
+  // The replay guard, before the write rather than after: the unique index on
+  // (machine_id, digest) refuses the second copy of the same signed bytes. A refusal is
+  // not an error here, it is the guard working, and it says which report it saw.
+  if (verdict.signed) {
+    const { error: receiptErr } = await sb.from("machine_report_receipts").insert({
+      machine_id: machine.id,
+      machine_name: machine.name,
+      digest: verdict.digest,
+      kid: verdict.kid,
+      signed_ok: true,
+      signed_reason: null,
+      readings_count: readings.length,
+    });
+    if (receiptErr) {
+      if (receiptErr.code === "23505") {
+        return fail(
+          "REPLAYED_REPORT",
+          `These exact signed bytes have already been reported by ${machine.name}: the digest ${verdict.digest.slice(0, 16)} is on the record. Change the nonce and the timestamp and the next one is a new report.`,
+          409,
+          { digest: verdict.digest, kid: verdict.kid },
+        );
+      }
+      return fail("REPORT_REFUSED", receiptErr.message, 500);
+    }
+  }
 
   // Coarse flood bound: a machine may report at most once per interval. A
   // sensor that wants faster cadence batches into one report instead, which
@@ -232,6 +272,11 @@ export async function PUT(req: Request) {
     state: r.state,
     message: r.message,
     payload: r.payload,
+    signature: verdict.signed ? String((signatureInput as { signature?: unknown }).signature ?? "").slice(0, 200) : null,
+    signed_ok: verdict.signed,
+    signed_reason: verdict.signed ? null : verdict.reason,
+    report_digest: verdict.digest,
+    kid: verdict.signed ? verdict.kid : null,
   }));
   const { data: inserted, error } = await sb.from("machine_readings").insert(rows).select("id, created_at");
   if (error) return fail("REPORT_REFUSED", error.message, 500);
@@ -269,6 +314,11 @@ export async function PUT(req: Request) {
           count: readings.length,
           readings: parts,
           alert: alerts[0]?.message ?? null,
+          // Whether these bytes carried a verified signature, on the bus row as well as
+          // on the readings, so the feed and the record cannot disagree about it.
+          signed: verdict.signed,
+          kid: verdict.signed ? verdict.kid : null,
+          digest: verdict.digest,
         },
         signature: null,
         signed_ok: false,
@@ -322,6 +372,11 @@ export async function PUT(req: Request) {
       accepted: inserted?.length ?? 0,
       commands: cmds,
       next_report_after_ms: REPORT_MIN_INTERVAL_MS,
+      // The signature verdict travels back, so a device that is misconfigured finds out
+      // on the report it sent rather than by reading a page later.
+      signature: verdict.signed
+        ? { signed: true, kid: verdict.kid, digest: verdict.digest }
+        : { signed: false, reason: verdict.reason },
     },
     { headers: { "cache-control": "no-store" } },
   );

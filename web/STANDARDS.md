@@ -316,3 +316,111 @@ doing the hard way: one very long instructions string, loaded at connect time.
   credential, or one of the store paths that only appear when something is opened.
 - The ruleset version is part of the record: engine swamp-audit/2 reads the same bytes as
   swamp-audit/1 and finds nothing, and both rows stand on /security.
+
+## September 2026: the physical layer
+
+Researched the same week, against primary sources: what real robots need that a
+connected-sensor page does not provide. The findings are in the sections below, and the
+sentence that governs all of them is this one. This platform never claims a safety
+function, never certifies a machine, and never puts itself in the loop that could hurt
+somebody. It keeps the record, and the record is what a robot fleet does not have.
+
+### Machine identity: a key the platform never sees
+
+- A key per device, registered by the device: BUILT. `PUT /api/machines/keys` takes the
+  PUBLIC half of an Ed25519 key the device generated itself, in hex or base64, and REFUSES
+  a request with no public key. Minting one here and handing back a private key was the
+  first shape this door had, and it was wrong: a key that has been through the server is a
+  key the server could have signed with, and every verification would have been theatre.
+- Signed reports: BUILT. The canonical message is six prefixed lines with the readings in
+  sorted-key JSON, published in the guide and built identically by the JS, Python and
+  ESP32 clients. `scripts/robot-sim.cjs` signs with a real key against a live door.
+- Unsigned is a first class value, not a gap: an unsigned report is STORED with its reason
+  on every reading. A record that silently dropped the unsigned half would flatter itself.
+- Replay is refused by the store, not by a code path: a signed report writes a receipt
+  keyed on the SHA-256 of the canonical message and a unique index refuses the second copy.
+- Rotated keys verify inside a fifteen minute grace window measured against the DEVICE's
+  timestamp, because a device that rotated mid-report must not have that report thrown
+  away. Revoked keys verify nothing, whatever the timestamp says.
+- A DID document per machine at /api/machines/<name>/did.json, and the fleet's keys at
+  /.well-known/machines.json, so a third party resolves a device without reading a page.
+
+### Firmware as a record, not an upload
+
+- A release is a ROW: artifact URL, SHA-256, size, notes, publisher and a REQUIRED SBOM,
+  checked for CycloneDX or SPDX shape at publish time, because that is the only moment a
+  publisher still has one to hand. The image itself is served by the maker, and the device
+  fetches it and checks the digest itself. That check is the one thing that survives a
+  compromised download path.
+- A release is immutable: re-publishing a version on a channel is refused, because a
+  device that already took those bytes must stay able to say which ones they were. A yank
+  keeps the row and stops the offer.
+- A rollout is a percentage and a canary list applied to a deterministically sorted fleet,
+  so the same inputs always select the same set. A rollout that selected differently on
+  two consecutive calls would offer a release to everybody and call it a canary.
+- Offered is not installed, and the difference is a per-machine target row. The device
+  reports `installed` or `failed` and there is no third answer, because a fleet told
+  "maybe" cannot act.
+- A failed install PINS the machine back to what it was running, in the same call, with
+  the device's note as the reason. A robot that keeps trying a release that does not boot
+  is a robot in a loop, and the pin is public, so lagging behind reads as a decision.
+- A pin is a decision with a required reason, and rollouts skip it rather than around it.
+- The ESP32 sketch now generates its key on the device, keeps the seed in NVS, signs each
+  minute report, asks what firmware is offered, downloads the artifact, hashes the bytes
+  that actually arrived, and flashes ONLY on a matching digest. It reports the outcome on
+  the boot after the update, which is the only honest moment to say "installed". The
+  firmware half has NOT been compiled here: this repository has no ESP32 toolchain, and
+  the file says so at the top. The platform half is verified end to end by the simulator.
+
+### The vulnerability record and its clock
+
+- An advisory carries the instant awareness began, which is the one fact only a maker can
+  supply. Every duty is DERIVED from it: early warning at 24 hours, notification at 72,
+  final report at 14 days, and 30 days for a severe incident. A duty somebody has to
+  remember to create is a duty somebody forgets.
+- A duty cannot be marked met with a sentence. Evidence must be a citation a reader can
+  follow: a URL, or a typed row reference (`event:`, `release:`, `advisory:` and similar).
+  `verify-machine-lifecycle.cjs` asserts both halves, including that a plausible sentence
+  is refused.
+- A fix duty additionally needs the version it landed in, and the advisory has to be
+  marked fixed first, so the two rows cannot disagree.
+- This is a clock over facts a maker entered. It is not legal advice, not a certification,
+  and not a statement about whether a product is in scope of the Regulation, and every
+  surface that renders it says that in those words. A page that implied compliance would
+  be worse than no page, because somebody might rely on it.
+
+### What the swarm can see, and what it may not touch
+
+- Three read-only MCP tools: `read_fleet`, `read_firmware_releases` and
+  `read_vulnerability_record`. An agent coordinating hardware needs the robot's row,
+  mid-task, and making it fetch a page is making it guess.
+- Publishing, staging and reporting are NOT tools. An image offered to the wrong board is
+  a robot that does not boot, so those stay behind a signed-in door where a person is
+  present. An agent may read the fleet and may not move it.
+
+### A machine's history leaves as a log file, not as a scrape
+
+- `GET /api/machines/<name>/mcap` serves the readings as MCAP, the container the robotics
+  world reads, because a web page is not a container. Channels follow the ROS 2 namespace
+  shape (`/machine/<name>/telemetry`, `/events`, `/alerts`), telemetry, events and alerts are
+  separate channels, and timestamps are the machine's own rather than the platform's.
+- The response carries the SHA-256 of the exact bytes it served, in `x-mcap-sha256` and in the
+  JSON twin at `?meta=1`. A file kept today can be proved later against the header it arrived
+  with. The digest is of the file, not of the rows, so it changes as the machine reports.
+- A row whose timestamp cannot be parsed is dropped and counted rather than placed at the
+  epoch, because a message with a fake time puts a spike in somebody's chart. The count is in
+  the file's metadata and in the manifest.
+- The origin stamped into the file is the deployment's canonical origin, never the host a
+  request happened to arrive through. The digest covers those bytes, so two doors describing
+  the same rows must produce the same file rather than two files differing by a hostname.
+  `probe-mcap.cjs` fetches the URL the MCP tool returns and hashes what actually arrived.
+- `read_machine_log` describes the file over MCP without downloading it, and is joined to the
+  HTTP door as one capability in the actions manifest.
+
+### The policy version, and the drift the suite was not catching
+
+- POLICY_VERSION is 17: the audit rules r26 and r27 landed under v16 without a bump, which
+  is exactly the drift the published hash exists to prevent, so v17 names that rule set.
+- The verifier that was supposed to catch it pinned one version number and went stale at
+  v16. It now carries a table of version to rule count, so adding a rule without bumping
+  the version fails the suite instead of shipping.

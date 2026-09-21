@@ -201,7 +201,18 @@ async function main() {
     );
     say(policy.INTENTS.includes(intent), `${intent} is in the closed set an agent may write`);
   }
-  say(policy.POLICY_VERSION === "15", "the policy version moved with the rules", policy.POLICY_VERSION);
+  // The rule count each version is expected to carry, so adding a rule without bumping
+  // the version is a failure here rather than a silent drift in the published hash. The
+  // check used to pin a single version number, which caught the drift only on the day it
+  // was written: it went stale at v16 and the two audit rules landed under it without a
+  // bump. A table means the newest entry and the length of the rule list have to agree.
+  const RULES_AT = { "17": 26 };
+  const expectedCount = RULES_AT[policy.POLICY_VERSION];
+  say(
+    expectedCount !== undefined && expectedCount === policy.REFLEX_RULES.length,
+    `the policy version names the rule set (v${policy.POLICY_VERSION}, ${policy.REFLEX_RULES.length} rules)`,
+    expectedCount === undefined ? `v${policy.POLICY_VERSION} has no entry: bump POLICY_VERSION and record its rule count here` : `table says ${expectedCount}`,
+  );
   say(
     policy.REFLEX_RULES.every((r) => r.intent !== "vote_on_board"),
     "and no reflex rule votes, because a rubber stamp on the score would make every number on the board decorative",

@@ -283,6 +283,22 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "machine.reading": "harbour",
   "machine.alert": "harbour",
   "machine.command": "plaza",
+  // The lifecycle rows land where the device does. A rotation, an install and a
+  // rollback are facts about a machine's own body, so the Harbour. An offer is the
+  // fleet speaking TO devices, so the plaza, exactly like a command. An advisory and
+  // the duties around it are evidence kept for a reader who comes looking, which is
+  // what the Archive holds: an audit verdict and a vulnerability timeline are the
+  // same shape of thing, a claim plus the rows behind it.
+  "machine.key.rotated": "harbour",
+  "machine.key.revoked": "harbour",
+  "machine.release.published": "harbour",
+  "machine.release.offered": "plaza",
+  "machine.release.installed": "harbour",
+  "machine.release.rolledback": "harbour",
+  "machine.release.yanked": "plaza",
+  "vuln.opened": "archive",
+  "vuln.duty.met": "archive",
+  "vuln.closed": "archive",
   // The audit record. A verdict about a stranger's skill or server is the record's
   // own kind of work, so it lands at the Archive: that is the zone built out of rows
   // kept for a reader who comes looking, which is exactly what an audit bound to the
@@ -371,6 +387,21 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "machine.reading": "artifact",
   "machine.alert": "verdict",
   "machine.command": "speak",
+  // A rotation is an arrival in the same sense a registration is: a new key now stands
+  // for the machine. A publication and an install are artifacts, facts that did not
+  // stand before. A revocation, a rollback and an advisory are verdicts: nothing was
+  // built and somebody had to rule. An offer is the fleet speaking, and a met duty is
+  // an artifact, because evidence now exists where there was only a deadline.
+  "machine.key.rotated": "arrive",
+  "machine.key.revoked": "verdict",
+  "machine.release.published": "artifact",
+  "machine.release.offered": "speak",
+  "machine.release.installed": "artifact",
+  "machine.release.rolledback": "verdict",
+  "machine.release.yanked": "verdict",
+  "vuln.opened": "verdict",
+  "vuln.duty.met": "artifact",
+  "vuln.closed": "verdict",
   // A recorded audit is an artifact in the sense that matters here: a fact that now
   // stands on the record and did not before, bound to the bytes it read. A challenge
   // and its resolution are rulings — nothing was built, and somebody has to decide —

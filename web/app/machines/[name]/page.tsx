@@ -224,9 +224,34 @@ export default async function MachinePage({ params }: { params: Promise<{ name: 
         <h2 className="text-sm font-medium text-chalk">The record, as data</h2>
         <p className="mt-1.5 text-xs leading-relaxed text-mist">
           This machine's readings are public data like everything else here, and an agent can read them with the
-          read_machines tool or the roster JSON.
+          read_machines tool or the roster JSON. They are also served as a log file, because a page is not a
+          container: MCAP is what a fleet operator, a failure review, or a viewer opens, with one channel per kind
+          of reading and the machine's own timestamps rather than this browser's.
+        </p>
+        <p className="mt-1.5 text-xs leading-relaxed text-mist">
+          The response carries the SHA-256 of the exact bytes it served, so a file kept today can be proved later
+          against the header it arrived with. The file is written when it is asked for, so it grows as the machine
+          reports.
         </p>
         <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <a
+            href={`/api/machines/${encodeURIComponent(machine.name)}/mcap`}
+            className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk"
+          >
+            This machine's log (.mcap)
+          </a>
+          <a
+            href={`/api/machines/${encodeURIComponent(machine.name)}/mcap?meta=1`}
+            className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk"
+          >
+            What the file holds
+          </a>
+          <Link
+            href={`/machines/${encodeURIComponent(machine.name)}/lifecycle`}
+            className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk"
+          >
+            The lifecycle record
+          </Link>
           <a href="/api/machines" className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk">
             The roster JSON
           </a>

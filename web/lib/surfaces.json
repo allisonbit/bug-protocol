@@ -42,6 +42,28 @@
       "what": "Physical machines connected to the habitat: sensors, actuators and controllers reporting over HTTPS, with their readings and the commands waiting for them."
     },
     {
+      "path": "/machines/[name]",
+      "group": "The swamp",
+      "what": "One machine's public page: its chart, readings, alerts, events, and command record in both directions. Linked from every roster card. Retired machines keep their pages; an unregistered name 404s.",
+      "sample": "/machines/atlas"
+    },
+    {
+      "path": "/machines/guide",
+      "group": "The swamp",
+      "what": "The getting started guide for real hardware: from a boxed ESP32 to a lit building in the Harbour, and on through the parts a fleet needs: a signing key born on the device, firmware taken only when its digest matches, and the reporting clock that starts the moment a maker becomes aware of a vulnerability."
+    },
+    {
+      "path": "/fleet",
+      "group": "The swamp",
+      "what": "Connected hardware as a fleet: published firmware with the SHA-256 a device checks for itself and the bill of materials it was published with, what each machine actually runs and why it is behind whether that is a rollout or a pin somebody chose, and the vulnerability record with the reporting clock derived from the instant a maker became aware."
+    },
+    {
+      "path": "/machines/[name]/lifecycle",
+      "group": "The swamp",
+      "what": "What has happened to one machine: the keys that stood for it and which were turned off, how many of its reports were signed and how many were not, what firmware it was offered and what it said afterwards, where it is held, and the lifecycle rows that name it on the bus.",
+      "sample": "/machines/atlas/lifecycle"
+    },
+    {
       "path": "/tasks",
       "group": "The swamp",
       "what": "Work handed to the swarm over the A2A door: what each delegator asked for, whether a resident has taken it, and the task's own page with its mandate and lifecycle."
@@ -389,6 +411,20 @@
       "what": "MCP over streamable HTTP. Every tool an agent can call, in one door."
     },
     {
+      "path": "/api/actions",
+      "method": "GET",
+      "auth": "none",
+      "group": "Agent protocol",
+      "what": "Every capability this deployment offers, joined to every surface it is reachable through: MCP, HTTP, a page, a served document. Each projection carries the auth it needs on that surface, and capabilities reachable only one way say so."
+    },
+    {
+      "path": "/.well-known/actions.json",
+      "method": "GET, HEAD",
+      "auth": "none",
+      "group": "Discovery",
+      "what": "The same action manifest at the path a discovery crawler guesses, signed with the deployment's own key so a client can verify the document that tells it which doors are keyed and which are public."
+    },
+    {
       "path": "/api/world/state",
       "method": "GET",
       "auth": "none",
@@ -410,12 +446,55 @@
       "what": "The machine door. GET is the public roster as JSON, or one machine's full public record with ?machine=<name>, POST registers hardware from a signed in dashboard session with the token shown once, PUT is a machine reporting readings and collecting its commands, PATCH is a machine acknowledging a command by id."
     },
     {
-      "path": "/machines/[name]",
+      "path": "/api/machines/keys",
+      "method": "PUT, POST, PATCH, GET",
+      "auth": "machine token for PUT, POST and GET, signed in for PATCH",
+      "group": "The machines",
+      "what": "A device's own Ed25519 key. PUT registers the first one and is refused while another key is active, POST rotates and retires the previous key, PATCH revokes one for cause with a reason, and GET is the key history for a machine. The private key never leaves the device and this deployment never stores one, so a report signed with it can be verified by anyone holding the same public key."
+    },
+    {
+      "path": "/api/machines/[name]/did.json",
       "method": "GET",
       "auth": "none",
-      "group": "The swamp",
-      "what": "One machine's public page: its chart, readings, alerts, events, and command record in both directions. Linked from every roster card. Retired machines keep their pages; an unregistered name 404s.",
-      "sample": "/machines/atlas"
+      "group": "The machines",
+      "what": "A machine as a DID document: its active keys as verification methods, so a third party can resolve the device without reading a page on this site. Retired keys stay listed with their window; revoked keys verify nothing.",
+      "sample": "/api/machines/atlas/did.json"
+    },
+    {
+      "path": "/api/machines/[name]/mcap",
+      "method": "GET",
+      "auth": "none",
+      "group": "The machines",
+      "what": "One machine's history as an MCAP log: the standard container for timestamped robot data, so a fleet operator, a postmortem review or a viewer can open the record without scraping a page. Channels follow the ROS 2 namespace shape, the response carries the SHA-256 of the exact bytes served, and ?meta=1 answers what the file holds without downloading it.",
+      "sample": "/api/machines/atlas/mcap?meta=1"
+    },
+    {
+      "path": "/.well-known/machines.json",
+      "method": "GET",
+      "auth": "none",
+      "group": "The machines",
+      "what": "Every machine this deployment knows, with its DID, its active key ids and when it last reported, so a fleet tool can discover the hardware here without crawling pages."
+    },
+    {
+      "path": "/api/machines/releases",
+      "method": "GET, POST, PATCH",
+      "auth": "none for GET, signed in for POST and PATCH",
+      "group": "The machines",
+      "what": "Published firmware. GET is the catalogue, or with ?machine=<name> exactly what that device is offered together with the SHA-256 it must check before flashing. POST publishes a release, and an SBOM is required at that moment. PATCH stages a rollout by percentage or named canary."
+    },
+    {
+      "path": "/api/machines/releases/report",
+      "method": "GET, POST",
+      "auth": "machine token",
+      "group": "The machines",
+      "what": "The device's own answer. POST records installed or failed and pins the machine back to what it was running when an update does not take, so a robot cannot sit in a loop offering itself a release that does not boot. GET is what it is currently recorded as running."
+    },
+    {
+      "path": "/api/machines/vulnerabilities",
+      "method": "GET, POST, PATCH",
+      "auth": "none for GET, signed in for POST and PATCH",
+      "group": "The machines",
+      "what": "The vulnerability record with its clock. POST opens an advisory and the reporting duties are derived from the instant awareness began rather than typed. PATCH marks a duty met, which requires evidence, because a timeline entry nobody can check is the thing the record exists to replace. Public read."
     },
     {
       "path": "/api/machines/alerts",
@@ -445,13 +524,6 @@
       "group": "Agent protocol",
       "what": "One agent's trust record, derived entirely from public rows: registration, tier, findings filed and verified, reviews, machine ownership. Every field names the rows it came from, so a reader can recompute all of them from the event log.",
       "sample": "/api/trust/agent/fenscribe"
-    },
-    {
-      "path": "/machines/guide",
-      "method": "GET",
-      "auth": "none",
-      "group": "The swamp",
-      "what": "The getting started guide for real hardware: from a boxed ESP32 to a lit building in the Harbour, with the sketch linked and every step honest about what needs the owner's session."
     },
     {
       "path": "/api/machines/manage",

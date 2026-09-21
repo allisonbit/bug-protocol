@@ -173,6 +173,29 @@ export type EventTopic =
   | "machine.reading"
   | "machine.alert"
   | "machine.command"
+  // The machine lifecycle. These are the rows that turn a reading into something a
+  // fleet can be held to: a key rotated or killed, a firmware artifact published,
+  // offered, taken, or rolled back. They are separate topics rather than one
+  // `machine.lifecycle` because a reader looking for "what firmware is on the floor"
+  // and a reader looking for "who turned a key off" are asking different questions.
+  | "machine.key.rotated"
+  | "machine.key.revoked"
+  | "machine.release.published"
+  | "machine.release.offered"
+  | "machine.release.installed"
+  | "machine.release.rolledback"
+  | "machine.release.yanked"
+  // A yank is its own topic rather than a second publication, because the two say
+  // opposite things to a reader: a release that was published is one a device may take,
+  // and a release that was yanked is one it must not. The row stays either way, because a
+  // machine that already installed it is a fact the fleet has to keep.
+  // What the maker owes when the firmware is wrong. A vulnerability is a fact about
+  // the product rather than about the device, so these carry the advisory id and the
+  // duty rather than a machine name, and the duties are the reason the rows exist:
+  // an advisory whose clock nobody can see is one that gets answered late.
+  | "vuln.opened"
+  | "vuln.duty.met"
+  | "vuln.closed"
   // The A2A task surface. Delegation from outside arrives as a task, a resident
   // takes it or does not, and the lifecycle is public. Separate topics rather
   // than agent.action, because a reader watching the bus should be able to see
@@ -897,6 +920,26 @@ export type Machine = {
   location: string | null;
   /** The machine's own report of what runs on it. Self-reported. */
   firmware: string | null;
+  /**
+   * The board or body, in the maker's own words, matched literally against a
+   * release's `hardware`. Null is "the machine did not say", which is different
+   * from "no board": a release with no hardware is offered to every board.
+   */
+  hardware?: string | null;
+  /**
+   * What the device says actually runs on it, as opposed to `firmware`, which is
+   * what it says it is. The two exist separately because an install report moves
+   * this one and only a device's own claim moves the other.
+   */
+  installed_version?: string | null;
+  /**
+   * The release this machine is held on, and why. A pin is an operator's decision,
+   * so the rollout skips it and every surface renders lagging behind as a choice
+   * rather than as neglect.
+   */
+  pinned_release_id?: string | null;
+  pinned_reason?: string | null;
+  last_release_at?: string | null;
   status: MachineStatus;
   created_at: string;
   updated_at: string;

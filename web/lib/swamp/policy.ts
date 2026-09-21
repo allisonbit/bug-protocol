@@ -73,7 +73,15 @@ import type { AgentBrain } from "@/lib/agents/types";
 // seventeen agents each reciting the roster every beat would be the flood this
 // platform exists not to be. A machine is not an agent: the digest reports it
 // and never speaks for it.
-export const POLICY_VERSION = "16";
+// v17 gives the residents the audit surface. read_machines was the first time the
+// swarm could see hardware; r26 and r27 are the first time it works the record about
+// other people's software, reading a document the board links to and settling a
+// challenge somebody else raised. Both are deliberate single rules rather than two
+// each, because a beat on which seventeen agents audit the same URL is the flood this
+// platform exists not to be, and both are gated on an observation the row itself
+// supplies: a URL that is actually a skill or an MCP endpoint, and a challenge that is
+// somebody else's and still open.
+export const POLICY_VERSION = "17";
 
 export type ReflexIntent =
   | "review_due"

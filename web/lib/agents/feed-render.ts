@@ -122,6 +122,25 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "machine.reading": { label: "machine", dot: "bg-cyan", tone: "text-chalk", mono: true },
   "machine.alert": { label: "machine alert", dot: "bg-warn", tone: "text-warn" },
   "machine.command": { label: "command", dot: "bg-bug-dim", tone: "text-chalk", mono: true },
+  // The lifecycle rows. A rotation and a publication are ordinary work and read
+  // neutral; an install reads neutral too because a device taking an update is
+  // routine. The three that take colour are the ones that changed something a reader
+  // should look at: a revoked key, a rolled back release, and an advisory whose clock
+  // is running. A met duty takes the lime dot, because a duty met with evidence is
+  // the one good outcome on this list.
+  "machine.key.rotated": { label: "key rotated", dot: "bg-cyan", tone: "text-chalk" },
+  "machine.key.revoked": { label: "key revoked", dot: "bg-warn", tone: "text-warn" },
+  "machine.release.published": { label: "firmware published", dot: "bg-cyan", tone: "text-chalk" },
+  "machine.release.offered": { label: "rollout", dot: "bg-mist", tone: "text-mist" },
+  "machine.release.installed": { label: "firmware installed", dot: "bg-cyan", tone: "text-chalk" },
+  "machine.release.rolledback": { label: "rolled back", dot: "bg-warn", tone: "text-warn" },
+  // A yank is the fleet saying stop, so it takes the warn dot rather than the neutral
+  // one a publication gets. It is deliberately not styled like a failure: a yank is a
+  // decision somebody made, and a rollback is something a device did.
+  "machine.release.yanked": { label: "release yanked", dot: "bg-warn", tone: "text-warn" },
+  "vuln.opened": { label: "advisory", dot: "bg-amber", tone: "text-amber" },
+  "vuln.duty.met": { label: "duty met", dot: "bg-lime", tone: "text-bug" },
+  "vuln.closed": { label: "advisory closed", dot: "bg-lime", tone: "text-bug" },
   // The audit record. A recorded verdict reads as work rather than as an alarm: the
   // engine found what it found and wrote it down, and the dot stays neutral because
   // most audits are ordinary documents. A challenge takes the amber dot, because it
@@ -352,6 +371,31 @@ export function summarize(e: SwampEvent): string {
       if (direction === "acknowledged") return str(p.text) || "a machine acknowledged a command";
       return str(p.text) || "a command was issued to a machine";
     }
+    // ---- the machine lifecycle -----------------------------------------------
+    // Each route sets a prebuilt `text` for these, and the fallbacks read the same
+    // fields so a row written by an older route still renders as a sentence rather
+    // than as a topic name. The advisory rows carry no machine, because an advisory
+    // is a fact about a product and the same fix can land on a whole fleet.
+    case "machine.key.rotated":
+      return str(p.text) || `${str(p.machine, 60) || "a machine"} rotated its signing key`;
+    case "machine.key.revoked":
+      return str(p.text) || `${str(p.machine, 60) || "a machine"} had key ${str(p.kid, 20) || ""} revoked`;
+    case "machine.release.published":
+      return str(p.text) || `${str(p.release, 60) || "a release"} was published`;
+    case "machine.release.offered":
+      return str(p.text) || `${str(p.release, 60) || "a release"} was offered to ${Number(p.count ?? 0)} machine(s)`;
+    case "machine.release.installed":
+      return str(p.text) || `${str(p.machine, 60) || "a machine"} installed ${str(p.release, 60) || "a release"}`;
+    case "machine.release.rolledback":
+      return str(p.text) || `${str(p.machine, 60) || "a machine"} rolled back ${str(p.release, 60) || "a release"}`;
+    case "machine.release.yanked":
+      return str(p.text) || `${str(p.release, 60) || "a release"} was yanked and is offered to nobody`;
+    case "vuln.opened":
+      return str(p.text) || `${str(p.advisory, 40) || "an advisory"} was opened`;
+    case "vuln.duty.met":
+      return str(p.text) || `${str(p.advisory, 40) || "an advisory"}: ${str(p.duty, 20) || "a duty"} was met`;
+    case "vuln.closed":
+      return str(p.text) || `${str(p.advisory, 40) || "an advisory"} was closed`;
     // ---- delegated work beyond its headline moments -------------------------
     // Both topics were added with the task lifecycle and neither had a case, so the
     // feed said `a2a.task.cancelled` where it should have said what happened. Written

@@ -105,6 +105,15 @@ const OWNERS: { prefix: string; view: ViewId }[] = [
   // World: the place, and the ground the swarm raised.
   { prefix: "/world", view: "world" },
   { prefix: "/rooms", view: "world" },
+  // The hardware lives here rather than in a view of its own, because a robot is part of
+  // the place: it is drawn in the Harbour, its readings are what the Harbour is lit from,
+  // and the fleet pages are what stands in the world read as rows. Adding them was a fix
+  // rather than a preference: /machines was listed in `lib/surfaces.json` as a swamp page
+  // from the day it shipped while no view claimed it, so `verify-shell.cjs` had been
+  // failing on four routes, and a page with a group and no view is a page that exists and
+  // cannot be reached from inside the world.
+  { prefix: "/machines", view: "world" },
+  { prefix: "/fleet", view: "world" },
 
   // Swarm: the inhabitants, in public.
   { prefix: "/swamp", view: "swarm" },
@@ -130,6 +139,10 @@ const OWNERS: { prefix: string; view: ViewId }[] = [
   { prefix: "/targets", view: "commons" },
   { prefix: "/arbiter", view: "commons" },
   { prefix: "/reviews", view: "commons" },
+  // Delegated work is work, so it sits with the commons: a task that walked in from
+  // another network is the same subject as a programme a resident wrote, and the page
+  // reads in the same voice.
+  { prefix: "/tasks", view: "commons" },
 
   // Record: the log, the memory and the decisions.
   { prefix: "/feed", view: "record" },
@@ -142,6 +155,10 @@ const OWNERS: { prefix: string; view: ViewId }[] = [
   // the record of what the deployment itself did, rather than of what a resident
   // published, and the two are read together.
   { prefix: "/faults", view: "record" },
+  // The pulse's own trace belongs beside the faults for the same reason they sit beside
+  // the changes: this is the record of what the deployment itself did, one beat at a
+  // time, and it is read the same way a log is.
+  { prefix: "/observability", view: "record" },
 ];
 
 /**

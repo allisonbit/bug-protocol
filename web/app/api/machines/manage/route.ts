@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
 import type { Machine, MachineCommand } from "@/lib/agents/types";
+import type { Release } from "@/lib/machines/releases";
 import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -15,7 +16,14 @@ export const dynamic = "force-dynamic";
  * and it issues commands, retires and reactivates the machines you registered.
  *
  *   GET    your machines and the commands still in flight
- *   POST   { action: "issue_command" | "retire" | "reactivate", ... }
+ *   POST   { action: "issue_command" | "retire" | "reactivate" | "pin" | "unpin"
+ *                   | "yank_release" | "unyank_release", ... }
+ *
+ * A PIN IS THE FLEET'S OWN ANSWER FOR HARDWARE. An update that failed pins the
+ * machine back automatically, and an operator pins one deliberately when a site must
+ * not move or a version is certified for a cell. Either way the pin is a public row
+ * with a reason, so a robot running old firmware reads as a decision rather than as
+ * a machine nobody has looked at.
  *
  * THE RULE ON COMMANDS. You command machines YOU registered. A machine row
  * carries `owner` for exactly this check. Hardware is not a commons asset, and
@@ -215,7 +223,194 @@ export async function POST(req: Request) {
     );
   }
 
-  return fail("UNKNOWN_ACTION", 'action must be "issue_command", "retire" or "reactivate".', 400, {
-    actions: ["issue_command", "retire", "reactivate"],
+  // A pin is the operator's answer to "this machine stays here". It is the same
+  // action whether the reason is a validation rig that must not move, a site that
+  // needs a version it has certified, or an update that failed and held the robot
+  // back, which is why the reason is required rather than optional: a pin with no
+  // reason is indistinguishable from a machine nobody has looked at.
+  if (action === "pin" || action === "unpin") {
+    const found = await ownedMachine(user.id, body.machine);
+    if (!found.ok) return found.res;
+    const { machine, admin } = found;
+
+    if (action === "unpin") {
+      const { data: updated, error } = await admin
+        .from("machines")
+        .update({ pinned_release_id: null, pinned_reason: null, updated_at: new Date().toISOString() })
+        .eq("id", machine.id)
+        .select("*")
+        .single();
+      if (error) return fail("UPDATE_REFUSED", error.message, 500);
+      return NextResponse.json(
+        {
+          ok: true,
+          machine: updated,
+          note: "The pin is cleared, so the next rollout may offer this machine firmware again. Its own reports decide what it actually runs.",
+        },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) : "";
+    if (!reason) {
+      return fail("REASON_REQUIRED", "A pin needs `reason`. Pinning a machine is a decision, and the fleet page shows the reason beside it so a robot running old firmware reads as a choice rather than as neglect.", 400, {
+        example: { action: "pin", machine: machine.name, version: "2026.09.1", reason: "certified for the production cell until Friday" },
+      });
+    }
+
+    // A pin names either a release id or a version on the machine's own channel,
+    // because an operator reading a release note knows the version and not the uuid.
+    const releaseId = typeof body.release_id === "string" ? body.release_id.trim() : "";
+    const version = typeof body.version === "string" ? body.version.trim() : "";
+    if (!releaseId && !version) {
+      return fail("TARGET_REQUIRED", "A pin names what it holds the machine on: either `release_id`, or `version` with an optional `name`, so the two cannot disagree about which artifact is meant.", 400);
+    }
+
+    let query = admin.from("machine_releases").select("*");
+    if (releaseId) query = query.eq("id", releaseId);
+    else query = query.eq("version", version).eq("name", typeof body.name === "string" && body.name.trim() ? body.name.trim().toLowerCase() : (machine.kind === "robot" ? "swamp-robot" : ""));
+    const { data: matches } = await query.limit(5);
+    const candidates = (matches as Release[] | null) ?? [];
+    if (candidates.length === 0) {
+      return fail("NO_SUCH_RELEASE", `No published release matches ${releaseId ? `id ${releaseId}` : `${version}${typeof body.name === "string" ? ` on ${body.name}` : ""}`}. A pin has to name an artifact that exists, or the fleet would offer nothing at all and call it a pin.`, 404);
+    }
+    if (candidates.length > 1 && !releaseId) {
+      return fail("AMBIGUOUS", `${candidates.length} releases carry version ${version}. Send \`release_id\`, one of: ${candidates.map((c) => `${c.id} (${c.name} ${c.channel})`).join(", ")}.`, 409);
+    }
+    const target = candidates[0];
+
+    const { data: updated, error } = await admin
+      .from("machines")
+      .update({ pinned_release_id: target.id, pinned_reason: reason, updated_at: new Date().toISOString() })
+      .eq("id", machine.id)
+      .select("*")
+      .single();
+    if (error) return fail("UPDATE_REFUSED", error.message, 500);
+
+    await admin
+      .from("events")
+      .insert({
+        topic: "machine.release.offered",
+        agent_id: null,
+        agent_handle: null,
+        payload: {
+          text: `${machine.name} pinned to ${target.name} ${target.version}: ${reason}`,
+          machine: machine.name,
+          release: `${target.name} ${target.version}`,
+          count: 1,
+          machines: [machine.name],
+          pinned: true,
+        },
+        signature: null,
+        signed_ok: false,
+        provenance: "system",
+      })
+      .then(undefined, () => null);
+
+    return NextResponse.json(
+      {
+        ok: true,
+        machine: updated,
+        pinned_to: { id: target.id, name: target.name, version: target.version },
+        note: "Rollouts skip a pinned machine, so this is the fleet's answer for an update that failed or a site that must not move. Unpin deliberately when the reason no longer holds.",
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  // A bad release has to be stoppable, and stopping it is not the same act as rolling a
+  // device back. A yank says "no device may take this" and leaves every device that
+  // already took it alone, which is why the row stays: a machine running yanked firmware
+  // is exactly the thing an operator needs to be able to see.
+  if (action === "yank_release" || action === "unyank_release") {
+    const releaseId = String(body.release_id ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(releaseId)) {
+      return fail("BAD_RELEASE", "`release_id` is the uuid returned when the release was published.", 400);
+    }
+    const admin = supabaseAdmin();
+    if (!admin) return fail("BACKEND_UNCONFIGURED", "The swamp backend isn't configured on this deployment yet.", 503);
+
+    const { data: releaseRow } = await admin.from("machine_releases").select("*").eq("id", releaseId).maybeSingle();
+    const release = releaseRow as Release | null;
+    if (!release) return fail("NOT_FOUND", `No release with id ${releaseId}.`, 404);
+
+    // WHO MAY YANK. The publisher, and only the publisher, because a yank reaches every
+    // machine that would otherwise have been offered it and that is not a decision to hand
+    // to anyone who happens to be signed in. A release nobody is recorded as having
+    // published can only be yanked by an operator running a migration, which is said here
+    // rather than worked around.
+    if (release.published_by && release.published_by !== user.id) {
+      return fail("NOT_YOUR_RELEASE", `${release.name} ${release.version} was published by another account. Only the publisher may yank it, because a yank reaches every machine that would have been offered it.`, 403);
+    }
+
+    if (action === "unyank_release") {
+      const { error } = await admin.from("machine_releases").update({ yanked_at: null, yanked_reason: null }).eq("id", releaseId);
+      if (error) return fail("UPDATE_REFUSED", error.message, 500);
+      return NextResponse.json(
+        {
+          ok: true,
+          release: { id: release.id, name: release.name, version: release.version },
+          note: "Offered again on the next rollout. Every machine that was offered it before is untouched, so stage a rollout when you want it taken.",
+        },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 300) : "";
+    if (reason.length < 10) {
+      return fail("REASON_REQUIRED", "Say why the release is yanked, in at least 10 characters. A yank is a fleet-wide decision and the reason is what a reader has instead of asking you.", 400, {
+        example: { action: "yank_release", release_id: releaseId, reason: "the watchdog resets on boards with the older bootloader" },
+      });
+    }
+
+    const { error } = await admin
+      .from("machine_releases")
+      .update({ yanked_at: new Date().toISOString(), yanked_reason: reason })
+      .eq("id", releaseId);
+    if (error) return fail("UPDATE_REFUSED", error.message, 500);
+
+    // How far it got before the yank, from the target rows rather than from a guess: the
+    // number an operator needs is how many devices are already running it.
+    const { data: targetRows } = await admin.from("machine_release_targets").select("state").eq("release_id", releaseId);
+    const targets = (targetRows as { state: string }[] | null) ?? [];
+    const installed = targets.filter((t) => t.state === "installed").length;
+
+    await admin
+      .from("events")
+      .insert({
+        topic: "machine.release.yanked",
+        agent_id: null,
+        agent_handle: null,
+        payload: {
+          text: `${release.name} ${release.version} was yanked: ${reason}${installed > 0 ? `. ${installed} machine(s) already run it and are not touched by this.` : ""}`,
+          release: `${release.name} ${release.version}`,
+          reason,
+          installed,
+          offered: targets.length,
+        },
+        signature: null,
+        signed_ok: false,
+        provenance: "system",
+      })
+      .then(undefined, () => null);
+
+    return NextResponse.json(
+      {
+        ok: true,
+        release: { id: release.id, name: release.name, version: release.version },
+        yanked_because: reason,
+        offered_to: targets.length,
+        already_running_it: installed,
+        note:
+          installed > 0
+            ? `${installed} machine(s) already run this and are NOT rolled back by the yank: pulling them would be a rollout of the previous version and that is a separate decision. Pin them, then rollout what they should run instead.`
+            : "Nothing had installed it yet, so the yank is the whole of it.",
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
+
+  return fail("UNKNOWN_ACTION", 'action must be "issue_command", "retire", "reactivate", "pin", "unpin", "yank_release" or "unyank_release".', 400, {
+    actions: ["issue_command", "retire", "reactivate", "pin", "unpin", "yank_release", "unyank_release"],
   });
 }

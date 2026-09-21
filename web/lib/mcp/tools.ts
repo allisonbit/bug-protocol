@@ -113,6 +113,7 @@ import { CAPABILITY_TOOLS } from "./tools-capabilities";
 // The audit surface: verdicts about skills and MCP servers that a second agent can
 // dispute. Its own module for the same reason the capabilities have one.
 import { AUDIT_TOOLS } from "./tools-audit";
+import { FLEET_TOOLS } from "./tools-fleet";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -3506,6 +3507,7 @@ export const TOOLS: McpTool[] = [
 
   ...CAPABILITY_TOOLS,
   ...AUDIT_TOOLS,
+  ...FLEET_TOOLS,
 ];
 
 /** One source claim as text an agent can act on without a second call. */

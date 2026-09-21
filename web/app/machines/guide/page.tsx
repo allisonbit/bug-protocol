@@ -99,6 +99,67 @@ export default function MachineGuidePage() {
             which is the honest state of a machine that stopped talking.
           </p>
         </li>
+
+        <li>
+          <h2 className="font-serif text-2xl">6. Give it a key, so its reports can be trusted as far as they can be</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            A token proves the request came from whoever was told the secret. A signature proves the bytes came from
+the holder of a private key, and it is the difference between &ldquo;a reading arrived with the right
+password&rdquo; and &ldquo;this reading was signed by this machine&rdquo;. The sketch generates an Ed25519 keypair on
+first boot and keeps the seed in non volatile memory, then sends the public half once to{" "}
+            <span className="font-mono text-xs text-chalk">PUT /api/machines/keys</span>. That door refuses a request
+            with no public key, on purpose: a key this platform minted would be a key it could sign with, and every
+            signature would then mean nothing. Until the key is registered and the clock has synced, the device sends
+            unsigned reports, and the record says which were unsigned rather than quietly dropping them.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            Each machine gets a DID document at{" "}
+            <span className="font-mono text-xs text-chalk">/api/machines/&lt;name&gt;/did.json</span>, a key may be
+            retired with a grace window or revoked for cause, and the machine page shows the whole key history. A
+            revoked key verifies nothing afterwards, including reports inside the window.
+          </p>
+        </li>
+
+        <li>
+          <h2 className="font-serif text-2xl">7. Let it take firmware, and report what happened</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            The sketch also asks what it is offered at{" "}
+            <span className="font-mono text-xs text-chalk">GET /api/machines/releases?machine=&lt;name&gt;</span>, every
+            half hour by default. The answer carries the artifact URL and the SHA-256 the device must check. It then
+            downloads the image, hashes the bytes that actually arrived, and flashes only when the digest matches a
+            published release. A mismatch abandons the update and reports the failure with the two digests in it, which
+            is the failure this whole surface exists to prevent: a device that flashes first and checks afterwards has
+            already run the wrong image.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            The outcome of an update is reported on the boot after it, never during it. That is the only honest moment
+            to say &ldquo;installed&rdquo;, because it is the first moment the new image is the one running. A version
+            that does not match what was pending is reported as a failure, and a failure holds the machine on the
+            version it had, with the reason published next to it. That hold is the fleet&rsquo;s answer to a bad
+            release, and it is visible on{" "}
+            <Link href="/fleet" className="text-bug-dim underline decoration-dotted hover:text-bug">
+              the fleet page
+            </Link>{" "}
+            as a decision rather than as neglect.
+          </p>
+        </li>
+
+        <li>
+          <h2 className="font-serif text-2xl">8. What the platform owes you, if the firmware is wrong</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            A connected robot is a product with digital elements, and since 11 September 2026 the EU Cyber Resilience
+            Act expects its manufacturer to report an actively exploited vulnerability within 24 hours of becoming
+            aware, to notify within 72, and to file a final report inside 14 days, with severe incidents carrying a
+            longer report window. The fleet page runs that clock from the instant awareness began, and it is derived
+            rather than typed so nobody has to remember to create a duty. A duty cannot be marked met without a
+            citation, because a timeline entry nobody can check is the thing the record exists to replace.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            Said plainly, because a page that implied otherwise would be worse than no page: this is a clock over facts
+            a maker entered. It is not legal advice, it is not a certification, and it is not a statement about whether
+            your product is in scope of the Regulation.
+          </p>
+        </li>
       </ol>
 
       <section className="mt-12 rounded-xl border border-line bg-ink-soft p-6">
@@ -107,6 +168,9 @@ export default function MachineGuidePage() {
           <li>A machine is not an agent. It holds no reputation, writes no findings, and takes no part in the security pipeline.</li>
           <li>Only its owner may command it. A command waits in a queue; the platform never talks to the device.</li>
           <li>Everything it reports is public, permanently, under its own name.</li>
+          <li>A private key never leaves the device. This platform holds public keys and nothing else.</li>
+          <li>The platform never talks to the device. It holds a command or a release offer; the device collects it.</li>
+          <li>The firmware half of the sketch was written against the ESP32 core 3.x API and has not been compiled here, because this repository has no toolchain for it. The platform half is exercised end to end by <span className="font-mono text-[11px]">scripts/robot-sim.cjs</span>.</li>
         </ul>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
           <Link href="/dashboard/machines" className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk">
@@ -114,6 +178,9 @@ export default function MachineGuidePage() {
           </Link>
           <Link href="/machines" className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk">
             The roster
+          </Link>
+          <Link href="/fleet" className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk">
+            The fleet
           </Link>
           <Link href="/world" className="rounded-md border border-line px-3 py-1.5 text-mist transition-colors hover:text-chalk">
             The Harbour
