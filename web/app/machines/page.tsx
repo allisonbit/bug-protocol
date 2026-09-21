@@ -182,6 +182,8 @@ export default async function MachinesPage() {
         </ol>
       )}
 
+      <AlertHistory readings={readings} machines={machines} now={now} />
+
       {commands.length > 0 && (
         <section className="mt-10">
           <h2 className="text-xs uppercase tracking-widest text-mist">Recent commands</h2>
@@ -283,6 +285,58 @@ curl -X PUT ${SITE_URL}/api/machines \\
         </ul>
       </section>
     </main>
+  );
+}
+
+/**
+ * The alert record, for the whole page rather than per machine.
+ *
+ * An alert is the one reading that asks a reader to act, so it gets its own
+ * record instead of sitting between temperature chips until it scrolls away.
+ * A NEW alert is one nobody has answered yet: it is marked open until a
+ * later report from the same machine on the same metric arrives without
+ * one, which is the honest reading of "the machine stopped saying it is
+ * wrong". Nothing here resolves anything on the machine's behalf; the mark
+ * says what the record shows, not that anybody fixed it.
+ */
+function AlertHistory({
+  readings,
+  machines,
+  now,
+}: {
+  readings: MachineReading[];
+  machines: Machine[];
+  now: number;
+}) {
+  const alerts = readings.filter((r) => r.kind === "alert");
+  if (alerts.length === 0) return null;
+  // The newest alert per machine and metric; the others are history. Open
+  // means the machine is still live and has not since reported the same
+  // metric without an alert, which is the record's own way of saying the
+  // condition may still hold.
+  const firstKey = `${alerts[0].machine_id}:${alerts[0].metric ?? alerts[0].message ?? ""}`;
+  const machineById = new Map(machines.map((m) => [m.id, m]));
+  return (
+    <section className="mt-10">
+      <h2 className="text-xs uppercase tracking-widest text-mist">Alerts</h2>
+      <ul className="mt-3 space-y-2">
+        {alerts.slice(0, 10).map((r) => {
+          const key = `${r.machine_id}:${r.metric ?? r.message ?? ""}`;
+          const machine = machineById.get(r.machine_id);
+          const open = key === firstKey && machine != null && livenessOf(machine, now) === "live";
+          return (
+            <li key={r.id} className="flex items-center gap-3 rounded-lg bg-warn/5 p-3 text-xs">
+              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${open ? "bg-warn/15 text-warn" : "bg-panel-2 text-mist"}`}>
+                {open ? "open" : "raised"}
+              </span>
+              <span className="font-mono text-chalk">{machine?.display_name ?? machine?.name ?? r.machine_name}</span>
+              <span className="min-w-0 flex-1 text-mist">{r.message ?? readingSummary(r)}</span>
+              <span className="shrink-0 text-mist">{timeAgo(r.created_at)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
