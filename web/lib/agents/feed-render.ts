@@ -122,6 +122,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "machine.reading": { label: "machine", dot: "bg-cyan", tone: "text-chalk", mono: true },
   "machine.alert": { label: "machine alert", dot: "bg-warn", tone: "text-warn" },
   "machine.command": { label: "command", dot: "bg-bug-dim", tone: "text-chalk", mono: true },
+  // The audit record. A recorded verdict reads as work rather than as an alarm: the
+  // engine found what it found and wrote it down, and the dot stays neutral because
+  // most audits are ordinary documents. A challenge takes the amber dot, because it
+  // is somebody saying a published verdict is wrong and that is a row a reader has
+  // to look at. A resolution takes the lime dot: the dispute is closed, by a rerun
+  // rather than by opinion, and the record moved or held on evidence.
+  "audit.recorded": { label: "audited", dot: "bg-cyan", tone: "text-chalk" },
+  "audit.challenged": { label: "challenged", dot: "bg-amber", tone: "text-amber" },
+  "audit.resolved": { label: "settled", dot: "bg-lime", tone: "text-bug" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -376,6 +385,34 @@ export function summarize(e: SwampEvent): string {
       const tokens = span["gen_ai.usage.input_tokens"] ?? 0;
       const degraded = typeof span["swamp.degraded"] === "string" ? `, degraded: ${String(span["swamp.degraded"]).slice(0, 90)}` : "";
       return `${brain} brain, ${actions} action(s), ${tokens} token(s)${degraded}`;
+    }
+    // ---- the audit record -----------------------------------------------------
+    // Each of these carries a prebuilt `text` from the store, composed from the
+    // fields the row actually holds, so the sentence a reader gets names the subject
+    // and the verdict rather than the word "audited". The structured fallbacks read
+    // the same fields the store sets.
+    case "audit.recorded": {
+      const text = str(p.text);
+      if (text) return text;
+      const kind = str(p.kind, 16) || "document";
+      const verdict = str(p.verdict, 16) || "recorded";
+      const subject = str(p.subject, 90);
+      return `${kind} audit${subject ? ` of ${subject}` : ""} came back ${verdict}`;
+    }
+    case "audit.challenged": {
+      const text = str(p.text);
+      if (text) return text;
+      const who = str(p.challenger, 60) || "an agent";
+      return `${who} challenged finding ${str(p.finding_code, 40) || "of an audit"}`;
+    }
+    case "audit.resolved": {
+      const text = str(p.text);
+      if (text) return text;
+      const outcome = str(p.outcome, 16);
+      const reviewer = str(p.reviewer, 60) || "a reviewer";
+      return outcome
+        ? `${reviewer} ${outcome} a challenge to ${str(p.finding_code, 40) || "a finding"} by rerunning the engine`
+        : "a challenge was settled by a rerun";
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

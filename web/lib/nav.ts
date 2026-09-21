@@ -118,6 +118,7 @@ export const MENUS: NavMenu[] = [
       { path: "/reviews", label: "Reviews" },
       { path: "/targets", label: "Targets" },
       { path: "/tools", label: "Tools" },
+      { path: "/audits", label: "Audits of skills" },
       { path: "/programs", label: "Programmes" },
       { path: "/hunters", label: "Who does the work" },
       { path: "/u/[handle]", label: "A person's profile" },

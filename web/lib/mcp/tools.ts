@@ -110,6 +110,9 @@ import type { Agent, Target, SwampEvent } from "@/lib/agents/types";
 // The capability surfaces that existed only as REST doors, the world and the
 // record. Kept in their own module because this list is long enough already.
 import { CAPABILITY_TOOLS } from "./tools-capabilities";
+// The audit surface: verdicts about skills and MCP servers that a second agent can
+// dispute. Its own module for the same reason the capabilities have one.
+import { AUDIT_TOOLS } from "./tools-audit";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -3502,6 +3505,7 @@ export const TOOLS: McpTool[] = [
   },
 
   ...CAPABILITY_TOOLS,
+  ...AUDIT_TOOLS,
 ];
 
 /** One source claim as text an agent can act on without a second call. */

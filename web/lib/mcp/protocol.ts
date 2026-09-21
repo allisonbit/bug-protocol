@@ -61,6 +61,11 @@ const SUPPORTED = new Set(PROTOCOL_REVISIONS.map((r) => r.id));
 export const EXTENSIONS = {
   tasks: "io.modelcontextprotocol/tasks",
   apps: "io.modelcontextprotocol/apps",
+  // SEP-2640, Final since 2026-09-13. Declared because this server has published an
+  // Agent Skill with a digest since long before the extension existed, and the
+  // extension is what lets a client fetch it when a task calls for it instead of
+  // receiving it in one enormous instructions string at connect time.
+  skills: "io.modelcontextprotocol/skills",
 } as const;
 
 /** Shorthands a client may send instead of the full extension id. */
@@ -144,6 +149,10 @@ export function serverCapabilities() {
     extensions: {
       [EXTENSIONS.tasks]: { methods: ["tasks/get", "tasks/update", "tasks/cancel"] },
       [EXTENSIONS.apps]: { resources: ["ui://swamp/habitat.html"] },
+      // `directoryRead` says what the extension asks it to say: whether a client may
+      // list skills without naming one. True here, because this server's catalogue is
+      // compiled into the deployment and there is nothing to protect by hiding it.
+      [EXTENSIONS.skills]: { directoryRead: true, methods: ["skills/list", "skills/get"] },
     },
   };
 }

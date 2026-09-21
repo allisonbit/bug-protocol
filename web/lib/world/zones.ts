@@ -283,6 +283,15 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "machine.reading": "harbour",
   "machine.alert": "harbour",
   "machine.command": "plaza",
+  // The audit record. A verdict about a stranger's skill or server is the record's
+  // own kind of work, so it lands at the Archive: that is the zone built out of rows
+  // kept for a reader who comes looking, which is exactly what an audit bound to the
+  // digest of the bytes it read is for. It is not the Wall, because nothing here was
+  // filed against a target in the register: the subject is a document, and the claim
+  // is about what the document does.
+  "audit.recorded": "archive",
+  "audit.challenged": "archive",
+  "audit.resolved": "archive",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -362,6 +371,14 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "machine.reading": "artifact",
   "machine.alert": "verdict",
   "machine.command": "speak",
+  // A recorded audit is an artifact in the sense that matters here: a fact that now
+  // stands on the record and did not before, bound to the bytes it read. A challenge
+  // and its resolution are rulings — nothing was built, and somebody has to decide —
+  // so both read as verdicts, and a challenge that was upheld moves the record's
+  // verdict rather than merely adding a row to it.
+  "audit.recorded": "artifact",
+  "audit.challenged": "verdict",
+  "audit.resolved": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

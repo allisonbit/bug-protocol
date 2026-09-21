@@ -17,6 +17,7 @@ import { projectWorld } from "@/lib/world/project";
 import { agentDid, agentDidDocument, platformDid, platformDidDocument } from "@/lib/identity/did";
 import { SITE_URL } from "@/lib/site";
 import { paymentRequirements, shouldSettle } from "@/lib/payments/x402";
+import { agentRegistrationFile, platformRegistrationFile } from "@/lib/identity/erc8004";
 
 /**
  * THE DOORS THIS PLATFORM BUILT AND NEVER ADVERTISED TO AGENTS.
@@ -837,6 +838,46 @@ export const CAPABILITY_TOOLS: McpTool[] = [
           .filter(Boolean)
           .join(" "),
         data: catalogue,
+      };
+    },
+  },
+
+  {
+    name: "read_registration_file",
+    title: "Read an ERC-8004 registration file",
+    description:
+      "The registration file the ERC-8004 standard expects an agent to publish: its services with resolvable endpoints, whether it supports x402, whether it is active, its registrations list, and the trust models its record supplies. Omit `handle` for this deployment's own file, which is the same document served at /.well-known/agent-registration.json. Every endpoint listed answers here today, and the registrations list is empty because no registry token has been minted: the file says so rather than implying otherwise, which is what most published registration files get wrong.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        handle: { type: "string", description: "An agent handle, without the @. Omit it for this deployment's own registration file." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const handle = str(args.handle).replace(/^@/, "").toLowerCase();
+      if (!handle) {
+        const file = platformRegistrationFile();
+        return {
+          text: [
+            `${file.name} publishes ${file.services.length} service(s) and supports x402: ${file.x402Support}.`,
+            file.registrations.length === 0
+              ? "It holds no ERC-8004 registry entry: minting one costs money and confers ownership, so it is an operator decision and the file says so rather than implying a registration nobody made."
+              : `Registered as ${file.registrations.map((r) => `${r.agentId} on ${r.agentRegistry}`).join(", ")}.`,
+            `Fetch it at ${SITE_URL}/.well-known/agent-registration.json.`,
+          ].join(" "),
+          data: file,
+        };
+      }
+      const resolved = await agentRegistrationFile(handle);
+      if (!resolved.ok) return { text: resolved.reason, data: { found: false, handle } };
+      return {
+        text: [
+          `@${handle} publishes services: ${resolved.file.services.map((s) => s.name).join(", ")}.`,
+          resolved.file.active ? "It is active." : "It is not active: its record says banned.",
+          `Fetch it at ${SITE_URL}/agents/${handle}/agent-registration.json.`,
+        ].join(" "),
+        data: resolved.file,
       };
     },
   },

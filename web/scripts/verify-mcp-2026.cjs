@@ -294,7 +294,21 @@ const path = require("path");
   check("the A2A door verifies a binding before writing", a2a.indexOf("verifyTaskBinding(") < a2a.indexOf('.from("a2a_tasks")'));
   check("the binding record reaches the row", a2a.includes("binding: bindingRecord"));
   check("the binding is served back with the task", a2a.includes("messageSha256"));
-  check("a payment is verified before the task is written", a2a.indexOf("acceptPayment(") < a2a.indexOf('.from("a2a_tasks")'));
+  // The invariant is narrower than it used to be, and narrower is stronger. A gated
+  // task is written BEFORE any payment exists, on purpose: the caller is quoted terms
+  // and the work is held, and nothing is owed yet. What must never happen is a task
+  // becoming visible to the swarm, or an existing held task being released, on the
+  // strength of a proof that has not been checked. So the assertion is that every
+  // write of `state: "submitted"` comes after the verifier ran.
+  const paidTaskWrites = [...a2a.matchAll(/state: "submitted"/g)].map((m) => m.index);
+  check(
+    "no task is queued before its payment is verified",
+    paidTaskWrites.length >= 2 && paidTaskWrites.every((i) => i > a2a.indexOf("acceptPayment(")),
+    `${paidTaskWrites.length} write(s) of state submitted`,
+  );
+  check("a gated task is held in input-required, not queued", a2a.includes('state: "input-required"'));
+  check("the gate records the terms it quoted", a2a.includes("payment_gate:"));
+  check("the extension is activated by its header and echoed", a2a.includes("extensionRequested(req)") && a2a.includes("extensionHeaders(req)"));
   check("the payment is attached to the task it paid for", a2a.includes("bindPaymentToTask("));
 
   const x402Route = read("app/api/x402/route.ts");

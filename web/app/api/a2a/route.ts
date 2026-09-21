@@ -6,6 +6,18 @@ import { getFlags } from "@/lib/agents/auth";
 import type { SwampEvent } from "@/lib/agents/types";
 import { bindingOf, verifyTaskBinding } from "@/lib/identity/binding";
 import { acceptPayment, bindPaymentToTask, type PaymentProof } from "@/lib/payments/x402";
+// The A2A x402 extension: the wire vocabulary the ecosystem's payment clients speak,
+// mapped onto the verifier above rather than beside it.
+import {
+  X402_EXTENSION_URI,
+  extensionHeaders,
+  extensionRequested,
+  failedMetadata,
+  paidMetadata,
+  requiredMetadata,
+  settlementNote,
+  type X402Receipt,
+} from "@/lib/payments/a2a-x402";
 import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -108,7 +120,7 @@ export async function POST(req: Request) {
   const { method, params = {} } = body;
   const id = body.id ?? null;
 
-  if (method === "message/send") return messageSend(id, params, sb);
+  if (method === "message/send") return messageSend(id, params, sb, req);
   if (method === "tasks/get") return tasksGet(id, params, sb);
   if (method === "tasks/list") return tasksList(id, sb);
   if (method === "mandates/get") return mandatesGet(id, params, sb);
@@ -117,7 +129,12 @@ export async function POST(req: Request) {
 
 // ---- message/send ------------------------------------------------------------
 
-async function messageSend(id: unknown, params: Record<string, unknown>, sb: NonNullable<ReturnType<typeof supabaseAdmin>>) {
+async function messageSend(
+  id: unknown,
+  params: Record<string, unknown>,
+  sb: NonNullable<ReturnType<typeof supabaseAdmin>>,
+  req: Request,
+) {
   const { text, role } = partsText(params.message);
   if (!text) {
     return rpcError(id, -32602, "message/send needs params.message with at least one part carrying text. That text is the task.");
@@ -139,27 +156,6 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
   // agent can now be checked by anyone reading the row, instead of being taken on
   // the transport's word. The keys are read from the registry, never from the
   // request, because a caller checking itself verifies nothing.
-  // A PAYMENT MAY BE ATTACHED TO THE SAME CALL, so the work and its budget arrive
-  // together instead of as two requests that can disagree. It is verified before any
-  // task is written: a task recorded against a proof that later failed to check would
-  // be a task whose budget was imaginary, and the delegator would have no way to know.
-  // Unpaid delegation stays allowed and unchanged, because the queue has always been
-  // open and closing it to fund one feature would be a worse trade than the feature
-  // is worth.
-  const rawPayment = params.payment as PaymentProof | undefined;
-  let payment: Awaited<ReturnType<typeof acceptPayment>> | null = null;
-  if (rawPayment !== undefined && rawPayment !== null) {
-    payment = await acceptPayment({ proof: rawPayment, sb });
-    if (!payment.ok) {
-      return rpcError(
-        id,
-        -32602,
-        `The attached payment was refused (${payment.code}): ${payment.reason}`,
-        payment.status === 503 ? 503 : 402,
-      );
-    }
-  }
-
   const binding = bindingOf(params);
   if (binding === "invalid") {
     return rpcError(
@@ -171,6 +167,241 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
   const bindingRecord = binding
     ? await verifyTaskBinding({ sb, caller, text, externalId, binding })
     : null;
+
+  // ---- THE x402 PAYMENT, AND THE GATE IT CAN PUT ON A TASK -------------------
+  //
+  // THREE SHAPES ARRIVE HERE, and they are one flow rather than three features:
+  //
+  //   1. no payment                 ordinary delegation, unchanged, always allowed.
+  //   2. `payment.required: true`    the caller is telling the platform this work
+  //                                  should be paid for and asking what it costs.
+  //                                  The task is created and held in
+  //                                  `input-required`, and the terms go back in the
+  //                                  metadata as the extension specifies. Nothing is
+  //                                  charged for asking, and nothing is owed until
+  //                                  the caller comes back with a proof.
+  //   3. a signed proof on the same  the payment and the work arrive together, and
+  //      call as the task             the proof is checked BEFORE the task is
+  //                                  written: a task recorded against a proof that
+  //                                  later failed would be a task whose budget was
+  //                                  imaginary, and the delegator would never know.
+  //
+  // A gated task is created in `input-required`, and the residents' observation query
+  // reads `state = 'submitted'`, so it is invisible to the swarm until it is paid for.
+  // That is the whole reason the state exists: a task nobody has been told about
+  // cannot be taken and then discovered to be unpaid.
+  //
+  // Unpaid delegation stays first class. Closing an open queue to fund one feature
+  // would be a worse trade than the feature is worth.
+  const extension = extensionRequested(req);
+  const paymentParam = params.payment as (PaymentProof & { required?: unknown }) | undefined;
+  const gateRequested = paymentParam !== undefined && paymentParam !== null && paymentParam.required === true;
+  const proofPresent = Boolean(paymentParam?.payload);
+  const continueTaskId = typeof params.taskId === "string" && params.taskId.trim() ? params.taskId.trim() : "";
+
+  // A GATE IS CREATED, NOT A TASK: the caller gets the terms and a handle, and the
+  // work it described is kept on the row so paying for it later does not mean saying
+  // it twice. The terms are stored rather than recomputed, so the quote is binding.
+  if (gateRequested && !proofPresent) {
+    const terms = requiredMetadata({ description: `A delegated task from ${caller}, held until its quoted budget is settled.` });
+    const status = terms["x402.payment.status"];
+    if (status === "payment-failed") {
+      // The door is not open on this deployment, and it says which variable is missing
+      // rather than accepting a task it can never take payment for.
+      return NextResponse.json(
+        { jsonrpc: "2.0", id, result: { task: null, metadata: terms }, note: "No task was created: this deployment cannot take payment, and it will not hold work it cannot settle for." },
+        { headers: { "cache-control": "no-store", "access-control-allow-origin": "*", ...extensionHeaders(req) } },
+      );
+    }
+
+    const { data: gateRow, error: gateError } = await sb
+      .from("a2a_tasks")
+      .insert({
+        external_id: externalId,
+        caller,
+        message: { role, parts: [{ kind: "text", text }] },
+        state: "input-required",
+        payment_gate: terms,
+        ...(bindingRecord ? { binding: bindingRecord } : {}),
+      })
+      .select("*")
+      .single();
+    if (gateError) return rpcError(id, -32000, `The gated task could not be recorded: ${gateError.message}`, 500);
+    const gated = gateRow as { id: string; created_at: string };
+
+    await sb
+      .from("events")
+      .insert({
+        topic: "a2a.task.input",
+        agent_id: null,
+        agent_handle: null,
+        payload: {
+          text: `task ${gated.id.slice(0, 8)} from ${caller} is held for payment: ${text.slice(0, 160)}`,
+          task_id: gated.id,
+          caller,
+          status: "payment-required",
+          accepts: (terms["x402.payment.required"] as { accepts?: unknown[] } | undefined)?.accepts?.length ?? 0,
+        },
+        signature: null,
+        signed_ok: false,
+        provenance: "system",
+      })
+      .then(undefined, () => null);
+
+    if (mandate) {
+      await sb.from("a2a_mandates").insert({
+        task_id: gated.id,
+        caller,
+        intent: mandate.intent,
+        budget: mandate.budget,
+        signature: mandate.signature,
+        key_id: mandate.keyId,
+      }).then(undefined, () => null);
+    }
+
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          task: { id: gated.id, state: "input-required", createdAt: gated.created_at, url: `${SITE_URL}/tasks/${gated.id}` },
+          metadata: terms,
+          next: `Send the same call again with \`taskId\` set to ${gated.id} and \`payment\` carrying your signed EIP-3009 proof. The terms are stored on the task, so you are answered against the quote you received.`,
+          note: [
+            "Held, not queued: no resident can see or take this task until it is paid for. Nothing is owed yet, and nothing is charged for asking.",
+            settlementNote(),
+          ].join(" "),
+        },
+      },
+      { headers: { "cache-control": "no-store", "access-control-allow-origin": "*", ...extensionHeaders(req) } },
+    );
+  }
+
+  let payment: Awaited<ReturnType<typeof acceptPayment>> | null = null;
+  if (proofPresent) {
+    payment = await acceptPayment({ proof: paymentParam, sb });
+    if (!payment.ok) {
+      // A REFUSED PROOF IS ANSWERED IN THE EXTENSION'S OWN VOCABULARY when the caller
+      // asked for the extension, and as a transport error otherwise. Either way no task
+      // is created: a task whose budget failed to check is a task whose budget was
+      // imaginary, and recording one would put the platform's word behind a claim it
+      // does not hold.
+      const refused = payment;
+      if (extension) {
+        return NextResponse.json(
+          {
+            jsonrpc: "2.0",
+            id,
+            result: {
+              task: null,
+              metadata: failedMetadata(refused),
+              note: "No task was created. The proof was refused, and the refusal is on the public log: a payment door whose refusals were silent would be the one surface here nobody could audit.",
+            },
+          },
+          { headers: { "cache-control": "no-store", "access-control-allow-origin": "*", ...extensionHeaders(req) } },
+        );
+      }
+      return rpcError(
+        id,
+        -32602,
+        `The attached payment was refused (${payment.code}): ${payment.reason}`,
+        payment.status === 503 ? 503 : 402,
+      );
+    }
+  }
+
+  // A PAID CONTINUATION. The caller replies to the gate it was quoted, and this is
+  // where the held task becomes visible to the swarm. The task's own message is never
+  // retaken from the reply: the work was recorded when the gate was created, and a
+  // second body arriving on the same handle would let a caller swap the work after the
+  // price was agreed.
+  if (continueTaskId) {
+    const { data: heldRow } = await sb.from("a2a_tasks").select("*").eq("id", continueTaskId).maybeSingle();
+    const held = heldRow as { id: string; state: string; caller: string; payment_gate: Record<string, unknown> | null } | null;
+    if (!held) return rpcError(id, -32001, `No task "${continueTaskId}".`, 404);
+    // The handle belongs to whoever it was quoted to. A continuation from another
+    // caller is refused rather than quietly accepted on the strength of a proof that
+    // happens to be valid.
+    if (held.caller !== caller) {
+      return rpcError(id, -32602, `Task ${held.id} was quoted to ${held.caller}, and this reply is from ${caller}. A gate is answered by the party it was quoted to.`);
+    }
+    if (held.state !== "input-required") {
+      return rpcError(id, -32602, `Task ${held.id} is ${held.state}, so it is not waiting on a payment. Nothing was changed.`);
+    }
+
+    if (!payment) {
+      const metadata = requiredMetadata();
+      return NextResponse.json(
+        {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            task: { id: held.id, state: "input-required", createdAt: null, url: `${SITE_URL}/tasks/${held.id}` },
+            metadata,
+            note: "The task is still held. Send the same call with a valid proof and it becomes visible to the swarm.",
+          },
+        },
+        { headers: { "cache-control": "no-store", "access-control-allow-origin": "*", ...extensionHeaders(req) } },
+      );
+    }
+
+    const gateTerms = (held.payment_gate ?? {}) as Record<string, unknown>;
+    const priorReceipts = Array.isArray(gateTerms["x402.payment.receipts"])
+      ? (gateTerms["x402.payment.receipts"] as X402Receipt[])
+      : [];
+    const metadata = paidMetadata(payment, priorReceipts);
+
+    // The state guard is in the WHERE clause as well as in the read above, so two
+    // simultaneous continuations cannot both release the task. Paid once means queued
+    // once, and the second caller is told the task already moved rather than being
+    // handed a second release of the same work.
+    const { data: releasedRow } = await sb
+      .from("a2a_tasks")
+      .update({ state: "submitted", payment_gate: { ...gateTerms, ...metadata }, updated_at: new Date().toISOString() })
+      .eq("id", held.id)
+      .eq("state", "input-required")
+      .select("*")
+      .maybeSingle();
+    if (!releasedRow) {
+      return rpcError(id, -32000, `Task ${held.id} was released by another call a moment ago. The payment is recorded; the task has already been queued.`, 409);
+    }
+    await bindPaymentToTask(sb, payment.id, held.id);
+
+    await sb
+      .from("events")
+      .insert({
+        topic: "a2a.task.submitted",
+        agent_id: null,
+        agent_handle: null,
+        payload: {
+          text: `task ${held.id.slice(0, 8)} from ${caller} was paid for and is now queued: ${text.slice(0, 160)}`,
+          task_id: held.id,
+          caller,
+          payment_status: (metadata as Record<string, unknown>)["x402.payment.status"],
+          payer: payment.payer,
+        },
+        signature: null,
+        signed_ok: false,
+        provenance: "system",
+      })
+      .then(undefined, () => null);
+
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          task: { id: held.id, state: "submitted", createdAt: null, url: `${SITE_URL}/tasks/${held.id}` },
+          metadata,
+          note: [
+            "Released and queued. Residents read submitted tasks on their next beat, and whether one is taken is public either way.",
+            settlementNote(),
+          ].join(" "),
+        },
+      },
+      { headers: { "cache-control": "no-store", "access-control-allow-origin": "*", ...extensionHeaders(req) } },
+    );
+  }
 
   const { data: taskRow, error: insertError } = await sb
     .from("a2a_tasks")
@@ -280,8 +511,16 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
             attachedToTask: paymentAttached,
             note: payment.note,
           },
+          // The same facts in the vocabulary the A2A x402 extension names, so a client
+          // written against that flow reads this reply without a translation table.
+          metadata: paidMetadata(payment),
         }
       : {}),
+    // NO PAYMENT STATUS IS ATTACHED TO AN UNPAID, QUEUED TASK. Saying
+    // `payment-required` here would be a lie about a task that is already visible to
+    // the swarm, and the honest statement is that money never entered this call: the
+    // extension is echoed in the headers, so a payment client can tell the difference
+    // between a server that understood it and one that ignored it.
     ...(bindingRecord
       ? {
           binding: {
@@ -301,7 +540,18 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
   const taskId = typeof params.id === "string" ? params.id.trim() : "";
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) return rpcError(id, -32602, "tasks/get needs params.id set to a task id (uuid).");
   const { data: row } = await sb.from("a2a_tasks").select("*").eq("id", taskId).maybeSingle();
-  const task = row as { id: string; state: string; caller: string; message: { parts?: { text?: string }[] }; result: unknown; binding: Record<string, unknown> | null; created_at: string; updated_at: string; completed_at: string | null } | null;
+  const task = row as {
+    id: string;
+    state: string;
+    caller: string;
+    message: { parts?: { text?: string }[] };
+    result: unknown;
+    binding: Record<string, unknown> | null;
+    payment_gate: Record<string, unknown> | null;
+    created_at: string;
+    updated_at: string;
+    completed_at: string | null;
+  } | null;
   if (!task) return rpcError(id, -32001, `No task "${taskId}".`, 404);
 
   // The history is the task's slice of the log, newest last, capped.
@@ -357,6 +607,13 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
               state: m.state,
             })),
           }
+        : {}),
+      // THE PAYMENT GATE, IF THERE IS ONE. A client polling a held task learns the
+      // terms it is waiting on from the task itself rather than having to remember the
+      // reply it received, which is what makes a stateless negotiation workable: the
+      // quote is on the row, so any later reader is answered the same way.
+      ...(task.payment_gate
+        ? { metadata: task.payment_gate as Record<string, unknown>, paymentGate: (task.payment_gate as Record<string, unknown>)["x402.payment.status"] ?? "waiting" }
         : {}),
       createdAt: task.created_at,
       updatedAt: task.updated_at,

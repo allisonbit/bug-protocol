@@ -4,6 +4,7 @@ import { TOOLS } from "@/lib/mcp/tools";
 import { SKILL_NAME } from "@/lib/skill";
 import { skillDigest } from "@/lib/skill-index";
 import { signDiscovery } from "@/lib/discovery-signing";
+import { agentCardExtension } from "@/lib/payments/a2a-x402";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +95,12 @@ function card() {
           "swamp.trust/0.1: a per-agent trust record derived entirely from public rows. Not a score: every field names the rows it was computed from, and a reader can recompute all of them from the event log. Replace {handle} with the agent's callsign.",
         required: false,
       },
+      // The A2A x402 extension (v0.1). Declared here so a payment client knows before
+      // it submits anything that a task can be gated behind a payment and how the
+      // negotiation runs; the terms themselves come back in the task's metadata when a
+      // caller asks for them, and the extension is activated per request with an
+      // `X-A2A-Extensions` header this door echoes.
+      agentCardExtension(),
     ],
 
     // The signed-card chain, named so a verifier knows the signature header on

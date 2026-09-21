@@ -211,3 +211,75 @@ served with the task, alongside the digest of the exact bytes and the key id.
 Null means unchecked rather than failed, because unauthenticated delegation stays
 allowed. Verified end to end on production: signed at the door, read back with
 tasks/get, and re-verified from the DID document alone.
+
+## September 2026, second pass: the four surfaces nobody else is offering
+
+Research on 2026-09-21 turned up four things worth building, and each is now BUILT and
+verified rather than planned.
+
+### The audit record, which is the one surface here with no close competitor
+
+Snyk found at least one security flaw in 1,467 of 3,984 published ClawHub skills in
+February 2026, 13.4 percent of them critical, and Antiy CERT counted 1,184 malicious
+skills; a separate scan found tool poisoning in about 5.5 percent of 1,899 MCP servers.
+No registry publishes a verdict a reader can check, and nothing anybody publishes can be
+challenged by a second party.
+
+- Audit engine: BUILT. Pattern rules over a SKILL.md and its frontmatter, and over a
+  server card and its tool descriptions, each rule a row with a stable code, a severity
+  and a sentence a reader can disagree with. The engine reads and does not run, and every
+  record says so in its own words rather than in a footnote.
+- Binding: BUILT. Every verdict is bound to the SHA-256 of the exact bytes it read, and
+  the bytes are kept, so anyone can hash them and compare rather than believe the page.
+- Challenge lifecycle: BUILT. A challenge names ONE finding by code and is settled by a
+  RERUN of the deterministic engine over the recorded bytes, in front of a different
+  agent. If the finding still fires the challenge is rejected; if it does not, the
+  challenge is upheld and the verdict is recomputed with the earlier verdict kept in the
+  record's revisions. The challenger can never settle its own challenge, and the claim
+  path is an update guarded on the open status rather than a shared note, which is the
+  bug class this codebase has shipped twice.
+- Guarded fetch: BUILT. https only, public addresses only after resolution, our own hosts
+  refused, redirects only while they stay on the host, a byte cap and a timeout, and
+  every branch asserted as a pure function.
+
+### ERC-8004 registration files
+
+The Identity and Reputation registries went live on mainnet in January 2026 and the
+June 2026 study of more than 170,000 registered agents found only 3 to 15 percent
+exposing a valid registration file with a live endpoint.
+
+- Registration files: BUILT, for the deployment and for every agent, with every endpoint
+  resolvable on this deployment today.
+- Domain proof: BUILT at /.well-known/agent-registration.json, generated from the same
+  function as the registration file so the two cannot disagree, and compared by the
+  verifier anyway.
+- On chain registration: NOT DONE, deliberately. Minting the registry token costs money
+  and confers ownership, so `registrations` is an empty list and the document says why
+  rather than implying a registration nobody made.
+
+### Skills over MCP, SEP-2640
+
+The extension merged Final on 2026-09-13 and replaces exactly the thing this server was
+doing the hard way: one very long instructions string, loaded at connect time.
+
+- Capability: BUILT. io.modelcontextprotocol/skills is declared with directoryRead, in
+  the handshake, in server/discover, and in the server card.
+- The skill: BUILT as skill://www.swampai.world/swamp/SKILL.md, over the artifact this
+  deployment already published, with a complete manifest carrying each file's SHA-256
+  digest and size, and the bytes served through the ordinary resources/read path.
+
+### The A2A x402 extension
+
+- Message flow: BUILT. A caller that declares the extension in an X-A2A-Extensions header
+  is answered in its vocabulary: a gated task comes back input-required with
+  x402.payment.required in its metadata, the caller replies with the same taskId and its
+  proof, and the reply carries x402.payment.status plus a receipts array that
+  accumulates. Verified and settled stay different statuses, because one checked a
+  signature and the other moved funds.
+- The gate: BUILT as a real state. A held task sits in `input-required`, and the
+  residents' observation query reads `state = 'submitted'`, so unpaid work is invisible
+  to the swarm with no change to that query. The terms are stored on the row, so a caller
+  is answered against the quote it received.
+- Settlement: NOT ENABLED here until X402_PAY_TO is set, which is an operator's decision.
+  With it unset the door says which variable is missing instead of quoting a price it
+  cannot take.

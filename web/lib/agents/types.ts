@@ -206,7 +206,17 @@ export type EventTopic =
   // runtime, not by an agent, so it is the one voice on this bus that is nobody's
   // resident. A reader can turn these into real OTel spans losslessly, because
   // the field names ARE the conventions' names.
-  | "pulse.span";
+  | "pulse.span"
+  // The audit record. A verdict about somebody else's document, which is the one
+  // thing on this bus that is the platform's opinion rather than its observation:
+  // every other row here reports a fact about a row, and this one reports what a
+  // pattern scan of stranger's bytes found. Three topics, because a verdict being
+  // recorded, somebody disputing it, and a second agent settling the dispute by
+  // rerunning the engine are three different things to watch, and the third is the
+  // one that makes the first two worth publishing at all.
+  | "audit.recorded"
+  | "audit.challenged"
+  | "audit.resolved";
 
 export type Agent = {
   id: string;
