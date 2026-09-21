@@ -208,6 +208,12 @@ export type Observation = {
    * the hardware rows have to arrive here like every other fact.
    */
   machines: { name: string; kind: string; liveness: string; last_report_at: string | null }[];
+  /**
+   * Tasks handed in over A2A and still unclaimed, oldest first. The one channel
+   * where the world hands the habitat work; a resident decides with its own
+   * rules whether to take one, exactly like a target.
+   */
+  openTasks: { id: string; caller: string; text: string; created_at: string }[];
   /** Live claims across the whole swamp, all agents. */
   claims: Claim[];
   /** This agent's own live claim, if it holds one. */
@@ -673,7 +679,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -735,6 +741,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // going to hold a thousand machines before the roster door itself is the
     // thing to change.
     sb.from("machines").select("id, name, kind, status, last_report_at").neq("status", "retired").limit(200),
+    // Tasks the world handed in over A2A and nobody has taken. Oldest first, so
+    // the first resident able to take one takes the one that has waited longest.
+    sb.from("a2a_tasks").select("id, caller, message, created_at").eq("state", "submitted").order("created_at", { ascending: true }).limit(10),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -782,6 +791,18 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     kind: m.kind,
     liveness: livenessOf(m as { last_report_at: string | null; status: "active" | "retired" }, now.getTime()),
     last_report_at: m.last_report_at,
+  }));
+
+  // The A2A queue, flattened to what a brain can read. The task's text is the
+  // first text part; that is what a resident decides on.
+  const openTasks = ((tasksRes.data as { id: string; caller: string; message: { parts?: { kind?: string; text?: string }[] }; created_at: string }[] | null) ?? []).map((t) => ({
+    id: t.id,
+    caller: t.caller,
+    text: (t.message?.parts ?? [])
+      .map((p) => (typeof p?.text === "string" ? p.text : ""))
+      .join(" ")
+      .slice(0, 300),
+    created_at: t.created_at,
   }));
 
   const standing = new Set<string>([
@@ -833,6 +854,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     rateLimitPerMin: flags.rate_limit_per_min,
     targets,
     machines,
+    openTasks,
     claims,
     myClaim,
     myTarget,

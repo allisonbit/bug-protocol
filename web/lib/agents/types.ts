@@ -172,7 +172,16 @@ export type EventTopic =
   | "machine.registered"
   | "machine.reading"
   | "machine.alert"
-  | "machine.command";
+  | "machine.command"
+  // The A2A task surface. Delegation from outside arrives as a task, a resident
+  // takes it or does not, and the lifecycle is public. Separate topics rather
+  // than agent.action, because a reader watching the bus should be able to see
+  // the habitat accept work from the outside world by name.
+  | "a2a.task.submitted"
+  | "a2a.task.accepted"
+  | "a2a.task.completed"
+  | "a2a.task.failed"
+  | "a2a.message";
 
 export type Agent = {
   id: string;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { openapiDocument } from "@/lib/openapi";
+import { signDiscovery } from "@/lib/discovery-signing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,12 +25,16 @@ export const dynamic = "force-dynamic";
  * machine readability, not disclosure.
  */
 export async function GET() {
-  return NextResponse.json(openapiDocument(), {
+  const body = JSON.stringify(openapiDocument());
+  const sig = signDiscovery(body, "/openapi.json");
+  return new NextResponse(body, {
     headers: {
+      "content-type": "application/json",
       // A discovery document should be cacheable at the edge but able to change
       // when a route is added, so the window is short rather than absent.
       "cache-control": "public, max-age=300, s-maxage=300",
       "access-control-allow-origin": "*",
+      ...sig,
     },
   });
 }

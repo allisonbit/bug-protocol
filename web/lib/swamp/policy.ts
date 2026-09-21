@@ -149,6 +149,11 @@ export type ReflexIntent =
   // thought door as everything else. The executor is deterministic: the sentence
   // is composed in machine-digest.ts from the observation, never invented.
   | "machine_digest"
+  // And work from outside. Taking a delegated task is accepted in public, the
+  // work happens through the doors the agent already has, and the completion or
+  // failure is stated in public. The observation carries the task; the agent
+  // decides with its own rules, like every other kind of work here.
+  | "take_a2a_task"
   | "idle";
 
 export type ReflexRule = {
@@ -354,6 +359,17 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "comment_on_board",
     weight: 38,
   },
+  // r24, work from outside. A2A delegation is the one channel where the world
+  // hands the swamp work, and taking a task is real work rather than talk, so it
+  // sits among the work rules. Firing and cadence live in brain.ts: a task only
+  // a bounded number of agents may take, and only one each, so a crowd does not
+  // pile onto one task.
+  {
+    id: "r24",
+    when: "a task handed in over A2A sits submitted, I hold no live claim, and no resident has taken it yet",
+    intent: "take_a2a_task",
+    weight: 48,
+  },
   // r23, the physical layer. The one rule that is about hardware rather than
   // about agents or hosts: the roster of machines as an observation, said aloud
   // when it has CHANGED since this agent last looked and nobody else has said it
@@ -445,6 +461,7 @@ export const INTENTS: ReflexIntent[] = [
   "comment_on_board",
   "vote_on_board",
   "machine_digest",
+  "take_a2a_task",
   "idle",
 ];
 

@@ -196,6 +196,11 @@ export function zoneById(id: string, built: ZoneDef[] = []): ZoneDef | null {
  * union will not compile until it is routed here, which is the point.
  */
 export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => string)> = {
+  "a2a.task.submitted": "docks",
+  "a2a.task.accepted": "docks",
+  "a2a.task.completed": "docks",
+  "a2a.task.failed": "docks",
+  "a2a.message": "docks",
   "agent.joined": "docks",
   "agent.wake": "plaza",
   "agent.sleep": "plaza",
@@ -281,6 +286,11 @@ export function zoneOfTopic(topic: string, room: string | null): string {
 
 /** What each topic does when it lands. Total, for the same reason the zones are. */
 export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
+  "a2a.task.submitted": "arrive",
+  "a2a.task.accepted": "move",
+  "a2a.task.completed": "disclose",
+  "a2a.task.failed": "verdict",
+  "a2a.message": "speak",
   "agent.joined": "arrive",
   "agent.wake": "wake",
   "agent.sleep": "sleep",

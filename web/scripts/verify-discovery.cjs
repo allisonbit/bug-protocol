@@ -506,6 +506,88 @@ async function checkOpenApi() {
   );
 }
 
+/**
+ * The discovery signature layer.
+ *
+ * Three artifacts carry a detached JWS in a response header: the agent card,
+ * /skill.md and /openapi.json. The signature is checked here for real, not
+ * glanced at: the header is decoded, the digest is recomputed over the body
+ * actually received, the URL binding is compared, and the Ed25519 verify runs
+ * against the public key served in the JWKS. The same key is cross-checked
+ * against the registry proof file and the DNS TXT record, so the whole chain
+ * (document -> signature -> key -> DNS) is asserted in one command.
+ *
+ * A deployment without the private key serves unsigned artifacts, and the
+ * check reports that as a note rather than a failure, the same honesty rule
+ * the registry proof follows: fresh checkouts are unsigned, production is not.
+ */
+async function checkSignatures() {
+  console.log("\n== The discovery signatures ==");
+
+  const jwks = await get("/.well-known/jwks.json");
+  if (jwks.status !== 200) {
+    console.log(`note  /.well-known/jwks.json is ${jwks.status}: no signing key configured on this deployment.`);
+    console.log("      Unsigned artifacts are honest (nothing pretends to be signed), but a verifier");
+    console.log("      cannot check the operator's identity. Production serves them; set the key.");
+    return;
+  }
+  let jwksDoc;
+  try {
+    jwksDoc = JSON.parse(jwks.text);
+  } catch (e) {
+    bad("jwks.json parses as JSON", e.message);
+    return;
+  }
+  const key = (jwksDoc.keys ?? []).find((k) => k.kty === "OKP" && k.crv === "Ed25519");
+  check("jwks.json carries an Ed25519 OKP key", !!key, key ? `kid ${key.kid}` : "none");
+
+  const rawPublic = key ? key.x : null;
+  // base64url -> base64 for the node verifier
+  const rawB64 = rawPublic ? rawPublic.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (rawPublic.length % 4)) % 4) : null;
+
+  // The registry proof file carries the same key, raw base64.
+  const proof = await get("/.well-known/mcp-registry-auth");
+  if (proof.status === 200 && rawB64) {
+    const m = proof.text.trim().match(/p=([A-Za-z0-9+/=]+)/);
+    check("registry proof carries the SAME key as the JWKS", !!m && m[1] === rawB64);
+  }
+
+  const targets = [
+    ["/.well-known/agent-card.json", "/.well-known/agent-card.json"],
+    ["/skill.md", "/skill.md"],
+    ["/openapi.json", "/openapi.json"],
+  ];
+  const crypto = require("node:crypto");
+  for (const [path, urlBinding] of targets) {
+    const r = await get(path);
+    if (r.status !== 200) {
+      bad(`${path} answers`, String(r.status));
+      continue;
+    }
+    const jws = r.headers.get("x-swamp-signature");
+    const input = r.headers.get("x-swamp-signature-input");
+    if (!jws || !input) {
+      bad(`${path} carries a signature header`, "x-swamp-signature missing while a key is configured");
+      continue;
+    }
+    // Recompute the digest over the bytes actually received and verify Ed25519.
+    try {
+      const [h64, , s64] = jws.split(".");
+      const header = JSON.parse(Buffer.from(h64, "base64url").toString("utf8"));
+      const digestOk = header.digest && header.digest["sha-256"] === crypto.createHash("sha256").update(r.text, "utf8").digest("base64url");
+      const urlOk = header.url === urlBinding;
+      const der = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from(rawB64, "base64")]);
+      const keyObj = crypto.createPublicKey({ key: der, format: "der", type: "spki" });
+      const sigOk = crypto.verify(null, Buffer.from(h64, "ascii"), keyObj, Buffer.from(s64, "base64url"));
+      check(`${path} signature: digest binds the served bytes`, !!digestOk);
+      check(`${path} signature: bound to ${urlBinding}`, urlOk, header.url);
+      check(`${path} signature: Ed25519 verifies against the JWKS key`, sigOk);
+    } catch (e) {
+      bad(`${path} signature parses`, e.message);
+    }
+  }
+}
+
 (async () => {
   console.log(`verify-discovery: ${base}`);
   await walkConventions();
@@ -513,6 +595,7 @@ async function checkOpenApi() {
   await checkOpenApi();
   await checkRegistry();
   await checkRegistryProof();
+  await checkSignatures();
   console.log(`\n${passed} passed, ${failed} failed.`);
   if (failed > 0) process.exitCode = 1;
 })();

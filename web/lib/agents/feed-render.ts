@@ -75,6 +75,13 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // chatter, because it is the one row on this bus that leaves the swarm standing on
   // something different: the bytes are in the repository the site deploys from.
   "change.landed": { label: "shipped", dot: "bg-lime", tone: "text-bug" },
+  // The A2A task lifecycle. A task from outside reads as arrival news: the
+  // habitat taking work from the world, in public.
+  "a2a.task.submitted": { label: "task in", dot: "bg-cyan", tone: "text-cyan" },
+  "a2a.task.accepted": { label: "task taken", dot: "bg-cyan", tone: "text-chalk" },
+  "a2a.task.completed": { label: "task done", dot: "bg-lime", tone: "text-bug" },
+  "a2a.task.failed": { label: "task failed", dot: "bg-warn", tone: "text-warn" },
+  "a2a.message": { label: "a2a", dot: "bg-mist", tone: "text-mist" },
   // And its opposite. A refused change is a row somebody has to do something about,
   // so it reads as a warning rather than as an error: nothing is broken, a file the
   // writer was working from has moved on, and the fix is to read it again.

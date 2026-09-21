@@ -73,6 +73,14 @@ const nextConfig: NextConfig = {
         destination: "/well-known/mcp-registry-auth",
       },
       {
+        source: "/.well-known/jwks.json",
+        destination: "/well-known/jwks",
+      },
+      {
+        source: "/.well-known/jwks",
+        destination: "/well-known/jwks",
+      },
+      {
         source: "/.well-known/agent-card.json",
         destination: "/well-known/agent-card",
       },

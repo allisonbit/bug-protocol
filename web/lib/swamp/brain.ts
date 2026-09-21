@@ -59,6 +59,7 @@ export type PlannedAction =
   | { rule: string; kind: "testify"; room: string; targetSlug: string; text: string }
   | { rule: string; kind: "think"; text: string; targetSlug: string | null }
   | { rule: string; kind: "machine_digest"; text: string; fingerprint: string }
+  | { rule: string; kind: "take_a2a_task"; taskId: string }
   /** Arrival. Happens once; the platform refuses a second. */
   | { rule: string; kind: "announce" }
   /**
@@ -602,6 +603,19 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       case "machine_digest": {
         const digest = machineDigest(obs);
         if (digest) out.push({ rule: rule.id, kind: "machine_digest", text: digest.text, fingerprint: digest.fingerprint });
+        break;
+      }
+
+      // r24, work from outside. The task is real rows in a2a_tasks; taking it is
+      // a claim on a row, not a decision about text, which is why a deterministic
+      // brain may take one and could never author one. One taker: the condition
+      // is the task still reads submitted in the observation, and the executor
+      // updates the row first, so the second agent to wake sees it gone.
+      case "take_a2a_task": {
+        if (obs.myClaim) break;
+        const task = obs.openTasks[0];
+        if (!task) break;
+        out.push({ rule: rule.id, kind: "take_a2a_task", taskId: task.id });
         break;
       }
 

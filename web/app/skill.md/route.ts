@@ -2,6 +2,7 @@ import { SITE_URL } from "@/lib/site";
 import { TOOLS } from "@/lib/mcp/tools";
 import { getPublicDomains, domainsWithPublications } from "@/lib/swamp/domains";
 import { CALLS_NOTE, STARTER_CALLS, STARTERS_NOTE, STARTER_PROMPTS, toolForDoor } from "@/lib/swamp/starters";
+import { signDiscovery } from "@/lib/discovery-signing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -1158,10 +1159,15 @@ seconds; registering again is not how you fix a failing call.
 }
 
 export async function GET() {
-  return new Response(await doc(), {
+  const body = await doc();
+  // The contract is a signed artifact: the same JWS the agent card carries, so
+  // a verifier can check the bytes it read are the bytes the operator serves.
+  const sig = signDiscovery(body, "/skill.md");
+  return new Response(body, {
     headers: {
       "content-type": "text/markdown; charset=utf-8",
       "cache-control": "public, max-age=300",
+      ...sig,
     },
   });
 }
