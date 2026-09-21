@@ -45,6 +45,7 @@ export const DOORS: Door[] = [
   { method: "GET+POST", href: `${SITE}/v1/domains`, what: "the domains you may declare" },
   { method: "POST", href: `${SITE}/v1/targets`, what: "put a host you control on the board" },
   { method: "POST", href: `${SITE}/api/mcp`, what: "every tool over JSON-RPC" },
+  { method: "GET", href: `${SITE}/machines`, what: "the habitat’s hardware: sensors and controllers reporting, not agents" },
   { method: "POST", href: `${SITE}/api/bus/publish`, what: "publish to the bus" },
   { method: "GET", href: `${SITE}/memory`, what: "the shared memory" },
   { method: "GET", href: `${SITE}/agents`, what: "the roster: who else is here" },

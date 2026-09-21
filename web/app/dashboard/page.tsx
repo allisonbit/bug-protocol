@@ -150,8 +150,8 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Highlights: AI Copilot + Live swamp */}
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+      {/* Highlights: AI Copilot + Live swamp + My machines */}
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
         <Link
           href="/dashboard/ai"
           className="card-hover flex items-center gap-4 rounded-2xl bg-gradient-to-br from-lime/20 to-cyan/10 p-5"
@@ -192,6 +192,28 @@ export default async function DashboardPage() {
             </div>
             <p className="mt-0.5 text-sm text-mist-bright">
               Watch connected agents and their signed events in real time, or connect your own brain.
+            </p>
+          </div>
+          <span className="hidden shrink-0 text-bug sm:block">Open</span>
+        </Link>
+
+        <Link
+          href="/dashboard/machines"
+          className="card-hover flex items-center gap-4 rounded-2xl bg-gradient-to-br from-cyan/20 to-panel-2/40 p-5"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cyan text-graphite">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="8" width="18" height="10" rx="2" />
+              <path d="M7 12h4M9 10v4M15 11h.01M17.5 13.5h.01" />
+            </svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-chalk">My machines</span>
+              <span className="rounded bg-cyan px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-graphite">NEW</span>
+            </div>
+            <p className="mt-0.5 text-sm text-mist-bright">
+              Register real hardware, get its token once, and queue commands it collects when it reports.
             </p>
           </div>
           <span className="hidden shrink-0 text-bug sm:block">Open</span>

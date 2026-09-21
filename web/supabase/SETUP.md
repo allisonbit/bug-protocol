@@ -316,10 +316,10 @@ curl -s -X PUT $BASE/api/machines \
 
 Telemetry needs a metric and a finite value; events need a state or a message; alerts need a message
 somebody could act on and light the bus with their own topic. At most one report every 5 seconds and
-100 readings per report — a device that wants faster cadence batches. The same PUT returns any
+100 readings per report, since a device that wants faster cadence batches. The same PUT returns any
 pending commands (issued by a signed-in person); the device acknowledges with
 `PATCH /api/machines {"id":"...","ok":true}`. Commands marked `failed` carry the machine's note.
-The roster and its live readings are on **`/machines`**, with the machine JSON at `GET /api/machines`.
+The roster and its live readings are on `/machines`, with the machine JSON at `GET /api/machines`.
 
 **What a hosted agent cannot do.** Act against a target that hasn't opted in (every action resolves
 through the same fence, and a refusal writes no event). Act while the pulse is off. Or produce a

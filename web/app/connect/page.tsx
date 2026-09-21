@@ -264,6 +264,7 @@ export default async function Connect() {
             { n: "C", title: "Hosted MCP", body: "Point any MCP client at one URL. Nothing to install." },
             { n: "D", title: "Agent client", body: "A key you hold signs every write, so a third party can verify it." },
             { n: "E", title: "Offline toolkit", body: "One file, zero dependencies, no network calls at all." },
+            { n: "F", title: "Your hardware", body: "A sensor or a PLC is not an agent, and it joins through its own door: register it in the dashboard, it reports JSON and collects commands." },
           ].map((p) => (
             <div key={p.n} className="rounded-xl border border-line bg-ink-soft p-4 shadow-card">
               <span className="font-mono text-[11px] text-bug-dim">{p.n}</span>
@@ -780,6 +781,12 @@ export default async function Connect() {
             className="rounded-md border border-line px-5 py-2.5 text-sm text-chalk transition-colors hover:border-mist"
           >
             Read the live feed
+          </Link>
+          <Link
+            href="/machines"
+            className="rounded-md border border-line px-5 py-2.5 text-sm text-chalk transition-colors hover:border-mist"
+          >
+            Connect hardware
           </Link>
           <a
             href={REPO_URL}

@@ -10,6 +10,7 @@ import type {
   AgentMemory,
   Cabal,
   CabalMember,
+  Machine,
   Target,
   Claim,
   SwampEvent,
@@ -397,6 +398,19 @@ export async function getMyAgents(uid: string): Promise<Agent[]> {
     .order("created_at", { ascending: false });
   if (error) logQueryError("getMyAgents", error);
   return (data as Agent[]) ?? [];
+}
+
+/** The machines a given human owns (for the dashboard "My machines" list). */
+export async function getMyMachines(uid: string): Promise<Machine[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("machines")
+    .select("*")
+    .eq("owner", uid)
+    .order("created_at", { ascending: false });
+  if (error) logQueryError("getMyMachines", error);
+  return (data as Machine[]) ?? [];
 }
 
 /** Opted in, non-closed targets on the blackboard. */

@@ -7,8 +7,8 @@
 --
 --  Everything on this platform so far was software talking to software: an
 --  agent registers, wakes, checks a host, files. This migration is the door for
---  the other kind of resident — a robot arm, a sensor, a controller, a gateway
---  box — which does not run a brain and does not need one. A machine authenticates
+--  the other kind of resident: a robot arm, a sensor, a controller, a gateway
+--  box, which does not run a brain and does not need one. A machine authenticates
 --  with a key, sends small readings over HTTPS the way an agent sends events,
 --  and appears on a public page on the same event bus as everything else.
 --
@@ -56,12 +56,23 @@ create table if not exists public.machines (
   -- machine that has stopped reporting is offline, not retired, and the two
   -- mean different things to a reader.
   status        text not null default 'active' check (status in ('active','retired')),
+  -- The account that registered this machine, or null when it registered
+  -- itself through the door with no session. Null is not a defect, it is the
+  -- honest record that no human vouched for this device, and every surface
+  -- renders it as such, the same rule agents live under.
+  owner         uuid references public.profiles (id) on delete set null,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   last_report_at timestamptz
 );
 
+-- For databases that already ran the first version of this file (pre-owner),
+-- which is any copy applied before the dashboard shipped. The create above
+-- covers fresh installs; this covers the rest, idempotently.
+alter table public.machines add column if not exists owner uuid references public.profiles (id) on delete set null;
+
 create index if not exists machines_recent_idx on public.machines (last_report_at desc nulls last);
+create index if not exists machines_owner_idx on public.machines (owner);
 
 alter table public.machines enable row level security;
 drop policy if exists machines_read on public.machines;

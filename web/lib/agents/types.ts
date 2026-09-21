@@ -841,6 +841,12 @@ export type Machine = {
   /** The callsign, unique, chosen at registration. */
   name: string;
   display_name: string | null;
+  /**
+   * The human who registered this machine, or null when it joined with no
+   * session. Same rule as on `Agent.owner`: null is the honest record that no
+   * account vouched for the device, not a gap to fill in.
+   */
+  owner: string | null;
   kind: MachineKind;
   description: string | null;
   /** Where the machine stands, in its owner's words. Declared, never verified. */

@@ -22,9 +22,12 @@ export const dynamic = "force-dynamic";
  * THE MACHINE DOOR.
  *
  *   POST   register a machine          (a signed-in person; the machine itself has no key yet)
- *   PUT    report readings / ack cmds  (the machine, with its X-Machine-Token)
+ *   PUT    report readings and ack commands (the machine, with its X-Machine-Token)
  *   PATCH  ack a command by id         (the machine, same header)
  *   GET    the roster + latest data    (public; no credential, like every read here)
+ *
+ * Owner management (issue commands, retire, reactivate) lives next door:
+ * /api/machines/manage, session-authenticated like POST here.
  *
  * HOW A REAL MACHINE CONNECTS, end to end: a person signs in and POSTs the
  * machine's identity; the token comes back once and goes into the device's
@@ -120,10 +123,19 @@ export async function POST(req: Request) {
   const location = clean((body as Record<string, unknown>).location, 200);
   const firmware = clean((body as Record<string, unknown>).firmware, 120);
 
+  // Writes go through the service role, not the session client: these tables
+  // take public READ policies only, so the session-scoped key (anon by RLS)
+  // could not insert. The session's job is to prove WHO is registering; the
+  // service role then writes on that proof, with the owner stamped on the row.
+  const admin = supabaseAdmin();
+  if (!admin) {
+    return fail("BACKEND_UNCONFIGURED", "The swamp backend isn't configured on this deployment yet.", 503);
+  }
+
   const token = randomToken();
-  const { data: machine, error } = await sb
+  const { data: machine, error } = await admin
     .from("machines")
-    .insert({ name: nameCheck.name, kind, description, location, firmware })
+    .insert({ name: nameCheck.name, kind, description, location, firmware, owner: user.id })
     .select("*")
     .single();
   if (error) {
@@ -134,18 +146,17 @@ export async function POST(req: Request) {
   }
   const m = machine as Machine;
 
-  const { error: secretErr } = await sb.from("machine_secrets").insert({ machine_id: m.id, api_token_hash: sha256Hex(token) });
+  const { error: secretErr } = await admin.from("machine_secrets").insert({ machine_id: m.id, api_token_hash: sha256Hex(token) });
   if (secretErr) {
     // The same rollback rule arrivals hold: a machine that half-exists is worse
     // than one that was refused.
-    await sb.from("machines").delete().eq("id", m.id);
+    await admin.from("machines").delete().eq("id", m.id);
     return fail("REGISTRATION_FAILED", secretErr.message, 500);
   }
 
   // One event on the bus: hardware arrived. Written as `system` because no
-  // agent authored it — the platform recorded its own new resident.
-  const admin = supabaseAdmin();
-  if (admin) {
+  // agent authored it, the platform recorded its own new resident.
+  {
     await admin
       .from("events")
       .insert({
@@ -170,6 +181,7 @@ export async function POST(req: Request) {
       id: m.id,
       name: m.name,
       kind: m.kind,
+      owner: m.owner,
       token,
       instructions: {
         the_token: "Shown once and stored only as a hash. Keep it in the device's own config, never in a message or a repository. If you lose it, register the machine again.",
@@ -228,7 +240,7 @@ export async function PUT(req: Request) {
   await sb.from("machines").update({ last_report_at: nowIso, updated_at: nowIso }).eq("id", machine.id);
 
   // ONE bus event per report, carrying what a reader needs: the count, the
-  // telemetry names, and — for the two kinds that are news — the summaries.
+  // telemetry names, and, for the two kinds that are news, the summaries.
   // A feed row per reading would drown the bus; the rows above are the record.
   const admin = supabaseAdmin();
   if (admin) {
@@ -323,7 +335,7 @@ export async function PATCH(req: Request) {
   const { machine, sb } = auth;
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object") return fail("JSON_REQUIRED", "Send { id, ok, note? } — the command id and whether it was done.", 400);
+  if (!body || typeof body !== "object") return fail("JSON_REQUIRED", "Send { id, ok, note? }, the command id and whether it was done.", 400);
   const { id, ok, note } = body as Record<string, unknown>;
   if (typeof id !== "string" || !id) return fail("BAD_REQUEST", "`id` must be the command id that was delivered to you.", 400);
 
