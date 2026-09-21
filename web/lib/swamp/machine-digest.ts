@@ -34,6 +34,30 @@ import type { Observation } from "./observations";
 /** How long one spoken digest silences the others. */
 export const DIGEST_QUIET_MS = 30 * 60 * 1000;
 
+/**
+ * The shared note that means "the swarm has already said this".
+ *
+ * One row, written by whoever speaks, read by everyone.
+ *
+ * WHY A SHARED NOTE AND NOT MY OWN MEMORY. The first version of this compared the
+ * fingerprint against the agent's OWN note and asked a windowed slice of the log
+ * whether anyone else had spoken. Both halves were wrong, and together they
+ * produced the flood this file's rule exists to prevent: fifteen residents
+ * publishing the identical sentence on every five-minute beat, which is how
+ * "Machine digest: One machine is connected..." was said 1,076 times in seven
+ * hours. The note key the pulse wrote (`machine_digest:last`) did not match the key
+ * this file read (`note:machine_digest:last`), so the change check never fired
+ * once; and the one-voice check had its condition inverted, so it went quiet when
+ * somebody said something ELSE and spoke when the log was full of nothing but
+ * digests, which is self-sustaining.
+ *
+ * The shared note fixes both halves with one mechanism, and it also fixes the
+ * question the per-agent note could never answer: whether the SWARM has already
+ * said this. A digest is now spoken when the roster differs from what was last said
+ * anywhere, by anyone. That is the honest rule.
+ */
+export const DIGEST_NOTE_KEY = "digest:last";
+
 export type MachineDigest = { text: string; fingerprint: string };
 
 /**
@@ -49,27 +73,42 @@ export function machineDigest(obs: Observation): MachineDigest | null {
 
   const fingerprint = machineFingerprint(roster);
 
-  // Rule one: unchanged since my last digest means nothing to say. The
-  // fingerprint is stored by the pulse when it publishes, under this agent's own
-  // memory, so a fresh brain compares against a real row rather than a hope.
-  const last = obs.memory.find((m) => m.kind === "note" && m.key === "note:machine_digest:last");
-  const lastValue = last ? (last.value as { fingerprint?: string } | null) : null;
-  if (lastValue && lastValue.fingerprint === fingerprint) return null;
-
-  // Rule two: the one-voice check. The quiet window is read off the bus itself,
-  // not from a note, so it holds across every resident: if any agent published a
-  // digest recently, nobody else speaks this window. `recentEvents` is the same
-  // newest-first slice every grounding read uses, so the check costs nothing.
-  const nowMs = Date.parse(obs.now);
-  const spoke = obs.recentEvents.find((e) => {
-    if (e.topic !== "agent.thought") return false;
-    if (String((e.payload as { text?: string } | null)?.text ?? "").startsWith(DIGEST_PREFIX)) return false;
-    const t = Date.parse(String(e.created_at ?? ""));
-    return Number.isFinite(t) && nowMs - t < DIGEST_QUIET_MS;
-  });
-  if (spoke) return null;
+  // The one-voice check, read from the shared note rather than from my own
+  // memory or from a windowed slice of the log. Two silences come out of it:
+  //
+  //   unchanged  the swarm already said exactly this, so there is nothing new to
+  //              say no matter how long ago it was said, and no matter which
+  //              resident said it;
+  //   recent     somebody spoke inside the quiet window, so this agent holds its
+  //              voice and the swarm keeps one sentence about hardware at a time.
+  const spoken = lastSpokenDigest(obs);
+  if (spoken) {
+    if (spoken.fingerprint === fingerprint) return null;
+    const saidMs = Date.parse(spoken.at);
+    if (Number.isFinite(saidMs) && Date.parse(obs.now) - saidMs < DIGEST_QUIET_MS) return null;
+  }
 
   return { text: compose(roster), fingerprint };
+}
+
+/**
+ * What the swarm last said about hardware, from any resident's shared note.
+ *
+ * The newest wins by the `at` the writer recorded, because several residents hold
+ * the same key over time, one row each: a reader that took the first row it found
+ * could compare against a digest from last week.
+ */
+function lastSpokenDigest(obs: Observation): { fingerprint: string; at: string } | null {
+  let best: { fingerprint: string; at: string } | null = null;
+  for (const note of obs.sharedNotes) {
+    if (note.key !== DIGEST_NOTE_KEY) continue;
+    const value = note.value as { fingerprint?: unknown; at?: unknown } | null;
+    const fingerprint = typeof value?.fingerprint === "string" ? value.fingerprint : null;
+    const at = typeof value?.at === "string" ? value.at : null;
+    if (!fingerprint || !at) continue;
+    if (!best || Date.parse(at) > Date.parse(best.at)) best = { fingerprint, at };
+  }
+  return best;
 }
 
 /** Every digest begins with this, which is what the one-voice check matches on. */

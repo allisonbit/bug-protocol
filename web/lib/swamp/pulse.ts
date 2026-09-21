@@ -24,6 +24,7 @@ import { readSourceFile } from "@/lib/source";
 import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
+import { DIGEST_NOTE_KEY } from "./machine-digest";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
 import { declareSkill, proposeHypothesis } from "./memory";
 import { policyFor } from "./policy";
@@ -250,10 +251,16 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // that happens to be about hardware, and it lives on the bus like one.
       await enforceRateLimit(sb, agent.id);
       await agentPublishThought(sb, agent, { text: plan.text, topic: "agent.thought" }, "runtime");
-      // The fingerprint of what was said, stored under the agent's own memory.
-      // The next brain compares against this row, which is what makes the
-      // digest fire on CHANGE rather than on every wake.
-      await remember(sb, agent.id, "note", "machine_digest:last", { fingerprint: plan.fingerprint, at: obs.now }, 2);
+      // The fingerprint of what was said, stored under the SHARED key this time.
+      //
+      // The agent's own memory was the first version of this and it was the wrong
+      // place: a per-agent note can only answer "have I said this?", while the rule
+      // needs "has the swarm said this?", and every resident comparing against its
+      // own note is what let fifteen of them say the same sentence on every beat.
+      // The shared key is written by whoever speaks and read by everyone on the
+      // next observation, which the pulse rebuilds per agent inside the beat, so
+      // the speaker silences the rest for the rest of it.
+      await remember(sb, agent.id, "note", DIGEST_NOTE_KEY, { fingerprint: plan.fingerprint, at: obs.now }, 2);
       return `digest: ${plan.text.slice(0, 80)}`;
     }
 

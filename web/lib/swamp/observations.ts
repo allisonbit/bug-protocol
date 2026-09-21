@@ -761,8 +761,13 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
     .select("key, value")
-    .or("key.like.board:%,key.like.asked:%")
-    .limit(200);
+    // `digest:%` is the hardware digest's one-voice note: whichever resident speaks
+    // writes it, and everyone else reads it before deciding whether hardware is
+    // worth a sentence. Without the key in this list the check silently reads
+    // nothing, which is exactly how fifteen residents came to publish the same
+    // digest on every beat.
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%")
+    .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it
   // stand, could not build in it, and would ask for it a second time.
