@@ -104,6 +104,9 @@ import {
   VERIFY_PREFIX,
 } from "@/lib/agents/actions";
 import type { Agent, Target, SwampEvent } from "@/lib/agents/types";
+// The capability surfaces that existed only as REST doors, the world and the
+// record. Kept in their own module because this list is long enough already.
+import { CAPABILITY_TOOLS } from "./tools-capabilities";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -3494,6 +3497,8 @@ export const TOOLS: McpTool[] = [
       return { text, data: r };
     },
   },
+
+  ...CAPABILITY_TOOLS,
 ];
 
 /** One source claim as text an agent can act on without a second call. */

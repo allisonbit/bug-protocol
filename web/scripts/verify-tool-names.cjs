@@ -12,6 +12,15 @@
  * which is the door the swarm most needs open, and nothing failed: no build error,
  * no 500, no log line. The only symptom was a tool nobody could call.
  *
+ * WHY IT READS SEVERAL FILES NOW. This check used to read one file, and it read it
+ * correctly. Then the toolset outgrew a single module and the capability surfaces
+ * (delegation, hardware, the world, the record) arrived as `tools-capabilities.ts`,
+ * spread into `TOOLS`. That took eight descriptors out from under this check while
+ * it went on reporting a pass — 80 names against 80 handlers, nothing wrong — so a
+ * completeness claim was silently covering less than it said. The registry is
+ * therefore DISCOVERED rather than typed: every `lib/mcp/tools*.ts` is a registry
+ * module, and a third one added later is covered on the commit that adds it.
+ *
  * WHAT THIS CHECKS, AND WHAT IT DELIBERATELY DOES NOT. It reads the registry's own
  * source. That is enough to catch the failure mode above, because a descriptor
  * carries its name in the file. It cannot catch a name assembled from variables,
@@ -24,17 +33,25 @@
  *
  *   node scripts/verify-tool-names.cjs
  *
- * An optional path argument points it at a different file, which is how the check
- * was tested against a copy of the source with the duplicate put back:
+ * An optional path argument points it at a single file instead of the discovered
+ * set, which is how the check was tested against a copy of the source with the
+ * duplicate put back:
  *
  *   node scripts/verify-tool-names.cjs ./some/other/tools.ts
  */
 const fs = require("node:fs");
 const path = require("node:path");
 
-const SOURCE = process.argv[2]
-  ? path.resolve(process.argv[2])
-  : path.join(__dirname, "..", "lib", "mcp", "tools.ts");
+const ROOT = path.join(__dirname, "..");
+const REGISTRY_DIR = path.join(ROOT, "lib", "mcp");
+
+const SOURCES = process.argv[2]
+  ? [path.resolve(process.argv[2])]
+  : fs
+      .readdirSync(REGISTRY_DIR)
+      .filter((f) => /^tools.*\.ts$/.test(f))
+      .sort()
+      .map((f) => path.join(REGISTRY_DIR, f));
 
 let failed = 0;
 const say = (ok, label, detail) => {
@@ -68,23 +85,42 @@ function duplicates(names) {
   return [...seen.entries()].filter(([, count]) => count > 1).map(([name, count]) => `${name} x${count}`);
 }
 
-const source = fs.readFileSync(SOURCE, "utf8");
-const names = toolNames(source);
-const handlers = handlerCount(source);
-
-// 1) The reading is complete: one name per descriptor, and no more.
-console.log(`\nreading ${path.relative(path.join(__dirname, ".."), SOURCE)}`);
+console.log(`\nreading ${SOURCES.map((s) => path.relative(ROOT, s)).join(", ")}`);
 console.log("== the registry as it stands ==");
-say(names.length > 0, "descriptors were found", `${names.length} names, ${handlers} handlers`);
+
+const names = [];
+let handlersTotal = 0;
+let everyDescriptorNamed = true;
+for (const file of SOURCES) {
+  const source = fs.readFileSync(file, "utf8");
+  const found = toolNames(source);
+  const handlers = handlerCount(source);
+  names.push(...found);
+  handlersTotal += handlers;
+  const ok = found.length > 0 && found.length === handlers;
+  if (!ok) everyDescriptorNamed = false;
+  console.log(
+    `  ${ok ? "ok  " : "FAIL"} ${path.relative(ROOT, file)}  ${found.length} name(s), ${handlers} handler(s)`,
+  );
+}
+
 say(
-  names.length === handlers,
+  names.length > 0,
+  "descriptors were found",
+  `${names.length} names in ${SOURCES.length} file(s), ${handlersTotal} handlers`,
+);
+// 1) The reading is complete: one name per descriptor, in every registry file, and
+//    no more.
+say(
+  everyDescriptorNamed,
   "every descriptor contributed a name",
-  names.length === handlers
-    ? `(${names.length})`
-    : `found ${names.length} names for ${handlers} handlers — a name is no longer a plain literal, so this check is covering less than it claims`,
+  everyDescriptorNamed
+    ? `(${names.length} across ${SOURCES.length} file(s))`
+    : "a name is no longer a plain literal in one of these files, so this check is covering less than it claims",
 );
 
-// 2) No two tools share a name. This is the whole point of the file.
+// 2) No two tools share a name, across the whole registry rather than within one
+//    module. This is the whole point of the file.
 const dupes = duplicates(names);
 say(dupes.length === 0, "no two tools share a name", dupes.length ? dupes.join(", ") : `(${names.length} unique)`);
 
