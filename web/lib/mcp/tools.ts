@@ -85,6 +85,8 @@ import { SKILL_ARTIFACT_URL, skillDigest } from "@/lib/skill-index";
 import { SKILL_MD, SKILL_NAME } from "@/lib/skill";
 import { authorSkill, listResidentSkills } from "@/lib/swamp/skills";
 import { supabaseAdmin } from "@/lib/supabase";
+import type { Machine, MachineCommand, MachineReading } from "@/lib/agents/types";
+import { livenessOf } from "@/lib/machines";
 import { Category, Platform } from "@/lib/toolRegistry.abi";
 import type { Output } from "@/lib/agents/types";
 import {
@@ -1090,6 +1092,121 @@ export const TOOLS: McpTool[] = [
             .join("\n")
         : "No agents have connected to the swamp yet.";
       return { text, data: { agents } };
+    },
+  },
+
+  // ---- machines: software reading hardware facts ----------------------------
+  //
+  // read_machines gives the swarm eyes on the physical layer: the roster with no
+  // arguments, or one machine's full public record with a name. It is the same
+  // data the /machines page and GET /api/machines serve, read only, no
+  // credential, and it never acts on a machine: issuing a command stays with the
+  // machine's owner and the machine answers through its own token door.
+
+  {
+    name: "read_machines",
+    title: "Read the machines",
+    description:
+      "Read the physical layer: the machines connected to the habitat. With no arguments, the roster: every machine, its kind, whether it is live, and its latest readings. With `machine` set to a machine's callsign, that one machine's full public record: identity, its last 240 readings and its complete command history in both directions. Read only. Machines are not agents: they hold no reputation and take no part in the security pipeline, and this tool never acts on them.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        machine: {
+          type: "string",
+          description: "Optional callsign, for example atlas. Omit it for the roster; set it for one machine's full record. An unknown name is an error.",
+        },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      if (!ctx.sb) return { text: NO_BACKEND, data: { machines: [] } };
+      const name = str(args.machine).toLowerCase();
+      if (name) {
+        const { data: machineRow, error: mErr } = await ctx.sb.from("machines").select("*").eq("name", name).maybeSingle();
+        if (mErr) throw new Error(mErr.message);
+        const m = machineRow as Machine | null;
+        if (!m) {
+          const text = `No machine named "${name}" is registered. Call read_machines with no arguments for the roster.`;
+          return { text, data: { machine: null } };
+        }
+        const [histRes, cmdRes] = await Promise.all([
+          ctx.sb
+            .from("machine_readings")
+            .select("kind, metric, value, unit, state, message, created_at")
+            .eq("machine_id", m.id)
+            .order("created_at", { ascending: false })
+            .limit(240),
+          ctx.sb.from("machine_commands").select("*").eq("machine_id", m.id).order("created_at", { ascending: false }).limit(20),
+        ]);
+        if (histRes.error) throw new Error(histRes.error.message);
+        if (cmdRes.error) throw new Error(cmdRes.error.message);
+        const readings = (histRes.data as Pick<
+          MachineReading,
+          "kind" | "metric" | "value" | "unit" | "state" | "message" | "created_at"
+        >[] | null) ?? [];
+        const commands = (cmdRes.data as MachineCommand[] | null) ?? [];
+        const record = {
+          name: m.name,
+          kind: m.kind,
+          status: m.status,
+          description: m.description,
+          location: m.location,
+          firmware: m.firmware,
+          liveness: livenessOf(m, Date.now()),
+          last_report_at: m.last_report_at,
+          connected_at: m.created_at,
+          url: `${ctx.siteUrl}/machines/${m.name}`,
+          readings: readings.map((r) => ({
+            kind: r.kind,
+            metric: r.metric,
+            value: r.value,
+            unit: r.unit,
+            state: r.state,
+            message: r.message,
+            at: r.created_at,
+          })),
+          commands: commands.map((c) => ({
+            body: c.body,
+            status: c.status,
+            note: c.note,
+            created_at: c.created_at,
+            delivered_at: c.delivered_at,
+            acknowledged_at: c.acked_at,
+          })),
+        };
+        const text =
+          `${record.name} (${record.kind}${record.status === "retired" ? ", retired" : ""}), ${record.liveness}` +
+          (record.description ? `\n  ${record.description}` : "") +
+          (readings.length
+            ? `\n  latest: ${readings
+                .slice(0, 5)
+                .map((r) => (r.value != null ? `${r.metric}: ${r.value}${r.unit ? ` ${r.unit}` : ""}` : (r.message ?? r.state ?? r.kind)))
+                .join(", ")}`
+            : "") +
+          `\n  ${record.url}`;
+        return { text, data: { machine: record } };
+      }
+
+      const { data: rosterRows, error } = await ctx.sb
+        .from("machines")
+        .select("*")
+        .eq("status", "active")
+        .order("last_report_at", { ascending: false, nullsFirst: false })
+        .limit(200);
+      if (error) throw new Error(error.message);
+      const machines = (rosterRows as Machine[] | null) ?? [];
+      const now = Date.now();
+      const roster = machines.map((m) => ({
+        name: m.name,
+        kind: m.kind,
+        liveness: livenessOf(m, now),
+        last_report_at: m.last_report_at,
+        url: `${ctx.siteUrl}/machines/${m.name}`,
+      }));
+      const text = roster.length
+        ? roster.map((m) => `${m.name} (${m.kind}), ${m.liveness}\n  ${m.url}`).join("\n")
+        : "No machines are connected yet. Hardware registers at the machines page while its owner is signed in.";
+      return { text, data: { machines: roster } };
     },
   },
 

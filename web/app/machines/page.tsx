@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { Machine, MachineCommand, MachineReading } from "@/lib/agents/types";
 import { MACHINE_KINDS, livenessOf, readingSummary } from "@/lib/machines";
+import { Sparkline, telemetrySeries } from "@/components/machine-sparkline";
 import { SITE_URL } from "@/lib/site";
 import { timeAgo } from "@/lib/db";
 
@@ -112,12 +113,14 @@ export default async function MachinesPage() {
             return (
               <li key={m.id} className="rounded-xl bg-ink-soft p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-panel-2 text-sm font-semibold text-bug">
+                  <Link href={`/machines/${m.name}`} className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-panel-2 text-sm font-semibold text-bug transition-colors hover:bg-panel">
                     {(m.display_name ?? m.name).slice(0, 1).toUpperCase()}
-                  </div>
+                  </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate font-medium text-chalk">{m.display_name ?? m.name}</span>
+                      <Link href={`/machines/${m.name}`} className="truncate font-medium text-chalk transition-colors hover:text-bug">
+                        {m.display_name ?? m.name}
+                      </Link>
                       <span className="shrink-0 rounded bg-cyan/15 px-1.5 py-0.5 text-[10px] text-cyan">{m.kind}</span>
                       <span
                         className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
@@ -340,83 +343,3 @@ function AlertHistory({
   );
 }
 
-/**
- * The telemetry history for one machine, oldest first, grouped by metric.
- *
- * Drawn from the deeper history read rather than the latest-readings slice, so
- * the line shows the shape of the day and not just its last three points. A
- * gap longer than three times the median spacing is marked in the caption
- * rather than smoothed over: hours where a machine said nothing are hours,
- * not points, and joining across them would invent a flat line that never
- * existed.
- */
-function telemetrySeries(
-  history: { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[],
-  machineId: string,
-  now: number,
-) {
-  const mine = history
-    .filter((r) => r.machine_id === machineId && typeof r.value === "number" && Number.isFinite(r.value))
-    .map((r) => ({ v: r.value as number, at: Date.parse(r.created_at), metric: r.metric ?? "value", unit: r.unit ?? "" }));
-  if (mine.length < 3) return null;
-  const byMetric = new Map<string, typeof mine>();
-  for (const p of mine) {
-    const list = byMetric.get(p.metric) ?? [];
-    list.push(p);
-    byMetric.set(p.metric, list);
-  }
-  // The metric with the most points is the machine's main channel.
-  let best = { metric: "", points: [] as typeof mine };
-  for (const [metric, points] of byMetric) {
-    if (points.length > best.points.length) best = { metric, points };
-  }
-  if (best.points.length < 3) return null;
-  const points = best.points.sort((a, b) => a.at - b.at).slice(-120);
-  const values = points.map((p) => p.v);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  // Median spacing, so one slow report does not invent a gap.
-  const gaps = points.slice(1).map((p, i) => p.at - points[i].at).sort((a, b) => a - b);
-  const median = gaps[Math.floor(gaps.length / 2)] ?? 0;
-  const spanMinutes = Math.max(1, Math.round((points[points.length - 1].at - points[0].at) / 60000));
-  const gap = points.slice(1).some((p, i) => p.at - points[i].at > Math.max(median * 3, 10 * 60 * 1000));
-  const round1 = (v: number) => Math.round(v * 10) / 10;
-  return {
-    metric: best.metric,
-    unit: best.points[best.points.length - 1].unit,
-    last: round1(values[values.length - 1]),
-    min: round1(min),
-    max: round1(max),
-    points: values,
-    spanMinutes,
-    gap,
-  };
-}
-
-/**
- * A sparkline as plain SVG, no client JS and no chart library.
- *
- * Server-rendered because the page is server-rendered: a reading that was true
- * when the page was drawn is the reading the page shows, and the next visitor
- * gets the next page. The area under the line is filled so a single flat series
- * still reads as a shape rather than as a hairline.
- */
-function Sparkline({ points, min, max }: { points: number[]; min: number; max: number }) {
-  const W = 560;
-  const H = 56;
-  const PAD = 3;
-  const span = max - min || 1;
-  const x = (i: number) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
-  const y = (v: number) => H - PAD - ((v - min) / span) * (H - PAD * 2);
-  const line = points.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const area = `${line} L${x(points.length - 1).toFixed(1)},${H - PAD} L${x(0).toFixed(1)},${H - PAD} Z`;
-  const lastX = x(points.length - 1).toFixed(1);
-  const lastY = y(points[points.length - 1]).toFixed(1);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-14 w-full" preserveAspectRatio="none" role="img" aria-label="recent telemetry">
-      <path d={area} className="fill-bug/10" />
-      <path d={line} fill="none" className="stroke-bug" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
-      <circle cx={lastX} cy={lastY} r={2.4} className="fill-bug" />
-    </svg>
-  );
-}

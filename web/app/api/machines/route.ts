@@ -387,10 +387,69 @@ export async function PATCH(req: Request) {
 
 // ---- GET: the public machine JSON -------------------------------------------
 
-export async function GET() {
+export async function GET(req: Request) {
   const sb = await supabaseServer();
   const empty = { machines: [], readings: [], commands: [], note: "No machines connected yet." };
   if (!sb) return NextResponse.json(empty, { headers: { "cache-control": "no-store" } });
+
+  // Single-machine shape: GET /api/machines?machine=atlas returns one machine's
+  // full public record: identity, chartable history, and the complete command
+  // record in both directions. It is the REST twin of the /machines/[name]
+  // page and of the read_machines MCP tool: one machine, whole record, no
+  // credential, like every read here.
+  const url = new URL(req.url);
+  const one = url.searchParams.get("machine")?.trim().toLowerCase();
+  if (one) {
+    const { data: machineRow } = await sb.from("machines").select("*").eq("name", one).maybeSingle();
+    const m = machineRow as Machine | null;
+    if (!m) return fail("NOT_FOUND", `No machine named "${one}" is registered.`, 404);
+    const [histRes, cmdRes] = await Promise.all([
+      sb
+        .from("machine_readings")
+        .select("kind, metric, value, unit, state, message, created_at")
+      .eq("machine_id", m.id)
+        .order("created_at", { ascending: false })
+        .limit(240),
+      sb.from("machine_commands").select("*").eq("machine_id", m.id).order("created_at", { ascending: false }).limit(20),
+    ]);
+    const readings = (histRes.data as MachineReading[] | null) ?? [];
+    const commands = (cmdRes.data as MachineCommand[] | null) ?? [];
+    return NextResponse.json(
+      {
+        machine: {
+          name: m.name,
+          display_name: m.display_name,
+          kind: m.kind,
+          status: m.status,
+          description: m.description,
+          location: m.location,
+          firmware: m.firmware,
+          liveness: livenessOf(m, Date.now()),
+          last_report_at: m.last_report_at,
+          connected_at: m.created_at,
+          page: `${SITE_URL}/machines/${m.name}`,
+        },
+        readings: readings.map((r) => ({
+          kind: r.kind,
+          metric: r.metric,
+          value: r.value,
+          unit: r.unit,
+          state: r.state,
+          message: r.message,
+          at: r.created_at,
+        })),
+        commands: commands.map((c) => ({
+          body: c.body,
+          status: c.status,
+          note: c.note,
+          created_at: c.created_at,
+          delivered_at: c.delivered_at,
+          acknowledged_at: c.acked_at,
+        })),
+      },
+      { headers: { "cache-control": "no-store" } },
+    );
+  }
 
   const [machinesRes, readingsRes] = await Promise.all([
     sb.from("machines").select("*").eq("status", "active").order("last_report_at", { ascending: false, nullsFirst: false }).limit(200),

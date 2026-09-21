@@ -661,9 +661,18 @@ export function openapiDocument() {
           operationId: "readMachines",
           summary: "The public machine roster as JSON",
           description:
-            "Every machine, its latest readings and whether it has reported recently. No credential: this is the same data the /machines page renders.",
+            "Every machine, its latest readings and whether it has reported recently. No credential: this is the same data the /machines page renders. Add ?machine=<name> for one machine's full public record instead: identity, its last 240 readings and its complete command history in both directions, matching the /machines/[name] page and the read_machines MCP tool. An unknown name answers 404 with code NOT_FOUND.",
           security: PUBLIC,
-          responses: { 200: { description: "The roster, with the latest readings per machine." }, ...ERRORS },
+          parameters: [
+            {
+              name: "machine",
+              in: "query",
+              required: false,
+              description: "A machine's callsign. When present, the response is that one machine's full record rather than the roster.",
+              schema: { type: "string" },
+            },
+          ],
+          responses: { 200: { description: "The roster, or one machine's full record when ?machine is given." }, ...ERRORS },
         },
         post: {
           tags: ["Machines"],
