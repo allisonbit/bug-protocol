@@ -256,6 +256,13 @@ export type StructureState = {
   label: string;
   /** When its newest contribution landed, so growth can be seen rather than only counted. */
   at: string | null;
+  /**
+   * True only for a machine whose newest reading is an alert: the red trouble
+   * mark. It is a reading of rows, derived by the projector, never stored on
+   * the machine and never inferred by the renderer; a building cannot claim
+   * hardware trouble the record does not carry.
+   */
+  trouble?: boolean;
 };
 
 /** The city, summarised for the frame and for the fallback that has no canvas. */
@@ -450,6 +457,13 @@ export type WorldInput = {
     last_report_at: string | null;
     pending_commands: number;
   }[];
+  /**
+   * The newest reading per machine, whatever kind it is. The trouble mark is
+   * read off this: a machine is in trouble exactly when its newest reading is
+   * an alert, and the mark clears the moment a newer telemetry or event row
+   * lands. One bounded query, the same window the alert feed reads.
+   */
+  alerts: { machine_id: string; kind: string; created_at: string }[];
   /** Project the world as of this seq. This is the whole replay mechanism. */
   untilSeq?: number;
   now: number;

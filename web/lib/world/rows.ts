@@ -77,6 +77,7 @@ function absentFor(fallback: string): WorldInput {
     rooms: [],
     fixtures: [],
     machines: [],
+    alerts: [],
     now: Date.now(),
   };
 }
@@ -119,7 +120,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, machineReadingsRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
@@ -160,6 +161,10 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
         .select("machine_id")
         .in("status", ["pending", "delivered"])
         .limit(2000),
+      // The newest reading per machine, for the trouble mark. Ordered newest
+      // first and capped, then the projector takes the first row per machine:
+      // one bounded query instead of one per machine.
+      sb.from("machine_readings").select("machine_id, kind, created_at").order("created_at", { ascending: false }).limit(500),
     ]);
 
   // `getFeed` returns bare rows; a bounded query returns a response envelope. Both
@@ -235,6 +240,9 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
         (c) => c.machine_id === m.id,
       ).length,
     })),
+    // First row per machine IS the newest: the query is already newest first.
+    alerts: optional("world.machine_readings", machineReadingsRes as Maybe<{ machine_id: string; kind: string; created_at: string }>)
+      .filter((r, i, all) => all.findIndex((x) => x.machine_id === r.machine_id) === i),
     // The convenings are not queried: a room exists only as events, so the fold in
     // `projectWorld` fills this in from the window it already read.
     rooms: [],

@@ -245,6 +245,12 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
                 ? `live, last report ${ago(s.at, now) ?? "just now"}`
                 : `quiet since ${ago(s.at, now) ?? "the record's start"}`,
         });
+        // The red mark on the wall, in words. It means exactly one thing: the
+        // machine's newest reading is an alert, in the machine's own words on
+        // its own page. It is not a diagnosis and it is not cleared on a timer.
+        if (s.trouble) {
+          facts.push({ label: "Trouble", value: "the newest reading is an alert, in the machine's own words on its page" });
+        }
       }
       return {
         pick,

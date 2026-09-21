@@ -303,6 +303,8 @@ type Entry = {
   floors: number;
   height: number;
   lit: boolean;
+  trouble: boolean;
+  mark: THREE.Mesh | null;
   rise: number;
   pulse: number;
 };
@@ -428,6 +430,8 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
   root.add(cityGroup);
   const entries = new Map<string, Entry>();
   const BEACON = 1.9;
+  /** The trouble red. Cooler than the warn page colour, so it reads on dark stone. */
+  const TROUBLE = 0xff4d3d;
 
   /** Light warm stone to dark slate, so a street of houses has tone in it. */
   const LOOK: Record<StructureKind, { stone: number; glow: number }> = {
@@ -487,8 +491,38 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       beacon.position.y = s.height + BEACON / 2;
       group.add(beacon);
     }
+    // The trouble mark: a red disc set slightly off the wall, drawn ONLY when
+    // the machine's newest reading is an alert. It is the record made visible,
+    // not a diagnosis: the words are the machine's own, on its page. Deterministic
+    // placement, so the same building carries the mark in the same spot in every
+    // projection and replay.
+    let mark: THREE.Mesh | null = null;
+    if (s.kind === "machine" && s.trouble) {
+      mark = new THREE.Mesh(
+        new THREE.CircleGeometry(0.09, 20),
+        new THREE.MeshBasicMaterial({ color: TROUBLE, toneMapped: false }),
+      );
+      const a = Math.sin(s.position.x * 12.9898) * 43758.5453;
+      mark.position.set(0.28 + (a - Math.floor(a)) * 0.06, Math.min(s.height * 0.72, 0.62), s.footprint / 2 + 0.012);
+      mark.rotation.y = 0;
+      group.add(mark);
+    }
+
     cityGroup.add(group);
-    return { group, mesh, geo, mat, beacon, floors: s.floors, height: s.height, lit: s.lit, rise: 0, pulse: 0 };
+    return {
+      group,
+      mesh,
+      geo,
+      mat,
+      beacon,
+      floors: s.floors,
+      height: s.height,
+      lit: s.lit,
+      trouble: !!s.trouble,
+      mark,
+      rise: 0,
+      pulse: 0,
+    };
   }
 
   function teardown(entry: Entry): void {
@@ -498,6 +532,10 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     if (entry.beacon) {
       entry.beacon.geometry.dispose();
       (entry.beacon.material as THREE.Material).dispose();
+    }
+    if (entry.mark) {
+      entry.mark.geometry.dispose();
+      (entry.mark.material as THREE.Material).dispose();
     }
   }
 
@@ -668,6 +706,15 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
         if (entry.lit !== s.lit) {
           entry.lit = s.lit;
           entry.mat.emissiveIntensity = s.lit ? 0.95 : 0.16;
+        }
+        if (entry.trouble !== !!s.trouble) {
+          // Trouble arrived or cleared. Rebuild, because the mark is part of the
+          // building's geometry rather than a sprite to toggle; a rebuild pulses
+          // the emissive too, which is the right announcement either way.
+          teardown(entry);
+          const next = build(s);
+          next.pulse = 1;
+          entries.set(s.id, next);
         }
       }
       for (const [id, entry] of [...entries]) {

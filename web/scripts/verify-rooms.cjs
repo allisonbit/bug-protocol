@@ -94,6 +94,9 @@ async function main() {
     fixtures: [],
     rooms: [],
     bodies: [],
+    machines: [],
+    alerts: [],
+    now: Date.now(),
     totals: { facts: 0, hypotheses: 0, skills: 0 },
   };
   const build = (patch) => city.buildCity({ ...full, ...patch });

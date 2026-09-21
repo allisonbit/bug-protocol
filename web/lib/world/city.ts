@@ -233,6 +233,8 @@ export type CityInput = {
     last_report_at: string | null;
     pending_commands: number;
   }[];
+  /** The newest reading per machine: the trouble mark reads off this. */
+  alerts: { machine_id: string; kind: string; created_at: string }[];
   /** The projection's clock. Liveness is judged against this, not the wall clock, so a replay is still deterministic. */
   now: number;
   /** The projected bodies, because a house's height is the tier of the agent in it. */
@@ -282,6 +284,8 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       scope?: string | null;
       /** A room that stands this building regardless of scope, for fixtures. */
       roomId?: string;
+      /** Machines only: the newest reading is an alert. Draws the trouble mark. */
+      trouble?: boolean;
     },
   ): void {
     if (out.length >= MAX_STRUCTURES) {
@@ -327,6 +331,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       href: fields.href,
       label: fields.label,
       at: fields.at,
+      ...(fields.trouble ? { trouble: true } : {}),
     });
   }
 
@@ -486,6 +491,12 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
   for (const m of input.machines) {
     if (m.status === "retired") continue;
     const live = m.last_report_at != null && input.now - Date.parse(m.last_report_at) <= 15 * 60 * 1000;
+    // The trouble mark is the machine's own newest alert, in its own words:
+    // shown while the machine keeps reporting it, gone the moment a newer
+    // reading arrives, whatever that reading says. Nothing is diagnosed here
+    // and nothing is cleared on a timer; the record decides.
+    const latest = input.alerts.find((a) => a.machine_id === m.id) ?? null;
+    const trouble = latest != null && latest.kind === "alert";
     add("machine", m.id, {
       floors: 1 + Math.min(2, Math.max(0, m.pending_commands)),
       lit: live,
@@ -493,6 +504,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       href: `${MACHINE_PAGE_BASE}/${encodeURIComponent(m.name)}`,
       label: m.name,
       at: m.last_report_at,
+      trouble,
     });
   }
 
