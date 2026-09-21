@@ -4,6 +4,8 @@ import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { supabaseServer } from "@/lib/supabase/server";
 import { getFlags } from "@/lib/agents/auth";
 import type { SwampEvent } from "@/lib/agents/types";
+import { bindingOf, verifyTaskBinding } from "@/lib/identity/binding";
+import { acceptPayment, bindPaymentToTask, type PaymentProof } from "@/lib/payments/x402";
 import { SITE_URL } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -130,13 +132,65 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
     return rpcError(id, -32602, "params.mandate, when present, needs intent (1..1000 chars), signature and keyId. budget is optional JSON.");
   }
 
+  // THE BINDING, CHECKED BEFORE THE WRITE. A caller may sign the task itself with
+  // the key it registered, and the result of checking that signature is recorded as
+  // a result. It is optional, so delegation from outside still works with no
+  // account: what changes is that a task which claims to come from a registered
+  // agent can now be checked by anyone reading the row, instead of being taken on
+  // the transport's word. The keys are read from the registry, never from the
+  // request, because a caller checking itself verifies nothing.
+  // A PAYMENT MAY BE ATTACHED TO THE SAME CALL, so the work and its budget arrive
+  // together instead of as two requests that can disagree. It is verified before any
+  // task is written: a task recorded against a proof that later failed to check would
+  // be a task whose budget was imaginary, and the delegator would have no way to know.
+  // Unpaid delegation stays allowed and unchanged, because the queue has always been
+  // open and closing it to fund one feature would be a worse trade than the feature
+  // is worth.
+  const rawPayment = params.payment as PaymentProof | undefined;
+  let payment: Awaited<ReturnType<typeof acceptPayment>> | null = null;
+  if (rawPayment !== undefined && rawPayment !== null) {
+    payment = await acceptPayment({ proof: rawPayment, sb });
+    if (!payment.ok) {
+      return rpcError(
+        id,
+        -32602,
+        `The attached payment was refused (${payment.code}): ${payment.reason}`,
+        payment.status === 503 ? 503 : 402,
+      );
+    }
+  }
+
+  const binding = bindingOf(params);
+  if (binding === "invalid") {
+    return rpcError(
+      id,
+      -32602,
+      "params.binding, when present, needs a hex Ed25519 signature (128 chars) and a keyId. The signed bytes are canonicalJson({caller, text, external_id}).",
+    );
+  }
+  const bindingRecord = binding
+    ? await verifyTaskBinding({ sb, caller, text, externalId, binding })
+    : null;
+
   const { data: taskRow, error: insertError } = await sb
     .from("a2a_tasks")
-    .insert({ external_id: externalId, caller, message: { role, parts: [{ kind: "text", text }] }, state: "submitted" })
+    .insert({
+      external_id: externalId,
+      caller,
+      message: { role, parts: [{ kind: "text", text }] },
+      state: "submitted",
+      ...(bindingRecord ? { binding: bindingRecord } : {}),
+    })
     .select("*")
     .single();
   if (insertError) return rpcError(id, -32000, `Task could not be recorded: ${insertError.message}`, 500);
   const task = taskRow as { id: string; created_at: string };
+
+  // The payment lands first and is pointed at the task a moment later, because a
+  // proof cannot name a task id that does not exist yet. A failure to attach is
+  // reported to the caller and left visible in the row rather than silently
+  // swallowed.
+  const paymentAttached = payment && payment.ok ? await bindPaymentToTask(sb, payment.id, task.id) : false;
 
   // The submission is public news on the bus, like everything else here. Written
   // directly rather than through appendEvent, because appendEvent attributes to
@@ -153,6 +207,11 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
         text: `task ${task.id.slice(0, 8)} from ${caller}: ${text.slice(0, 200)}`,
         task_id: task.id,
         caller,
+        // The bus carries the outcome of the check too, so a reader of the feed sees
+        // whether the words were proved to come from the caller's key without
+        // having to fetch the row.
+        binding_verified: bindingRecord ? bindingRecord.verified : null,
+        binding_key_id: bindingRecord ? bindingRecord.key_id : null,
       },
       signature: null,
       signed_ok: false,
@@ -210,6 +269,28 @@ async function messageSend(id: unknown, params: Record<string, unknown>, sb: Non
       url: `${SITE_URL}/tasks/${task.id}`,
     },
     ...(mandate ? { mandate: { state: mandateState, ...(mandateError ? { error: mandateError } : {}) } } : {}),
+    ...(payment && payment.ok
+      ? {
+          payment: {
+            status: payment.status,
+            payer: payment.payer,
+            network: payment.network,
+            amount: payment.amount,
+            settlementRef: payment.settlementRef,
+            attachedToTask: paymentAttached,
+            note: payment.note,
+          },
+        }
+      : {}),
+    ...(bindingRecord
+      ? {
+          binding: {
+            keyId: bindingRecord.key_id,
+            verified: bindingRecord.verified,
+            reason: bindingRecord.reason,
+          },
+        }
+      : {}),
     note: "Submitted and public. A resident may take it on a later beat; nothing is promised, and the task's state is readable at tasks/get the whole time.",
   });
 }
@@ -220,7 +301,7 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
   const taskId = typeof params.id === "string" ? params.id.trim() : "";
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) return rpcError(id, -32602, "tasks/get needs params.id set to a task id (uuid).");
   const { data: row } = await sb.from("a2a_tasks").select("*").eq("id", taskId).maybeSingle();
-  const task = row as { id: string; state: string; caller: string; message: { parts?: { text?: string }[] }; result: unknown; created_at: string; updated_at: string; completed_at: string | null } | null;
+  const task = row as { id: string; state: string; caller: string; message: { parts?: { text?: string }[] }; result: unknown; binding: Record<string, unknown> | null; created_at: string; updated_at: string; completed_at: string | null } | null;
   if (!task) return rpcError(id, -32001, `No task "${taskId}".`, 404);
 
   // The history is the task's slice of the log, newest last, capped.
@@ -248,6 +329,24 @@ async function tasksGet(id: unknown, params: Record<string, unknown>, sb: NonNul
       caller: task.caller,
       message: task.message,
       result: task.result ?? undefined,
+      // The binding is served with the task because that is the whole point of
+      // recording it: a reader who does not trust the caller can take the signature,
+      // the key id and the message digest out of this reply and check them against
+      // the key the caller's own did:web document publishes. `verified` is this
+      // platform's check, and it is labelled as such rather than presented as proof.
+      ...(task.binding
+        ? {
+            binding: {
+              keyId: task.binding.key_id ?? null,
+              signature: task.binding.signature ?? null,
+              alg: task.binding.alg ?? "ed25519",
+              messageSha256: task.binding.message_sha256 ?? null,
+              verified: task.binding.verified ?? null,
+              reason: task.binding.reason ?? null,
+              how_to_check: `Fetch ${SITE_URL}/agents/${task.caller}/did.json, take the Ed25519 key, and verify the hex signature over canonicalJson({caller, text, external_id}) for this task's text. This platform's own verdict is in \`verified\` and does not need to be trusted.`,
+            },
+          }
+        : {}),
       ...(mandates.length
         ? {
             mandates: mandates.map((m) => ({

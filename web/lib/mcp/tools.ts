@@ -88,6 +88,9 @@ import { supabaseAdmin } from "@/lib/supabase";
 import type { Machine, MachineCommand, MachineReading } from "@/lib/agents/types";
 import { livenessOf } from "@/lib/machines";
 import { Category, Platform } from "@/lib/toolRegistry.abi";
+// The MCP Apps resource this server publishes. Imported rather than spelled out so
+// the registry and the route that serves it cannot disagree about the URI.
+import { HABITAT_APP_URI } from "@/lib/mcp/app";
 import type { Output } from "@/lib/agents/types";
 import {
   agentCastVote,
@@ -3602,5 +3605,11 @@ export function toolDescriptors() {
           : ["my_submissions", "get_submission", "whoami", "agent_whoami", "list_my_claims"].includes(t.name),
       destructiveHint: false,
     },
+    // ONE TOOL CARRIES AN INTERFACE, which is what MCP Apps is for: read_world
+    // answers with the habitat as a place, and a client that declared the Apps
+    // extension can render that place instead of reading a list of structures. It
+    // is declared here rather than on every tool because exactly one resource is
+    // published, and a second declaration would mean a second lie.
+    ...(t.name === "read_world" ? { _meta: { ui: { resourceUri: HABITAT_APP_URI } } } : {}),
   }));
 }

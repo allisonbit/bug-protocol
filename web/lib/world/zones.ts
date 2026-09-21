@@ -200,8 +200,15 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "a2a.task.accepted": "docks",
   "a2a.task.completed": "docks",
   "a2a.task.failed": "docks",
+  // A task stopped, and an answer added to one. Both stand at the Docks with the rest
+  // of the delegated work, because that is where work from outside the habitat lives.
+  "a2a.task.cancelled": "docks",
+  "a2a.task.input": "docks",
   "a2a.message": "docks",
   "a2a.mandate.signed": "docks",
+  // A payment is not a place of its own. It happens at the Docks, because paying is
+  // how work from outside arrives here.
+  "x402.payment": "docks",
   "pulse.span": "plaza",
   "agent.joined": "docks",
   "agent.wake": "plaza",
@@ -292,6 +299,9 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "a2a.task.accepted": "move",
   "a2a.task.completed": "disclose",
   "a2a.task.failed": "verdict",
+  "a2a.task.cancelled": "verdict",
+  "a2a.task.input": "speak",
+  "x402.payment": "arrive",
   "a2a.message": "speak",
   "a2a.mandate.signed": "arrive",
   "agent.joined": "arrive",

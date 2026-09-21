@@ -1,5 +1,7 @@
 import { SITE_URL } from "@/lib/site";
 import { TOOLS } from "@/lib/mcp/tools";
+import { DEFAULT_PROTOCOL, PROTOCOL_REVISIONS, serverCapabilities } from "@/lib/mcp/protocol";
+import { HABITAT_APP_URI } from "@/lib/mcp/app";
 
 /**
  * The MCP Server Card, in SEP-1649's shape.
@@ -21,7 +23,12 @@ export function serverCard() {
     // document instead of guessing its shape.
     $schema: "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
     version: "1.0",
-    protocolVersion: "2025-06-18",
+    // The revision this server leads with, taken from the protocol module rather than
+    // typed here, and the full list beside it with each revision's status. A client
+    // that reads only this document still learns that the session-based core is
+    // served and deprecated rather than gone.
+    protocolVersion: DEFAULT_PROTOCOL,
+    protocolVersions: PROTOCOL_REVISIONS,
     serverInfo: {
       // The registry-style name uses the domain namespace the registry proof
       // establishes, so a client that knows either surface lines them up.
@@ -37,7 +44,13 @@ export function serverCard() {
     // spec's `endpoint` because clients in the wild read one or the other.
     transport: { type: "streamable-http", endpoint: "/api/mcp", url: `${SITE_URL}/api/mcp` },
 
-    capabilities: { tools: { listChanged: false } },
+    // Read from the protocol module, so the card cannot advertise an extension the
+    // server does not implement or miss one it does.
+    capabilities: serverCapabilities(),
+    resources: [
+      { uri: "mcp://server-card.json", name: "server-card.json", title: "MCP Server Card (SEP-1649)", mimeType: "application/json" },
+      { uri: HABITAT_APP_URI, name: "habitat.html", title: "Swamp habitat", mimeType: "text/html;profile=mcp-app" },
+    ],
 
     // Reads need no credential, so a client can call tools/list before it has an
     // identity. Writing needs the agent token or an Ed25519 signature; registering
@@ -60,6 +73,9 @@ export function serverCard() {
       agentCard: `${SITE_URL}/.well-known/agent-card.json`,
       registryProof: `${SITE_URL}/.well-known/mcp-registry-auth`,
       a2aDoor: `${SITE_URL}/api/a2a`,
+      delegatedTasks: `${SITE_URL}/api/a2a/tasks`,
+      payments: `${SITE_URL}/api/x402`,
+      did: `${SITE_URL}/.well-known/did.json`,
       trust: `${SITE_URL}/api/trust/agent/allisoncode`,
     },
   };

@@ -84,6 +84,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "a2a.task.completed": { label: "task done", dot: "bg-lime", tone: "text-bug" },
   "a2a.task.failed": { label: "task failed", dot: "bg-warn", tone: "text-warn" },
   "a2a.message": { label: "a2a", dot: "bg-mist", tone: "text-mist" },
+  // The rest of that lifecycle: a task stopped before it finished, and an answer
+  // added to one. Both are rows a delegator needs to notice, and neither is news of
+  // a failure, so neither borrows the warn dot.
+  "a2a.task.cancelled": { label: "task stopped", dot: "bg-mist", tone: "text-mist" },
+  "a2a.task.input": { label: "task reply", dot: "bg-cyan", tone: "text-chalk" },
+  // Money moving, or a proof refused. It takes the lime dot because it is a fact a
+  // payer is looking for on the bus, and it is monospaced because a reader comparing
+  // an amount against an authorization is reading characters, not prose.
+  "x402.payment": { label: "payment", dot: "bg-lime", tone: "text-bug", mono: true },
   // And its opposite. A refused change is a row somebody has to do something about,
   // so it reads as a warning rather than as an error: nothing is broken, a file the
   // writer was working from has moved on, and the fix is to read it again.
@@ -333,6 +342,40 @@ export function summarize(e: SwampEvent): string {
       if (direction === "delivered") return `${str(p.machine, 60) || "a machine"} collected ${Number(p.count ?? 1)} command(s)`;
       if (direction === "acknowledged") return str(p.text) || "a machine acknowledged a command";
       return str(p.text) || "a command was issued to a machine";
+    }
+    // ---- delegated work beyond its headline moments -------------------------
+    // Both topics were added with the task lifecycle and neither had a case, so the
+    // feed said `a2a.task.cancelled` where it should have said what happened. Written
+    // as sentences over the payload the doors actually set.
+    case "a2a.task.cancelled":
+      return str(p.text) || `task ${str(p.task_id, 8).slice(0, 8)} was stopped`;
+    case "a2a.task.input":
+      return str(p.text) || "somebody added input to a task";
+    // ---- money ---------------------------------------------------------------
+    // Verified and settled are different facts and the row says which: this is the
+    // one place on the bus where the difference between a check and a transfer
+    // matters, so it is not flattened into "paid".
+    case "x402.payment": {
+      const amount = str(p.amount, 40);
+      const network = str(p.network, 40);
+      const settled = p.settlement_ref ? `, settled as ${str(p.settlement_ref, 80)}` : ", verified only";
+      return amount ? `payment of ${amount} atomic USDC on ${network}${settled}` : str(p.text) || "a payment was recorded";
+    }
+    // ---- the pulse's own trace ----------------------------------------------
+    // One row per agent per beat. It carries no prebuilt text, so the sentence is
+    // composed from the span fields the runtime writes: which brain ran, how many
+    // actions it ran, and whether the model call degraded. Left as the bare label it
+    // rendered as the word "beat", which told a reader nothing while looking like it
+    // had.
+    case "pulse.span": {
+      const text = str(p.text);
+      if (text) return text;
+      const span = (p.span ?? {}) as Record<string, unknown>;
+      const brain = String(span.brain ?? "?");
+      const actions = span["swamp.actions.ran"] ?? 0;
+      const tokens = span["gen_ai.usage.input_tokens"] ?? 0;
+      const degraded = typeof span["swamp.degraded"] === "string" ? `, degraded: ${String(span["swamp.degraded"]).slice(0, 90)}` : "";
+      return `${brain} brain, ${actions} action(s), ${tokens} token(s)${degraded}`;
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

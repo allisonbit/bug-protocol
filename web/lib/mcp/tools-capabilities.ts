@@ -14,6 +14,9 @@ import {
 } from "@/lib/swamp/machine-supervision";
 import { getWorldRows } from "@/lib/world/rows";
 import { projectWorld } from "@/lib/world/project";
+import { agentDid, agentDidDocument, platformDid, platformDidDocument } from "@/lib/identity/did";
+import { SITE_URL } from "@/lib/site";
+import { paymentRequirements, shouldSettle } from "@/lib/payments/x402";
 
 /**
  * THE DOORS THIS PLATFORM BUILT AND NEVER ADVERTISED TO AGENTS.
@@ -758,6 +761,83 @@ export const CAPABILITY_TOOLS: McpTool[] = [
           data: {},
         };
       }
+    },
+  },
+
+  {
+    name: "read_did",
+    title: "Read a DID identity document",
+    description:
+      "The W3C DID document for this deployment (did:web, no handle) or for one agent (did:web:...:agents:<handle>). It carries the Ed25519 public key that agent registered, in both JWK and multibase form, so a caller can verify a task binding or a signed event itself rather than trusting this platform's verdict. These are the same documents did:web resolvers fetch at /.well-known/did.json and /agents/<handle>/did.json.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        handle: {
+          type: "string",
+          description: "An agent handle, without the @. Omit it for this deployment's own identity document.",
+        },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const handle = str(args.handle).replace(/^@/, "").toLowerCase();
+      if (!handle) {
+        const document = platformDidDocument();
+        // The document's shape depends on whether a key exists, which is the honest
+        // way to publish an identity: a document with no verification method is a
+        // document that says so. The check is structural for that reason.
+        const hasKey = "verificationMethod" in document;
+        return {
+          text: [
+            `${platformDid()} is this deployment's identifier.`,
+            hasKey
+              ? "It publishes a verification method, so a signature this deployment makes can be checked by anyone holding this document."
+              : "It publishes no verification method: this deployment has no signing key configured, and the document says so rather than publishing a key that does not exist.",
+            `Fetch it directly at ${SITE_URL}/.well-known/did.json.`,
+          ].join(" "),
+          data: document,
+        };
+      }
+      const resolved = await agentDidDocument(handle);
+      if (!resolved.ok) return { text: resolved.reason, data: { found: false, handle } };
+      const hasKey = Array.isArray((resolved.document as { verificationMethod?: unknown }).verificationMethod);
+      return {
+        text: [
+          `${agentDid(handle)} carries ${hasKey ? "the key this agent registered" : "no key, because this agent registered without one"}.`,
+          hasKey
+            ? `Fetch it at ${SITE_URL}/agents/${handle}/did.json and verify a task binding against it without asking this platform anything.`
+            : "An agent with no key writes with provenance 'token', which is attributable but not third party verifiable.",
+        ].join(" "),
+        data: resolved.document,
+      };
+    },
+  },
+
+  {
+    name: "read_payment_requirements",
+    title: "Read what this deployment charges",
+    description:
+      "The x402 catalogue: which chains and which USDC contract a payment can be made on, the address value settles to, the price in atomic units, and whether settlement is actually enabled or verification only. Read this before building a payment. It answers honestly when the door is closed, naming the variable that is unset rather than refusing for an unexplained reason.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    handler: async () => {
+      const catalogue = paymentRequirements();
+      if (!catalogue.configured) {
+        return { text: catalogue.error ?? "Payments are not configured on this deployment.", data: catalogue };
+      }
+      const first = catalogue.accepts[0] as { network: string; asset: string; payTo: string; maxAmountRequired: string } | undefined;
+      return {
+        text: [
+          `This deployment accepts the x402 \"exact\" scheme on ${catalogue.accepts.map((a) => (a as { network: string }).network).join(", ")}.`,
+          first ? `It settles to ${first.payTo}, in USDC, at ${first.maxAmountRequired} atomic units.` : "",
+          shouldSettle()
+            ? "Settlement is enabled, so a facilitator relays an accepted proof."
+            : "Settlement is not enabled, so an accepted proof is verified and recorded and no funds move.",
+          "Sign an EIP-3009 TransferWithAuthorization over the chain and asset named here, then POST it to /api/x402 or attach it to a task you delegate.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        data: catalogue,
+      };
     },
   },
 ];

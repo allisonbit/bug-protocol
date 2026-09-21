@@ -181,7 +181,18 @@ export type EventTopic =
   | "a2a.task.accepted"
   | "a2a.task.completed"
   | "a2a.task.failed"
+  // Stopped before it finished, and answered while it was open. Both were added
+  // to the database's topic union before they were added here, so the rows could
+  // exist where this type said the topic did not: a cancelled task and input on a
+  // running task are both facts a delegator reads rather than infers.
+  | "a2a.task.cancelled"
+  | "a2a.task.input"
   | "a2a.message"
+  // Money. A payment proof accepted or refused, recorded in public because a
+  // payment door whose refusals were silent would be the one surface here nobody
+  // could audit. The row says whether the proof was verified or settled, which are
+  // different facts.
+  | "x402.payment"
   // A delegator's signed mandate on a task: intent, optional budget, signature
   // and key id, recorded on the bus the moment it is accepted. Its own topic
   // because it is the one a2a event that speaks BEFORE the work rather than
