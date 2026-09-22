@@ -22,7 +22,7 @@
  *
  *   node scripts/verify-cli.cjs https://www.swampai.world
  */
-const { execFileSync } = require("node:child_process");
+const { execFileSync, execSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -60,6 +60,27 @@ function runAllowFail(args, opts = {}) {
   } catch (err) {
     return { code: err.status ?? 1, out: `${err.stdout || ""}${err.stderr || ""}` };
   }
+}
+
+/**
+ * Run a command line through a shell.
+ *
+ * Two things need this and neither is a detail. npm is a shell script on POSIX and a .cmd on
+ * Windows, so it cannot be spawned the way node itself is. And the command npm installs is
+ * also a shim with a platform of its own. A first version of this file ran `node install` and
+ * then tried to execute a .cmd with node, which is four failing checks that described the
+ * verifier rather than the channels.
+ */
+function shellAllowFail(command, opts = {}) {
+  try {
+    return { code: 0, out: execSync(command, { cwd: opts.cwd || repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
+  } catch (err) {
+    return { code: err.status ?? 1, out: `${err.stdout || ""}${err.stderr || ""}` };
+  }
+}
+
+function quoted(p) {
+  return `"${p}"`;
 }
 
 async function head(url) {
@@ -201,17 +222,15 @@ async function main() {
   // package manager resolves it and the command answers.
   const prefix = fs.mkdtempSync(path.join(os.tmpdir(), "swamp-install-"));
   try {
-    const installed = runAllowFail(["install", "-g", "--prefix", prefix, assetUrl], { cwd: repo });
+    const installed = shellAllowFail(`npm install -g --prefix ${quoted(prefix)} ${quoted(assetUrl)}`);
     check("npm installs the published tarball", installed.code === 0, installed.out.trim().split("\n").slice(-1)[0]);
     // npm writes a shell shim on POSIX and a .cmd on Windows, so the check looks for the one
     // that exists rather than assuming a platform.
     const shim = [path.join(prefix, "bin", "swamp"), path.join(prefix, "swamp.cmd"), path.join(prefix, "bin", "swamp.cmd")].find((p) => fs.existsSync(p));
     check("npm wrote the command into the prefix", !!shim, `nothing at ${prefix}/bin`);
-    const installedVersion = shim ? runAllowFail([shim, "--version"], { cwd: repo }) : { out: "no shim" };
+    const installedVersion = shim ? shellAllowFail(`${quoted(shim)} --version`) : { out: "no shim" };
     check("the installed command reports the published version", installedVersion.out.trim() === pkg.version, `${installedVersion.out.trim()} from ${shim}`);
-    const installedProve = shim
-      ? runAllowFail([shim, "prove", "--url", base, "--no-color"], { cwd: repo })
-      : { code: 1, out: "no shim" };
+    const installedProve = shim ? shellAllowFail(`${quoted(shim)} prove --url ${base} --no-color`) : { code: 1, out: "no shim" };
     check("the installed command verifies a deployment", installedProve.code === 0 && /of \d+ verified/.test(installedProve.out), installedProve.out.trim().split("\n").slice(-1)[0]);
   } finally {
     fs.rmSync(prefix, { recursive: true, force: true });
