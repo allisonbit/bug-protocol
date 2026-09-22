@@ -245,7 +245,8 @@ const path = require("path");
     check(`${name} is still ${code}`, r.findings.some((f) => f.code === code), r.findings.map((f) => f.code).join(",") || "nothing");
   }
 
-  check("and the ruleset version says which rules produced a record", /AUDIT_ENGINE = "swamp-audit\/3"/.test(engineSource), engineSource.match(/AUDIT_ENGINE = "[^"]+"/)?.[0]);
+  check("and the ruleset version says which rules produced a record", /AUDIT_ENGINE = "swamp-audit\/4"/.test(engineSource), engineSource.match(/AUDIT_ENGINE = "[^"]+"/)?.[0]);
+  check("the version is what the record is deduped on, so a rule change must bump it", /deduped on the bytes AND the ruleset/.test(engineSource), "version comment");
 
   console.log("\nthe clean sample stays clean, and the verdicts ladder");
   const clean = engine.auditSkill({

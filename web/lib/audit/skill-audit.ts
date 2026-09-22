@@ -30,7 +30,15 @@ import { createHash } from "node:crypto";
  * rule produced it.
  */
 
-export const AUDIT_ENGINE = "swamp-audit/3";
+// THE VERSION IS PART OF THE RECORD'S IDENTITY, NOT DECORATION.
+//
+// A record is deduped on the bytes AND the ruleset that produced it, so an unchanged file
+// re-submitted under a changed ruleset gets a new row and the old verdict stays as the
+// honest historical reading. That means every change to a rule or a guard has to bump this,
+// or the door keeps answering with a verdict the current engine would no longer produce,
+// presented as current. It has happened once already in this file's history, which is why
+// the verifier asserts the exact string rather than merely that one exists.
+export const AUDIT_ENGINE = "swamp-audit/4";
 
 export type AuditKind = "skill" | "mcp-server" | "instructions";
 
