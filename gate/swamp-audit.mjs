@@ -165,9 +165,14 @@ const inScope = all.flatMap((p) => {
   if (!hit || excludes.some((e) => e.re.test(p))) return [];
   return [{ path: p, kind: hit.kind }];
 });
-// Everything the policy deliberately stepped over, listed with the reason it did. A gate
-// that reports only what it looked at hides the size of what it did not.
+// WHAT THE POLICY STEPPED OVER, AND WHY.
+//
+// Only documents that would otherwise have been in scope count as excluded, because a file
+// the include globs never reached was not a decision this policy made. The rules themselves
+// are listed either way: the point of a reason is that a reviewer can disagree with it
+// even when nothing currently matches it.
 const excluded = all.flatMap((p) => {
+  if (!includes.some((i) => i.re.test(p))) return [];
   const hit = excludes.find((e) => e.re.test(p));
   return hit ? [{ path: p, glob: hit.glob, reason: hit.reason }] : [];
 });
@@ -264,6 +269,7 @@ const result = {
   documents: inScope.length,
   excluded: excluded.length,
   excludedPaths: excluded,
+  exclusionRules: excludes.map((e) => ({ glob: e.glob, reason: e.reason })),
   clean: 0,
   unchanged: 0,
   reaudited: 0,
@@ -367,6 +373,9 @@ if (args.mode === "check") {
 const lockOut = {
   version: 1,
   engine: result.engine ?? lock.engine ?? null,
+  // The scope is recorded with the verdicts, because a baseline that does not say what it
+  // covered is a file a reader has to interpret.
+  scope: { include: policy.include ?? [], exclude: policy.exclude ?? [] },
   door: args.door,
   generatedAt: new Date().toISOString(),
   note: "Verdicts from the public audit door, bound to the SHA-256 of the bytes in this repository. Refresh with: node swamp-audit.mjs --refresh",

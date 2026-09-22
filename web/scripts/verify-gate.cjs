@@ -56,7 +56,10 @@ function scaffold(docs) {
     path.join(root, "swamp.policy.json"),
     JSON.stringify(
       {
-        include: ["skills/**/SKILL.md", "AGENTS.md", ".agents/skills/**/SKILL.md"],
+        // DELIBERATELY BROAD, WHICH IS HOW THE COVERAGE ARGUMENT WORKS: a new directory of
+        // skills is gated without anyone remembering to update a glob, and every tree that
+        // must not be judged is an exclusion with a written reason instead.
+        include: ["**/SKILL.md", "AGENTS.md"],
         exclude: ["scripts/tests/**", "docs/examples/**"],
         failOn: { verdict: ["unsafe"], severity: ["critical", "high"] },
         failOnUnreachable: true,

@@ -224,7 +224,14 @@ const NEGATION = /\b(do not|don't|does not|doesn't|never|must not|mustn't|should
 function near(ctx: MatchContext): string {
   const prior = ctx.before.trim().split(/\s+/).pop() ?? "";
   const next = ctx.after.trim().split(/\s+/)[0] ?? "";
-  return `${prior} ${ctx.matched} ${next}`;
+  // MARKDOWN EMPHASIS IS STRIPPED, AND THAT IS NOT A DETAIL.
+  //
+  // These documents are markdown, and emphasis sits exactly where the guard needs to look:
+  // a real billing reference reads "`lookback=100d` is silently **clamped** to 90 days",
+  // where the bold markers between the adverb and its verb defeat an adjacency check and
+  // the line is reported as concealment. The words are what the rule is about, not the
+  // asterisks around them.
+  return `${prior} ${ctx.matched} ${next}`.replace(/[*_`]/g, "");
 }
 
 /** A secret, or the place one is kept. The noun a protective instruction names. */
@@ -243,7 +250,7 @@ const SECRET_NOUN =
  * Venice catalog were this shape before the guard existed.
  */
 const BEHAVIOR_VERB =
-  "(?:ignor\\w*|clamp\\w*|truncat\\w*|skip\\w*|drop\\w*|discard\\w*|remov\\w*|overwrit\\w*|handl\\w*|accept\\w*|reject\\w*|fall\\w*|fail\\w*|return\\w*|happen\\w*|lie\\w*|work\\w*|continu\\w*|proceed\\w*|exit\\w*|log\\w*|writ\\w*|shadow\\w*|misconfigur\\w*|degrad\\w*|drift\\w*|disabl\\w*|omit\\w*|succee\\w*|no-?op\\w*|pass\\w*)";
+  "(?:ignor\\w*|clamp\\w*|truncat\\w*|skip\\w*|drop\\w*|discard\\w*|remov\\w*|overwrit\\w*|handl\\w*|accept\\w*|reject\\w*|fall\\w*|fail\\w*|return\\w*|happen\\w*|lie\\w*|work\\w*|continu\\w*|proceed\\w*|exit\\w*|log\\w*|writ\\w*|shadow\\w*|misconfigur\\w*|degrad\\w*|drift\\w*|disabl\\w*|omit\\w*|succee\\w*|no-?op\\w*|pass\\w*|unsupport\\w*|unavailab\\w*|undefin\\w*|absent|missing)";
 
 /**
  * A prohibition of repeating, duplicating or sending nothing.

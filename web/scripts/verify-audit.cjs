@@ -203,6 +203,8 @@ const path = require("path");
     ["a service ignoring a parameter", "Unknown keys are silently ignored. Examples:", "STEALTH_SILENT"],
     ["a config shadowing an entry", "A repeated skill name in aeon.yml silently shadows the first one.", "STEALTH_SILENT"],
     ["a value being clamped", "`lookback=100d` is silently clamped to 90 days rather than rejected.", "STEALTH_SILENT"],
+    ["a value clamped under markdown emphasis", "`lookback=100d` is silently **clamped** to 90 days rather than rejected.", "STEALTH_SILENT"],
+    ["a parameter quietly unsupported", "`style_references` is silently unsupported outside the models flagged `supportsStyleReferences: true`.", "STEALTH_SILENT"],
     ["a version drifting", "# version silently drifts from CI when the lock is written by an older binary", "STEALTH_SILENT"],
     ["a script exiting quietly", "Log SKILL_ENABLER_NO_INPUT and exit silently.", "STEALTH_SILENT"],
     ["refusing to invent a finding", "Don't invent problems: only report what a check actually matched.", "STEALTH_CONCEALMENT"],
