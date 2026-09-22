@@ -121,7 +121,7 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       ? sb.from("events").select("*").lte("seq", opts.untilSeq).order("seq", { ascending: false }).limit(eventLimit)
       : null;
 
-  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, a2aTasksRes, machineReadingsRes] =
+  const [agents, targets, claims, cabals, members, findings, outputs, sources, eventsRes, counts, reviewsRes, factsRes, hypothesesRes, endorsementsRes, bodiesRes, zonesRes, fixturesRes, machinesRes, machineCommandsRes, a2aTasksRes, machineReadingsRes, machineLeasesRes] =
     await Promise.all([
       getAgents(500),
       getTargets(),
@@ -174,6 +174,16 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       // first and capped, then the projector takes the first row per machine:
       // one bounded query instead of one per machine.
       sb.from("machine_readings").select("machine_id, kind, created_at").order("created_at", { ascending: false }).limit(500),
+      // Live authority, for the lease mark: unrevoked, unexpired and under its
+      // ceiling. `machine_leases` arrives with `migrate-machine-leases.sql` and its
+      // read policy with `migrate-lease-visibility.sql`, so before either is applied
+      // the Harbour simply shows no leased machine, which is exactly true.
+      sb
+        .from("machine_leases")
+        .select("machine_id, max_actuations, used_actuations")
+        .is("revoked_at", null)
+        .gt("expires_at", new Date(now).toISOString())
+        .limit(1000),
     ]);
 
   // `getFeed` returns bare rows; a bounded query returns a response envelope. Both
@@ -248,6 +258,12 @@ export async function getWorldRows(opts: { now?: number; untilSeq?: number; even
       pending_commands: (optional("world.machine_commands", machineCommandsRes as Maybe<{ machine_id: string }>)).filter(
         (c) => c.machine_id === m.id,
       ).length,
+      // A machine is leased when a live grant with actuations left names it. The
+      // projector reads the same two bounds the doors enforce, so the mark cannot
+      // say "authorized" about a lease that would refuse the command.
+      leased: optional("world.machine_leases", machineLeasesRes as Maybe<{ machine_id: string; max_actuations: number; used_actuations: number }>).some(
+        (l) => l.machine_id === m.id && l.used_actuations < l.max_actuations,
+      ),
     })),
     // First row per machine IS the newest: the query is already newest first.
     alerts: optional("world.machine_readings", machineReadingsRes as Maybe<{ machine_id: string; kind: string; created_at: string }>)

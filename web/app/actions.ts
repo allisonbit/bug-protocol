@@ -14,6 +14,8 @@ import {
   emitRewardPaid,
   emitProgramClosed,
 } from "@/lib/bounty/escrow";
+import { supabaseAdmin } from "@/lib/supabase";
+import { leaseIssuable } from "@/lib/machines/leases";
 
 /**
  * Server actions: the real write path. Each runs through the request-scoped,
@@ -453,6 +455,130 @@ export async function triageSubmission(formData: FormData) {
 
   revalidatePath(`/submissions/${id}`);
   revalidatePath("/dashboard");
+}
+
+/**
+ * One lease row on the bus, written as a system event.
+ *
+ * The same shape the lease door writes, so a lease issued from the machine page and
+ * one issued over HTTP are the same fact on the same record. A failed write is logged
+ * and swallowed: the lease row is the authority, the event is its trace, and a feed
+ * hiccup must not leave a grant the owner believes they made un-made.
+ */
+async function emitLease(topic: "machine.lease", payload: Record<string, unknown>): Promise<void> {
+  const sb = supabaseAdmin();
+  if (!sb) return;
+  const { error } = await sb.from("events").insert({
+    topic,
+    agent_id: null,
+    agent_handle: null,
+    payload,
+    signature: null,
+    signed_ok: false,
+    provenance: "system",
+  });
+  if (error) console.warn(`[write refused] events:${topic}: ${error.message ?? error}`);
+}
+
+/**
+ * Issue a lease: the authority envelope around moving a machine.
+ *
+ * The bounds are enforced by `leaseIssuable`, the same pure function the HTTP door
+ * uses, so the two doors cannot drift into disagreeing about what a lease is. The
+ * write itself runs through the request-scoped client, so row level security is what
+ * authorizes it: only the machine's owner may insert, and only with themselves named
+ * as the issuer.
+ *
+ * An expiry is given in MINUTES rather than as a timestamp, because the thing a person
+ * is deciding is "how long may this stand", and a long dated bound is the one this
+ * table exists to prevent.
+ */
+export async function issueMachineLease(formData: FormData) {
+  const sb = await supabaseServer();
+  const user = await currentUser();
+  if (!sb || !user) redirect("/login?next=/dashboard/machines");
+
+  const name = str(formData.get("machine")).toLowerCase();
+  const scope = str(formData.get("scope"));
+  const minutes = num(formData.get("expires_minutes"), 0);
+  const maxActuations = num(formData.get("max_actuations"), 0);
+  const reason = str(formData.get("reason"));
+
+  const { data: machineRow } = await sb.from("machines").select("id,name").eq("name", name).maybeSingle();
+  const machine = machineRow as { id: string; name: string } | null;
+  if (!machine) throw new Error("No such machine, or it isn't yours to authorize.");
+  if (minutes <= 0) throw new Error("A lease needs an expiry in minutes.");
+
+  const nowMs = Date.now();
+  const expiresAtMs = nowMs + Math.round(minutes * 60_000);
+  const decision = leaseIssuable({ machineName: machine.name, scope, expiresAtMs, maxActuations, reason, nowMs });
+  if (!decision.ok) throw new Error(decision.reason);
+
+  const { error } = await sb.from("machine_leases").insert({
+    machine_id: machine.id,
+    machine_name: machine.name,
+    scope: decision.scope,
+    expires_at: new Date(expiresAtMs).toISOString(),
+    max_actuations: decision.maxActuations,
+    used_actuations: 0,
+    issued_by: user.id,
+    reason: decision.reason,
+  });
+  if (error) throw new Error(error.message);
+
+  await emitLease("machine.lease", {
+    text: `a lease was issued for ${machine.name}: ${decision.scope}, up to ${decision.maxActuations} time(s) before ${new Date(expiresAtMs).toISOString()}, because ${decision.reason}`,
+    machine: machine.name,
+    scope: decision.scope,
+    max_actuations: decision.maxActuations,
+    expires_at: new Date(expiresAtMs).toISOString(),
+    direction: "issued",
+  });
+
+  revalidatePath(`/machines/${name}`);
+  revalidatePath("/machines");
+  revalidatePath("/dashboard/machines");
+}
+
+/**
+ * Revoke a lease: the operator's stand-down.
+ *
+ * Revocation is checked before expiry and before the ceiling, so this is the one act
+ * that takes authority away whatever the clock says. The reason is required for the
+ * same purpose it is required on issue: a withdrawal nobody explained is one a reader
+ * cannot tell from an accident.
+ */
+export async function revokeMachineLease(formData: FormData) {
+  const sb = await supabaseServer();
+  const user = await currentUser();
+  if (!sb || !user) redirect("/login?next=/dashboard/machines");
+
+  const name = str(formData.get("machine")).toLowerCase();
+  const leaseId = str(formData.get("lease_id"));
+  const reason = str(formData.get("reason"));
+  if (!leaseId) throw new Error("A lease id is required.");
+  if (reason.length < 10) throw new Error("Say why the lease is revoked, in at least 10 characters.");
+
+  const { data: row } = await sb.from("machine_leases").select("id,scope").eq("id", leaseId).eq("machine_name", name).maybeSingle();
+  const lease = row as { id: string; scope: string } | null;
+  if (!lease) throw new Error("No such lease on that machine, or it isn't yours to revoke.");
+
+  const { error } = await sb
+    .from("machine_leases")
+    .update({ revoked_at: new Date().toISOString(), revoked_reason: reason.slice(0, 300) })
+    .eq("id", leaseId);
+  if (error) throw new Error(error.message);
+
+  await emitLease("machine.lease", {
+    text: `the lease for ${name} (${lease.scope}) was revoked: ${reason.slice(0, 300)}`,
+    machine: name,
+    scope: lease.scope,
+    direction: "revoked",
+  });
+
+  revalidatePath(`/machines/${name}`);
+  revalidatePath("/machines");
+  revalidatePath("/dashboard/machines");
 }
 
 export async function discloseSubmission(formData: FormData) {

@@ -252,6 +252,15 @@ export function inspectPick(pick: WorldPick, world: WorldState, now: number = Da
         if (s.trouble) {
           facts.push({ label: "Trouble", value: "the newest reading is an alert, in the machine's own words on its page" });
         }
+        // The ring, in words. It says one thing: a live lease authorizes an actuation
+        // here right now. It is not a safety claim and not a diagnosis, and the terms
+        // of the grant — who, until when, how many times, why — are on the page.
+        if (s.leased) {
+          facts.push({
+            label: "Authorized",
+            value: "a live lease permits an actuation here right now; who, until when, how often and why is on the machine's page",
+          });
+        }
       }
       if (s.kind === "task") {
         // The post IS the task row: its label is the work, in the submitter's

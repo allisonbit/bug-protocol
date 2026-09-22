@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import type { Machine, MachineCommand, MachineReading } from "@/lib/agents/types";
 import { MACHINE_KINDS, livenessOf, readingSummary } from "@/lib/machines";
+import type { LeaseRow } from "@/lib/machines/leases";
 import { Sparkline, telemetrySeries } from "@/components/machine-sparkline";
 import { SITE_URL } from "@/lib/site";
 import { timeAgo } from "@/lib/db";
@@ -37,9 +38,10 @@ export default async function MachinesPage() {
   let machines: Machine[] = [];
   let readings: MachineReading[] = [];
   let commands: MachineCommand[] = [];
+  let leases: LeaseRow[] = [];
   let history: { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[] = [];
   if (sb) {
-    const [m, r, h, c] = await Promise.all([
+    const [m, r, h, c, l] = await Promise.all([
       sb.from("machines").select("*").eq("status", "active").order("last_report_at", { ascending: false, nullsFirst: false }).limit(100),
       sb.from("machine_readings").select("*").order("created_at", { ascending: false }).limit(40),
       sb.from("machine_readings")
@@ -48,15 +50,30 @@ export default async function MachinesPage() {
         .order("created_at", { ascending: false })
         .limit(1200),
       sb.from("machine_commands").select("*").order("created_at", { ascending: false }).limit(20),
+      // Only authority that is live right now. An expired lease is history and belongs
+      // on the machine's own page; the roster answers "what may move as of this minute".
+      sb
+        .from("machine_leases")
+        .select("*")
+        .is("revoked_at", null)
+        .gt("expires_at", new Date(now).toISOString())
+        .order("expires_at", { ascending: true })
+        .limit(200),
     ]);
     machines = (m.data as Machine[] | null) ?? [];
     readings = (r.data as MachineReading[] | null) ?? [];
     commands = (c.data as MachineCommand[] | null) ?? [];
+    leases = (l.data as LeaseRow[] | null) ?? [];
     history = (h.data as { machine_id: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[] | null) ?? [];
   }
 
   const live = machines.filter((m) => livenessOf(m, now) === "live").length;
   const stale = machines.filter((m) => livenessOf(m, now) === "stale").length;
+
+  // A lease counts as live only if it has actuations left, the same bound the doors enforce.
+  const liveLeases = leases.filter((l) => l.used_actuations < l.max_actuations);
+  const leasedMachineIds = new Set(liveLeases.map((l) => l.machine_id));
+  const leaseById = new Map(leases.map((l) => [l.id, l]));
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 sm:py-16">
@@ -75,6 +92,12 @@ export default async function MachinesPage() {
           the security pipeline. It reports hardware facts and answers commands; that is the whole
           surface, and the tables keep it that way structurally.
         </p>
+        <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
+          Moving hardware takes more than a command. An actuation needs a live <span className="text-chalk">lease</span>:
+          an owner-written grant naming one command, an expiry, a ceiling on how many times it may be used
+          and a reason. A machine marked leased has one right now, and every command issued under one is
+          bound to it, so an act in the world can always be traced back to the grant that permitted it.
+        </p>
       </header>
 
       {machines.length > 0 && (
@@ -90,6 +113,14 @@ export default async function MachinesPage() {
           <div>
             <dd className="text-2xl font-semibold text-chalk">{machines.length}</dd>
             <dt className="text-[10px] uppercase tracking-wide text-mist">connected</dt>
+          </div>
+          <div>
+            <dd className={`text-2xl font-semibold ${liveLeases.length > 0 ? "text-bug" : "text-mist"}`}>
+              {liveLeases.length}
+            </dd>
+            <dt className="text-[10px] uppercase tracking-wide text-mist" title="Leases that are unrevoked, unexpired and under their ceiling.">
+              live leases
+            </dt>
           </div>
         </dl>
       )}
@@ -139,6 +170,14 @@ export default async function MachinesPage() {
                       {pending > 0 && (
                         <span className="shrink-0 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn">
                           {pending} command{pending === 1 ? "" : "s"} waiting
+                        </span>
+                      )}
+                      {leasedMachineIds.has(m.id) && (
+                        <span
+                          className="shrink-0 rounded bg-lime/15 px-1.5 py-0.5 text-[10px] text-bug"
+                          title="A live lease authorizes an actuation on this machine right now. Issue, see and revoke leases on the machine's page."
+                        >
+                          ✓ leased to act
                         </span>
                       )}
                     </div>
@@ -194,6 +233,11 @@ export default async function MachinesPage() {
             {commands.slice(0, 8).map((c) => (
               <li key={c.id} className="flex items-center gap-3 rounded-lg bg-ink-soft p-3 text-xs">
                 <span className="font-mono text-chalk">{c.machine_name}</span>
+                {c.lease_id && leaseById.has(c.lease_id) && (
+                  <span className="shrink-0 rounded bg-lime/10 px-1.5 py-0.5 font-mono text-[10px] text-bug" title="This command consumed a lease's actuation. The grant is on the machine's page.">
+                    under lease
+                  </span>
+                )}
                 <span className="min-w-0 flex-1 truncate text-mist">{c.body}</span>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${

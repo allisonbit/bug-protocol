@@ -160,7 +160,8 @@ export const STRUCTURE_SOURCES: { kind: StructureKind; what: string; source: str
     kind: "machine",
     what: "A machine at the Harbour",
     source: "machines",
-    grows: "lit while it has reported in the last quarter hour, and a storey taller when it carries a pending command",
+    grows:
+      "lit while it has reported in the last quarter hour, a storey taller when it carries a pending command, and ringed while a live lease authorizes an actuation on it",
   },
   {
     kind: "task",
@@ -239,6 +240,8 @@ export type CityInput = {
     status: string;
     last_report_at: string | null;
     pending_commands: number;
+    /** A live lease authorizes an actuation on it right now. Draws the lease ring. */
+    leased?: boolean;
   }[];
   /** The newest reading per machine: the trouble mark reads off this. */
   alerts: { machine_id: string; kind: string; created_at: string }[];
@@ -295,6 +298,8 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       roomId?: string;
       /** Machines only: the newest reading is an alert. Draws the trouble mark. */
       trouble?: boolean;
+      /** Machines only: a live lease authorizes an actuation. Draws the lease ring. */
+      leased?: boolean;
       /** Tasks only: the work, in the submitter's own words, for the card. */
       work?: string;
     },
@@ -343,6 +348,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       label: fields.label,
       at: fields.at,
       ...(fields.trouble ? { trouble: true } : {}),
+      ...(fields.leased ? { leased: true } : {}),
     });
   }
 
@@ -508,6 +514,10 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
     // and nothing is cleared on a timer; the record decides.
     const latest = input.alerts.find((a) => a.machine_id === m.id) ?? null;
     const trouble = latest != null && latest.kind === "alert";
+    // The lease ring is the OTHER half of the machine's record: not what the hardware
+    // says about itself, but what a person has authorized someone to do to it, until
+    // when and how many times. It is shown from the same three bounds the doors
+    // enforce, so a ring can never stand over a lease that would refuse a command.
     add("machine", m.id, {
       floors: 1 + Math.min(2, Math.max(0, m.pending_commands)),
       lit: live,
@@ -516,6 +526,7 @@ export function buildCity(input: CityInput): { structures: StructureState[]; cit
       label: m.name,
       at: m.last_report_at,
       trouble,
+      leased: m.leased === true,
     });
   }
 

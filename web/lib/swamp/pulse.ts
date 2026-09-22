@@ -35,6 +35,7 @@ import { LESSON_NOTE_KEY, lessonNoteValue } from "./lessons";
 import { decideLesson, proposeLesson } from "./lesson-store";
 import { gapDescription } from "@/lib/registry/gaps";
 import { SUPERVISION_NOTE_KEY } from "./machine-supervision";
+import { takeActuationAuthority } from "@/lib/machines/lease-gate";
 // The audit rules, worked rather than read: the guarded fetch, the store that binds a
 // verdict to the bytes it read, and the two shared notes that hold the swarm to one
 // document and one challenge per window.
@@ -355,6 +356,47 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // member of a closed palette rather than anything an agent felt like saying
       // to a machine.
       //
+      // THE AUTHORITY ENVELOPE APPLIES HERE TOO, and it did not. This path used to write
+      // its command row directly, so the swarm's own reflex could queue an actuation
+      // while the agent door refused one: the same rule, two implementations, and only
+      // the reviewed one had the check in it. The proof is on the log — an actuating
+      // command from a resident with `lease_id` null, issued while `machine_leases` was
+      // empty. An actuation now passes through the same gate every other door uses, and
+      // a refusal is recorded rather than swallowed, because "the swarm wanted to move
+      // this and was not allowed to" is exactly the fact an operator needs to see.
+      let authority: { leaseId: string } | null = null;
+      if (plan.actuation) {
+        const grant = await takeActuationAuthority(sb, { machineName: plan.machineName, scope: plan.command, nowMs: Date.parse(obs.now) || Date.now() });
+        if (!grant.ok) {
+          await appendEvent(sb, {
+            topic: "machine.lease",
+            agent,
+            payload: {
+              text: `${agent.handle} stood down: the actuation on ${plan.machineName} (${plan.command}) was refused because ${grant.reason}`,
+              machine: plan.machineName,
+              scope: plan.command,
+              direction: "refused",
+              code: grant.code,
+            },
+            signature: null,
+            provenance: "runtime",
+          });
+          // The cool-down note is written on a refusal as well as on a command, so the
+          // next resident in this beat does not spend it re-asking a machine that no
+          // authority covers, which would be noise on the record instead of work.
+          await remember(
+            sb,
+            agent.id,
+            "note",
+            SUPERVISION_NOTE_KEY,
+            { machine: plan.machineName, name: plan.command, at: obs.now, refused: grant.code },
+            2,
+          );
+          return `did not command ${plan.machineName}: ${grant.code}`;
+        }
+        authority = { leaseId: grant.leaseId };
+      }
+
       // The row is inserted FIRST and the event is written only if it lands. A
       // command that reached the hardware with no line on the public record would
       // be motion nobody can audit, and an event announcing a command that was
@@ -362,11 +404,14 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const { error: commandError } = await sb.from("machine_commands").insert({
         machine_id: plan.machineId,
         machine_name: plan.machineName,
-        body: JSON.stringify({ ...plan.body, reason: plan.reason, issued_by: agent.handle }),
+        body: JSON.stringify({ ...plan.body, reason: plan.reason, issued_by: agent.handle, ...(authority ? { lease: authority.leaseId } : {}) }),
         issued_by: null,
         issued_by_agent: agent.id,
         status: "pending",
         note: plan.reason,
+        // The grant that permitted this act, kept on the act. Without it a reader can
+        // see that something moved and never what allowed it to.
+        lease_id: authority?.leaseId ?? null,
       });
       if (commandError) throw new ActionError(500, commandError.message);
       await enforceRateLimit(sb, agent.id);
@@ -380,6 +425,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           actuation: plan.actuation,
           reason: plan.reason,
           cited: plan.cited,
+          lease_id: authority?.leaseId ?? null,
         },
         signature: null,
         provenance: "runtime",

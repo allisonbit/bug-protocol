@@ -266,6 +266,14 @@ export type StructureState = {
    */
   trouble?: boolean;
   /**
+   * True only for a machine a live lease authorizes right now: unrevoked, unexpired
+   * and under its actuation ceiling, the same three bounds every actuating door
+   * enforces. Unlike the trouble mark it says nothing about the machine's condition —
+   * it says somebody with the standing to say so has authorized an act on it, until
+   * when and how many times, which is on the machine's own page.
+   */
+  leased?: boolean;
+  /**
    * Tasks only: what the delegated work is, in the submitter's own words, and
    * the JSON-RPC id a submitter polls with. The card reads the words; nothing
    * is summarised here, because a summary would be an interpretation the

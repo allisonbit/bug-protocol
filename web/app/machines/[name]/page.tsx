@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import type { Machine, MachineCommand, MachineReading } from "@/lib/agents/types";
+import type { LeaseRow } from "@/lib/machines/leases";
 import { livenessOf, readingSummary, MACHINE_KINDS } from "@/lib/machines";
 import { timeAgo } from "@/lib/db";
 import { Sparkline, telemetrySeries } from "@/components/machine-sparkline";
+import { AuthoritySection } from "./authority";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,7 @@ export default async function MachinePage({ params }: { params: Promise<{ name: 
   if (!machine) notFound();
 
   const now = Date.now();
-  const [historyRes, recentRes, commandsRes] = await Promise.all([
+  const [historyRes, recentRes, commandsRes, leasesRes, user] = await Promise.all([
     sb
       .from("machine_readings")
       .select("machine_id, kind, metric, value, unit, created_at")
@@ -45,12 +47,33 @@ export default async function MachinePage({ params }: { params: Promise<{ name: 
       .order("created_at", { ascending: false })
       .limit(2000),
     sb.from("machine_readings").select("*").eq("machine_id", machine.id).order("created_at", { ascending: false }).limit(60),
-    sb.from("machine_commands").select("*").eq("machine_id", machine.id).order("created_at", { ascending: false }).limit(20),
+    sb      .from("machine_commands")
+      .select("*")
+      .eq("machine_id", machine.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    sb
+      .from("machine_leases")
+      .select("*")
+      .eq("machine_id", machine.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    currentUser(),
   ]);
   const history =
     (historyRes.data as { machine_id: string; kind: string; metric: string | null; value: number | null; unit: string | null; created_at: string }[] | null) ?? [];
   const readings = (recentRes.data as MachineReading[] | null) ?? [];
   const commands = (commandsRes.data as MachineCommand[] | null) ?? [];
+  const leases = (leasesRes.data as LeaseRow[] | null) ?? [];
+  const isOwner = !!user && !!machine.owner && user.id === machine.owner;
+
+  // The issuer is a person, so the page shows who they are rather than a uuid.
+  const issuerIds = Array.from(new Set(leases.map((l) => l.issued_by).filter((v): v is string => !!v)));
+  const { data: issuerRows } = issuerIds.length
+    ? await sb.from("profiles").select("id,handle,display_name").in("id", issuerIds)
+    : { data: [] as { id: string; handle: string | null; display_name: string | null }[] };
+  const issuers = new Map((issuerRows ?? []).map((p) => [p.id, p]));
+  const leasesWithIssuer = leases.map((l) => ({ ...l, issuer: l.issued_by ? issuers.get(l.issued_by) ?? null : null }));
 
   const liveness = livenessOf(machine, now);
   const series = telemetrySeries(history, machine.id, 240);
@@ -219,6 +242,8 @@ export default async function MachinePage({ params }: { params: Promise<{ name: 
           </ul>
         )}
       </section>
+
+      <AuthoritySection machine={{ name: machine.name, kind: machine.kind }} leases={leasesWithIssuer} isOwner={isOwner} />
 
       <section className="mt-10 rounded-xl border border-line bg-ink-soft p-6">
         <h2 className="text-sm font-medium text-chalk">The record, as data</h2>

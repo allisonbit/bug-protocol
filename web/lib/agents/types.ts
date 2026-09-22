@@ -1045,6 +1045,12 @@ export type MachineCommand = {
   issued_by: string | null;
   status: "pending" | "delivered" | "acknowledged" | "failed";
   note: string | null;
+  /**
+   * The lease whose actuation this command consumed, or null for a reporting
+   * command that needed no authority. It is what binds an act in the world to the
+   * grant that permitted it, rather than leaving the two facts on separate pages.
+   */
+  lease_id: string | null;
   created_at: string;
   delivered_at: string | null;
   acked_at: string | null;

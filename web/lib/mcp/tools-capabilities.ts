@@ -12,7 +12,7 @@ import {
   type MachineReading,
   type SupervisedMachine,
 } from "@/lib/swamp/machine-supervision";
-import { leaseMayAct, pickLease, type LeaseRow } from "@/lib/machines/leases";
+import { takeActuationAuthority } from "@/lib/machines/lease-gate";
 import { getWorldRows } from "@/lib/world/rows";
 import { projectWorld } from "@/lib/world/project";
 import { agentDid, agentDidDocument, platformDid, platformDidDocument } from "@/lib/identity/did";
@@ -546,35 +546,20 @@ export const CAPABILITY_TOOLS: McpTool[] = [
 
       // THE AUTHORITY ENVELOPE. An actuation needs a live lease: a scope, an expiry, a
       // ceiling and an issuer on the record. A reporting command does not, because
-      // asking a machine to speak is not the same act as asking it to move. The lease is
-      // consumed before the command is queued, so a ceiling of one really is one, and an
-      // exhausted or expired or revoked lease refuses here rather than at the machine.
+      // asking a machine to speak is not the same act as asking it to move. The whole
+      // check lives in lease-gate.ts, which the pulse's own actuation path passes
+      // through as well, because a rule with two implementations is a rule with two
+      // behaviours and only one of them gets reviewed.
       let consumedLease: string | null = null;
       if (decision.actuation) {
-        const { data: leaseData } = await sb
-          .from("machine_leases")
-          .select("*")
-          .eq("machine_name", m.name)
-          .eq("scope", decision.name)
-          .is("revoked_at", null);
-        const lease = pickLease((leaseData as LeaseRow[] | null) ?? [], decision.name);
-        const may = leaseMayAct({ lease, scope: decision.name, nowMs });
-        if (!may.ok) {
+        const authority = await takeActuationAuthority(sb, { machineName: m.name, scope: decision.name, nowMs });
+        if (!authority.ok) {
           return {
-            text: `Nothing was sent. ${may.reason} An owner issues a lease from the machine's dashboard; this platform does not actuate on an authority nobody wrote down.`,
-            data: { sent: false, code: may.code, lease_required: true, reason: may.reason },
+            text: `Nothing was sent. ${authority.reason} An owner issues a lease from the machine's page; this platform does not actuate on an authority nobody wrote down.`,
+            data: { sent: false, code: authority.code, lease_required: true, reason: authority.reason },
           };
         }
-        const { data: consumed, error: leaseErr } = await sb
-          .from("machine_leases")
-          .update({ used_actuations: may.lease.used_actuations + 1 })
-          .eq("id", may.lease.id)
-          .select("id")
-          .maybeSingle();
-        if (leaseErr || !consumed) {
-          return { text: `Nothing was sent. The lease could not be consumed: ${leaseErr?.message ?? "no row came back"}.`, data: { sent: false, code: "LEASE_NOT_CONSUMED" } };
-        }
-        consumedLease = may.lease.id;
+        consumedLease = authority.leaseId;
       }
 
       // The row first, the event second, exactly as the pulse does it: a command
@@ -588,6 +573,10 @@ export const CAPABILITY_TOOLS: McpTool[] = [
         issued_by_agent: agent.id,
         status: "pending",
         note: decision.reason,
+        // The grant that permitted this act, kept on the act rather than thrown away
+        // after the check: an actuation a reader can see, next to the authority it
+        // consumed, is the whole point of writing authority down.
+        lease_id: consumedLease,
       });
       if (error) return { text: `The command could not be queued: ${error.message}`, data: { sent: false } };
 
@@ -710,6 +699,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
           floors: number;
           lit: boolean;
           trouble?: boolean;
+          leased?: boolean;
           label: string;
           cites: string;
           href: string;
@@ -723,7 +713,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
         }
         const named = structures.slice(0, limit);
         const text = [
-          `${structures.length} structures stand${district ? ` in ${district}` : ""}, ${structures.filter((s) => s.lit).length} of them lit, ${structures.filter((s) => s.trouble).length} carrying the trouble mark.`,
+          `${structures.length} structures stand${district ? ` in ${district}` : ""}, ${structures.filter((s) => s.lit).length} of them lit, ${structures.filter((s) => s.trouble).length} carrying the trouble mark, ${structures.filter((s) => s.leased).length} standing under a live lease.`,
           `by kind: ${[...byKind.entries()].map(([k, n]) => `${k} ${n}`).join(", ")}`,
           `by district: ${[...byZone.entries()].map(([z, n]) => `${z} ${n}`).join(", ")}`,
           `totals: ${Object.entries(world.totals ?? {}).map(([k, v]) => `${k} ${v}`).join(", ")}`,
@@ -733,7 +723,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
           "",
           ...named.map(
             (s) =>
-              `  ${s.kind.padEnd(10)} ${s.zone.padEnd(10)} ${String(s.floors).padStart(2)} floor(s) ${s.lit ? "lit " : "dark"}${s.trouble ? " trouble" : ""}  ${s.label.slice(0, 70)}  [${s.cites}] ${s.href}`,
+              `  ${s.kind.padEnd(10)} ${s.zone.padEnd(10)} ${String(s.floors).padStart(2)} floor(s) ${s.lit ? "lit " : "dark"}${s.trouble ? " trouble" : ""}${s.leased ? " leased" : ""}  ${s.label.slice(0, 70)}  [${s.cites}] ${s.href}`,
           ),
         ]
           .filter(Boolean)
@@ -744,6 +734,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
             total: structures.length,
             lit: structures.filter((s) => s.lit).length,
             trouble: structures.filter((s) => s.trouble).length,
+            leased: structures.filter((s) => s.leased).length,
             byKind: Object.fromEntries(byKind),
             byDistrict: Object.fromEntries(byZone),
             totals: world.totals,

@@ -41,6 +41,8 @@ type Structure = {
   floors?: number;
   lit?: boolean;
   trouble?: boolean;
+  /** A live lease authorizes an actuation here. A different claim from the trouble mark. */
+  leased?: boolean;
   label?: string;
   cites?: string;
   href?: string;
@@ -52,13 +54,13 @@ type Span = { created_at?: string; agent_handle?: string | null; payload?: { spa
  * The interface document.
  *
  * Colour carries the same meaning it carries in the 3D world: lit is a thing that is
- * alive right now, dark is a thing that is not, and the trouble mark is the last
- * alert. A reader who has looked at the world page once should recognise this
- * immediately, which is the only reason to reuse the palette rather than pick a
- * nicer one.
+ * alive right now, dark is a thing that is not, the trouble mark is the last alert, and
+ * a lease mark is a live authority to actuate. A reader who has looked at the world page
+ * once should recognise this immediately, which is the only reason to reuse the palette
+ * rather than pick a nicer one.
  */
 export function habitatAppHtml(input: {
-  world: { structures?: Structure[]; total?: number; lit?: number; trouble?: number; totals?: Record<string, number> } | null;
+  world: { structures?: Structure[]; total?: number; lit?: number; trouble?: number; leased?: number; totals?: Record<string, number> } | null;
   activity: { spans?: Span[] } | null;
   worldError?: string | null;
   activityError?: string | null;
@@ -76,7 +78,7 @@ export function habitatAppHtml(input: {
       <td class="zone">${esc(s.zone ?? "?")}</td>
       <td><span class="dot ${s.lit ? "lit" : "dark"}"></span>${esc(s.label ?? s.kind ?? "")}</td>
       <td class="num">${esc(s.floors ?? 0)}</td>
-      <td class="mark">${s.trouble ? "trouble" : ""}</td>
+      <td class="mark">${s.trouble ? "trouble" : ""}${s.trouble && s.leased ? " " : ""}${s.leased ? "leased" : ""}</td>
     </tr>`,
     )
     .join("\n");

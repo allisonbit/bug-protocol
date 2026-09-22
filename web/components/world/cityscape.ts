@@ -303,9 +303,12 @@ type Entry = {
   floors: number;
   height: number;
   lit: boolean;      trouble: boolean;
+      /** True while a live lease authorizes an actuation here. Diffed like trouble. */
+      leased: boolean;
       /** Tasks only: the work text, diffed so a changed card rebuilds the post. */
       work: string | null;
       mark: THREE.Mesh | null;
+      leaseRing: THREE.Mesh | null;
   rise: number;
   pulse: number;
 };
@@ -433,6 +436,12 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
   const BEACON = 1.9;
   /** The trouble red. Cooler than the warn page colour, so it reads on dark stone. */
   const TROUBLE = 0xff4d3d;
+  /**
+   * The lease green. Deliberately not the trouble red and not the warm window glow:
+   * the ring says a person authorized an act here, which is a different claim about
+   * the same building and must never be mistaken for either of the other two.
+   */
+  const LEASED = 0x6ef2a8;
 
   /** Light warm stone to dark slate, so a street of houses has tone in it. */
   const LOOK: Record<StructureKind, { stone: number; glow: number }> = {
@@ -511,6 +520,22 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       mark.rotation.y = 0;
       group.add(mark);
     }
+    // The lease ring: a thin band of light laid on the ground around the machine,
+    // drawn ONLY while a live lease authorizes an actuation on it. The disc is the
+    // machine's own report of trouble; this is a person's written authority, so the
+    // two are drawn differently and never merge into one mark. Laid flat and slightly
+    // wider than the footprint, so it reads as ground the machine stands on rather
+    // than a storey it has gained.
+    let leaseRing: THREE.Mesh | null = null;
+    if (s.kind === "machine" && s.leased) {
+      leaseRing = new THREE.Mesh(
+        new THREE.RingGeometry(s.footprint * 0.95, s.footprint * 1.22, 32),
+        new THREE.MeshBasicMaterial({ color: LEASED, toneMapped: false, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
+      );
+      leaseRing.rotation.x = -Math.PI / 2;
+      leaseRing.position.y = 0.012;
+      group.add(leaseRing);
+    }
 
     cityGroup.add(group);
     return {
@@ -523,8 +548,10 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
       height: s.height,
       lit: s.lit,
       trouble: !!s.trouble,
+      leased: !!s.leased,
       work: s.kind === "task" ? (s.work ?? "") : null,
       mark,
+      leaseRing,
       rise: 0,
       pulse: 0,
     };
@@ -541,6 +568,10 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
     if (entry.mark) {
       entry.mark.geometry.dispose();
       (entry.mark.material as THREE.Material).dispose();
+    }
+    if (entry.leaseRing) {
+      entry.leaseRing.geometry.dispose();
+      (entry.leaseRing.material as THREE.Material).dispose();
     }
   }
 
@@ -715,6 +746,14 @@ export function createCityscape(scene: THREE.Scene, zones: ZoneState[]): Citysca
         if (entry.work !== (s.kind === "task" ? (s.work ?? "") : null)) {
           // A task post's text changed, which means the row it stands for was
           // replaced: rebuild so the label and the pulse follow the record.
+          teardown(entry);
+          const next = build(s);
+          next.pulse = 1;
+          entries.set(s.id, next);
+        } else if (entry.leased !== !!s.leased) {
+          // Authority was granted or withdrawn. Same treatment as the trouble mark,
+          // for the same reason: the ring is geometry on the building, not a sprite,
+          // so the honest way to change it is to rebuild and pulse.
           teardown(entry);
           const next = build(s);
           next.pulse = 1;

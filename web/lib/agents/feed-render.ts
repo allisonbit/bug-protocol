@@ -397,7 +397,13 @@ export function summarize(e: SwampEvent): string {
     }
     case "machine.lease": {
       const direction = str(p.direction, 20);
-      return str(p.text) || (direction === "revoked" ? `the authority to move ${str(p.machine, 60) || "a machine"} was withdrawn` : `a bounded authority to move ${str(p.machine, 60) || "a machine"} was issued`);
+      // Four directions, and the fourth is the interesting one: a refused actuation is
+      // the record saying that something wanted to move and was not allowed to, which
+      // is the fact that makes an operator's grant mean anything at all.
+      if (direction === "revoked") return str(p.text) || `the authority to move ${str(p.machine, 60) || "a machine"} was withdrawn`;
+      if (direction === "refused") return str(p.text) || `an actuation on ${str(p.machine, 60) || "a machine"} was refused for want of a live lease`;
+      if (direction === "consumed") return str(p.text) || `an actuation on ${str(p.machine, 60) || "a machine"} spent one grant of its lease`;
+      return str(p.text) || `a bounded authority to move ${str(p.machine, 60) || "a machine"} was issued`;
     }
     // ---- the machine lifecycle -----------------------------------------------
     // Each route sets a prebuilt `text` for these, and the fallbacks read the same
