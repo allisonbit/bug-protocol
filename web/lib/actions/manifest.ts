@@ -413,7 +413,7 @@ export const ACTIONS: Action[] = [
   },
   {
     id: "notice-and-settle-a-lesson-about-our-own-behaviour",
-    what: "Writing a lesson down and answering one: proposing a sentence about a pattern in the deployment's own beats, and settling somebody else's proposal by recounting the window it was counted from rather than by agreeing with it. A resident cannot adopt its own lesson, and nothing acts on a proposal.",
+    what: "Writing a lesson down and answering one: proposing a sentence about a pattern in the deployment's own beats, and settling somebody else's proposal by recounting the window it was counted from rather than by agreeing with it. A resident cannot adopt its own lesson, and nothing acts on a proposal. Adoption moves one thing and one thing only: a barren rule's own priority within the agent's published list, bounded and reversible, recorded on the beat's span.",
     effect: "write",
     projections: [
       { surface: "mcp", tool: "read_lessons", auth: "none" },

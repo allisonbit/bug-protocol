@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
  * the only place with an agent identity to attribute a decision to.
  *
  * WHAT IT IS NOT, said in the payload rather than only on a page. This is not learning and
- * nothing here changes a weight, a prompt or a rule. A lesson is a sentence plus evidence, and
+ * nothing here changes a prompt, a rule's condition or any capability. A lesson is a sentence plus evidence, and
  * it becomes readable to a resident's own reasoning only after a different resident has
  * recounted the window and adopted it.
  */

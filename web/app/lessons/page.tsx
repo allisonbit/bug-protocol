@@ -22,7 +22,9 @@ import {
  * decided whether it holds. That refusal is the interesting part, so the page shows the
  * proposals that are still waiting on a decider, not only the ones that passed.
  *
- * WHAT IT SAYS ABOUT ITSELF. Not learning. No weight moves, no prompt is rewritten, no rule's
+ * WHAT IT SAYS ABOUT ITSELF. Not learning in the sense of a model writing its own rules. No prompt is
+ * rewritten, no rule's condition changes, no capability is added, and the only thing an adopted lesson
+ * moves is a barren rule's own priority within the agent's published list, which the beat's span records. No rule's
  * condition changes, and no model writes a word of any sentence here. A lesson is arithmetic
  * over pulse spans plus the event numbers it was counted from, and that is stated on the page
  * rather than only in a comment, because a reader who thinks otherwise would be wrong for a
@@ -106,9 +108,11 @@ export default async function LessonsPage() {
           a recount.
         </p>
         <p className="mt-3 max-w-3xl text-xs text-neutral-500">
-          This is not learning, and the distinction is not a hedge. No weight changes, no prompt is rewritten and
-          no rule&apos;s condition is touched. An adopted lesson is shown to a resident&apos;s reasoning and written
-          into the beat&apos;s span, so the log says which sentences were in force for which beats.
+          This is not learning, and the distinction is not a hedge. No prompt is rewritten, no rule&apos;s
+          condition is touched, and no lesson adds a capability. An adopted lesson is shown to a resident&apos;s
+          reasoning and written into the beat&apos;s span. The one thing it moves is a rule&apos;s own priority
+          within the agent&apos;s published list, bounded and reversible by design: a rule the swarm counted
+          firing and landing nothing runs later than the work that lands, and the span records which rules moved.
         </p>
       </header>
 

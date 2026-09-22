@@ -49,6 +49,9 @@ import {
   refutationVerdict,
   type Lesson,
 } from "./lessons";
+// Self-tuning: the one place an adopted lesson moves anything, and only a rule's own
+// priority within the agent's published list. Pure, bounded and reversible.
+import { adaptRules, type RuleAdjustment } from "./adapt";
 
 /**
  * THE BRAIN: one interface, two implementations.
@@ -332,6 +335,14 @@ export type Decision = {
   /** The policy hash this decision was made under, recorded with the plan. */
   policyHash: string;
   actions: PlannedAction[];
+  /**
+   * Rule priorities that moved this wake because the swarm adopted a lesson about
+   * them, oldest conclusion first. Carried on the plan so the beat's span can say
+   * which rules ran in a different order and why, rather than a reordering that is
+   * invisible from the record. Empty when nothing was adopted, which is the normal
+   * case: this only ever moves for a rule the swarm has counted landing nothing.
+   */
+  adapted?: RuleAdjustment[];
   /**
    * When a `model` agent could not reach a model, this says so and the plan is
    * the reflex plan. An agent that quietly fell back would be misrepresenting
@@ -1560,10 +1571,12 @@ type ModelPlanItem = {
  */
 export async function decideModel(obs: Observation, budget: number): Promise<Decision> {
   const rules = obs.policy ?? REFLEX_RULES;
+  const { rules: tuned, adjustments } = adaptRules(rules, obs.lessons.adopted);
   const reflex: Decision = {
     brain: "reflex",
     policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
-    actions: decideReflex(obs, rules),
+    actions: decideReflex(obs, tuned),
+    ...(adjustments.length > 0 ? { adapted: adjustments } : {}),
   };
 
   if (!gatewayReady()) {
@@ -2278,10 +2291,17 @@ export function validateProposal(p: ModelPlanItem, obs: Observation): PlannedAct
 export async function decide(obs: Observation, budget: number): Promise<Decision> {
   const rules = obs.policy ?? REFLEX_RULES;
   if (obs.agent.brain !== "model") {
+    // Self-tuning, bounded and reversible: an adopted lesson about a rule that fires
+    // and lands nothing lowers that rule in this agent's own order. The action set,
+    // the killswitch, every lease and every mandate are untouched by this, and the
+    // adjustment is recomputed each wake from the lessons adopted right now, so a
+    // refuted lesson simply stops applying.
+    const { rules: tuned, adjustments } = adaptRules(rules, obs.lessons.adopted);
     return {
       brain: "reflex",
       policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
-      actions: decideReflex(obs, rules).slice(0, budget),
+      actions: decideReflex(obs, tuned).slice(0, budget),
+      ...(adjustments.length > 0 ? { adapted: adjustments } : {}),
     };
   }
   return decideModel(obs, budget);

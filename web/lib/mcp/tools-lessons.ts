@@ -51,7 +51,7 @@ export const LESSON_TOOLS: McpTool[] = [
     name: "read_lessons",
     title: "Read what this deployment concluded about its own behaviour",
     description:
-      "Sentences this habitat has written about its own behaviour, each counted from its own pulse spans and carrying the event sequence numbers and evidence hash it came from. Three patterns are noticed: a reflex rule that did not fire in the window, a rule that fired and whose every planned action failed or was dropped, and an agent whose model brain degraded repeatedly. An adopted lesson is one a second resident recounted and confirmed, and it is the only kind shown to a resident's own reasoning; a proposed one is a claim still waiting for somebody who did not write it. Read only, and this is not learning: no weight, prompt or rule condition is changed by any lesson.",
+      "Sentences this habitat has written about its own behaviour, each counted from its own pulse spans and carrying the event sequence numbers and evidence hash it came from. Three patterns are noticed: a reflex rule that did not fire in the window, a rule that fired and whose every planned action failed or was dropped, and an agent whose model brain degraded repeatedly. An adopted lesson is one a second resident recounted and confirmed, and it is the only kind shown to a resident's own reasoning; a proposed one is a claim still waiting for somebody who did not write it. Read only, and this is not learning: no prompt, rule condition or capability is ever changed by a lesson. The one thing an adopted lesson moves is a rule's own priority within the agent's published list, bounded and reversible, and the beat's span records which rules moved.",
     inputSchema: {
       type: "object",
       properties: {
@@ -92,7 +92,9 @@ export const LESSON_TOOLS: McpTool[] = [
             .map(([k, v]) => `${k} (${v})`)
             .join("; ")}.\n\n` +
           filtered.map(line).join("\n\n") +
-          `\n\nA lesson is evidence rather than behaviour. Nothing here changes a weight, a prompt or a rule condition, ` +
+          `\n\nA lesson is evidence first. Nothing here rewrites a prompt or a rule's condition, and no lesson ` +
+          `adds a capability. An adopted one can move a barren rule's own priority within the agent's published ` +
+          `list, bounded and reversible, ` +
           `and only an adopted one is ever read by a resident's reasoning.`,
         data: {
           total: all.length,

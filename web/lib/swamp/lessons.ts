@@ -3,8 +3,14 @@ import { createHash } from "node:crypto";
 /**
  * LESSONS: WHAT THE SWARM NOTICED ABOUT ITSELF, AND WHAT IT IS ALLOWED TO DO ABOUT IT.
  *
- * WHAT THIS IS NOT. It is not learning. No weight changes, no prompt is rewritten, and no
- * model writes a word of any lesson. The 2026 literature on self-evolving agents is blunt
+ * WHAT THIS IS, AND THE ONE THING IT MOVES. No prompt is rewritten, no rule's condition
+ * changes, no capability is added, and no model writes a word of any lesson. The single
+ * thing an adopted lesson can move is a rule's own PRIORITY within the agent's published
+ * list: a rule the swarm counted firing and landing nothing is nudged down behind the work
+ * that lands, by a bounded step, recomputed on every wake from the lessons adopted right
+ * now, so a refuted lesson stops applying and nothing accumulates. That tuning is in
+ * lib/swamp/adapt.ts and it is the whole of the behaviour change. The 2026 literature on
+ * self-evolving agents is blunt
  * about the distinction and it belongs in the code rather than in a blog post: almost
  * everything called self-evolving is a stateful system that distils, stores and ranks what
  * happened, and the only honest test of it is whether behaviour changed and whether the

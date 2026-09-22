@@ -1579,6 +1579,10 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
         //  asked for them, so "this rule never lands" would be unanswerable from the log.
         //  Bounded because the policy is a fixed list and a span is not a place for a corpus.
         "swamp.rules.fired": [...new Set(decision.actions.map((a) => a.rule))].slice(0, 16),
+        // Rule priorities this beat moved because the swarm adopted a lesson about them.
+        // Present only when something moved, so the ordinary wake stays the ordinary span,
+        // and the record says which rule ran in a different order and which claim moved it.
+        ...(decision.adapted && decision.adapted.length > 0 ? { "swamp.rules.adapted": decision.adapted } : {}),
         "swamp.actions.ran": actions.filter((a) => a.ok).length,
         "swamp.actions.failed": actions.filter((a) => !a.ok).length,
         "swamp.degraded": decision.degraded ?? null,
