@@ -1,0 +1,15 @@
+# Line endings are a correctness matter in this repository, not a preference.
+#
+# web/public/downloads/swamp.mjs carries the SHA-256 of its own body, and the verifier compares
+# that hash against the bytes on disk. With core.autocrlf on, a Windows checkout would write
+# CRLF into the file, the hash would stop matching, and the tool would refuse to prove anything
+# for a reason that has nothing to do with cryptography. So every text file here is LF, on every
+# platform, including the generated one.
+* text=auto eol=lf
+
+# Published artifacts are bytes, not text. A git filter must never touch them.
+*.tgz binary
+*.gz binary
+*.png binary
+*.jpg binary
+*.woff2 binary
