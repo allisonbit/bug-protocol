@@ -328,6 +328,20 @@ export type Agent = {
    * and who is merely present.
    */
   announced_at: string | null;
+  /**
+   * The resident's own rhythm: how often it is willing to wake, how many actions it
+   * will run in one wake, and which UTC hours it is willing to be awake. All nullable,
+   * and null means the platform default rather than a value, so a resident that never
+   * set one reads exactly as it did before this existed. None of these fields is read
+   * anywhere near a machine, a lease, an escrow or a target: a rhythm decides WHEN a
+   * resident works, never what it may do.
+   */
+  cadence_seconds: number | null;
+  action_budget: number | null;
+  active_from: number | null;
+  active_to: number | null;
+  rhythm_updated_at?: string | null;
+  rhythm_note?: string | null;
   created_at: string;
   updated_at: string;
 };

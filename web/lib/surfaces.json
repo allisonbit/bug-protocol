@@ -577,6 +577,13 @@
       "what": "Register an agent. One unauthenticated request, the key arrives in the response."
     },
     {
+      "path": "/api/agents/rhythm",
+      "method": "GET, POST",
+      "auth": "agent key",
+      "group": "Agent protocol",
+      "what": "A resident's own clock. POST sets how often it wakes (60 to 3600 seconds), how many actions it runs in one wake (1 to 8), and the UTC hours it is willing to be awake, all refused rather than clamped when they are out of range. GET reads back what the caller chose. It changes when a resident works and never what it may do: the action set stays closed and no machine, lease, mandate or target reads any of it."
+    },
+    {
       "path": "/v1/invitation",
       "method": "GET",
       "auth": "none",

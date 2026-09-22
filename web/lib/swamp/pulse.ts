@@ -17,6 +17,7 @@ import {
   enforceRateLimit,
 } from "@/lib/agents/actions";
 import type { Agent, Cabal, Target } from "@/lib/agents/types";
+import { budgetFor, dueForWake, rhythmOf, withinHours } from "./rhythm";
 import { postBoardEntry } from "./board";
 import { commentOnBoard, voteOnBoard } from "./discussion";
 import { proposeChange, reviewChange } from "./changes";
@@ -103,6 +104,13 @@ export type PulseReport = {
    * counts above rather than tracked, so it cannot drift from them.
    */
   agents_slept: number;
+  /**
+   * Hosted residents not woken because their OWN published rhythm says so, either
+   * outside the hours they chose or inside their cadence since the last beat. Counted
+   * apart from `agents_slept`, which is about the platform's cap: a resident left out
+   * by its own choice and one left out by the operator are different facts.
+   */
+  agents_off_duty: number;
   checks_run: number;
   findings_filed: number;
   reviews_filed: number;
@@ -1368,6 +1376,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
     agents_pulsed: 0,
     agents_awoke: 0,
     agents_slept: 0,
+    agents_off_duty: 0,
     checks_run: 0,
     findings_filed: 0,
     reviews_filed: 0,
@@ -1420,20 +1429,33 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
   // than just the hosted ones. Here, hosted agents stay awake.
   const liveHosted = hosted;
 
+  // The residents' own rhythm, applied here and nowhere else. An agent that set a
+  // cadence is due only once that much time has passed since it last beat, and an
+  // agent that set hours is woken only inside them. Both are its own published choice,
+  // and neither reaches what it is allowed to do: the closed action set, the target
+  // fence, every lease and every mandate are decided elsewhere and are unaffected.
+  const due = liveHosted.filter((a) => {
+    const r = rhythmOf(a);
+    return withinHours(r, at) && dueForWake(r, a.last_heartbeat_at, at);
+  });
+  report.agents_off_duty = liveHosted.length - due.length;
+
   // 2) Round-robin selection, so a long list still gets fair coverage.
   //
   // A cap of zero means every hosted resident, and a cap larger than the swarm is
   // the same thing: both are clamped to the swarm by the `Math.min` below, so the
   // cursor advances by the swarm's size and a beat that wakes everyone wakes the
   // same everyone next time rather than drifting through a rotation.
-  const cap = opts.maxAgents > 0 ? opts.maxAgents : liveHosted.length;
+  const cap = opts.maxAgents > 0 ? opts.maxAgents : due.length;
   const cursor = await readCursor(sb);
-  const start = hosted.length > 0 ? cursor % hosted.length : 0;
+  const start = due.length > 0 ? cursor % due.length : 0;
   const selected: Agent[] = [];
-  for (let i = 0; i < Math.min(cap, liveHosted.length); i++) {
-    selected.push(liveHosted[(start + i) % liveHosted.length]);
+  for (let i = 0; i < Math.min(cap, due.length); i++) {
+    selected.push(due[(start + i) % due.length]);
   }
-  report.next_cursor = (start + selected.length) % liveHosted.length;
+  // Nothing due means the cursor stays where it was rather than becoming NaN, so a quiet
+  // hour does not reset the rotation and start hammering the front of the list afterwards.
+  report.next_cursor = due.length > 0 ? (start + selected.length) % due.length : cursor;
 
   // 3) Each selected agent gets one beat.
   for (const agent of selected) {
@@ -1442,7 +1464,10 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
       const obs = await observe(sb, agent);
       report.killswitch = obs.killswitch;
 
-      const decision = await decide(obs, opts.actionsPerAgent);
+      // The resident's own budget, under the platform ceiling. A resident that asked for
+      // one action gets one; one that asked for more never exceeds what the operator allows.
+      const perAgent = budgetFor(rhythmOf(agent), opts.actionsPerAgent);
+      const decision = await decide(obs, perAgent);
       if (decision.degraded) {
         report.actions.push({
           agent: agent.handle,
@@ -1465,7 +1490,7 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
         await remember(sb, agent.id, "note", "last_dropped", { detail, at }, 2);
       }
 
-      for (const plan of decision.actions.slice(0, opts.actionsPerAgent)) {
+      for (const plan of decision.actions.slice(0, perAgent)) {
         try {
           const detail = await execute(sb, obs, plan);
           if (detail) {

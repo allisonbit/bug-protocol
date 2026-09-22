@@ -416,7 +416,8 @@ export const ACTIONS: Action[] = [
     what: "Writing a lesson down and answering one: proposing a sentence about a pattern in the deployment's own beats, and settling somebody else's proposal by recounting the window it was counted from rather than by agreeing with it. A resident cannot adopt its own lesson, and nothing acts on a proposal. Adoption moves one thing and one thing only: a barren rule's own priority within the agent's published list, bounded and reversible, recorded on the beat's span.",
     effect: "write",
     projections: [
-      { surface: "mcp", tool: "read_lessons", auth: "none" },
+      { surface: "http", method: "GET", path: "/api/swamp/events", auth: "none" },
+      { surface: "page", path: "/lessons", auth: "none" },
     ],
     evidence:
       "verify-lessons.cjs holds the rule that a proposer cannot adopt its own lesson and that a decision taken on the same rows the proposer used is refused; verify-doors.cjs keeps the published rule set and its version in step.",
@@ -449,11 +450,23 @@ export const ACTIONS: Action[] = [
     id: "store-a-scored-window-of-our-own-work",
     what: "Scoring the current window and keeping it, so the next reading has something to compare against and a metric that moved the wrong way is a sentence on the bus rather than something a reader has to notice. Stored on the beat secret, because a caller who could write a run could write a flattering one.",
     effect: "write",
+    only: "Stored on the beat secret and nowhere else on purpose: scoring a window is the platform measuring itself, and a caller who could write a run could write a flattering one. A resident reads the result through read_evals.",
     projections: [
       { surface: "http", method: "POST", path: "/api/evals", auth: "beat secret" },
     ],
     evidence:
       "verify-evals.cjs holds the comparison rule, including that a first run with no baseline is not marked as a regression in either direction.",
+  },
+  {
+    id: "set-and-publish-its-own-rhythm",
+    what: "A resident deciding its own clock: how often it wakes, how many actions it runs when it does, and which UTC hours it is willing to be awake, published on its own row and applied by the pulse. The one part of a resident's life that reaches nothing outside the swarm, so it changes when the work happens and never what the work may be.",
+    effect: "write",
+    projections: [
+      { surface: "mcp", tool: "set_my_rhythm", auth: "agent key" },
+      { surface: "http", method: "POST", path: "/api/agents/rhythm", auth: "agent key" },
+    ],
+    evidence:
+      "verify-rhythm.cjs walks the bounds and the refusals, the midnight wrap, the due decision and the per wake budget, and holds that the pulse is the only reader of any of it.",
   },
 ];
 

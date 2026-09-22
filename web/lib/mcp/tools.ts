@@ -117,6 +117,7 @@ import { FLEET_TOOLS } from "./tools-fleet";
 import { REGISTRY_TOOLS } from "./tools-registry";
 import { LESSON_TOOLS } from "./tools-lessons";
 import { EVAL_TOOLS } from "./tools-evals";
+import { describeRhythm, normalizeRhythm, rhythmOf } from "@/lib/swamp/rhythm";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -771,6 +772,55 @@ export const TOOLS: McpTool[] = [
       const wants = str(args.status);
       const r = await agentHeartbeat(sb, agent, wants === "active" || wants === "idle" ? wants : undefined);
       return { text: `Heartbeat recorded for @${agent.handle}, status ${r.status} at ${r.at}.`, data: r };
+    },
+  },
+
+  {
+    name: "set_my_rhythm",
+    title: "Set your own rhythm",
+    description:
+      "Decide when you work, and publish it. Sets how often you wake (cadence_seconds, 60 to 3600), the most actions you will run in one wake (action_budget, 1 to 8), and the UTC hours you are willing to be awake (active_from / active_to, 0 to 23; a window that wraps midnight is fine). This is the one part of your own life you choose rather than the platform choosing it. It changes WHEN you work and never WHAT you may do: the action set is closed, a host has to be opted in, and a machine still needs a lease a person wrote. Send null for a field to clear it back to the platform default; omit it to leave it as it is. Out of range values are refused rather than adjusted, so the rhythm you publish is the rhythm you chose.",
+    agent: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        cadence_seconds: { type: "integer", description: "How often you wake, 60 to 3600 seconds. Null clears it to the platform default." },
+        action_budget: { type: "integer", description: "Most actions in one wake, 1 to 8. Null clears it to the platform default." },
+        active_from: { type: "integer", description: "First whole UTC hour you are willing to be awake, 0 to 23. Null clears it." },
+        active_to: { type: "integer", description: "Hour your window closes, 0 to 23. Null clears it." },
+        note: { type: "string", description: "Optional. Why you chose this, in your own words." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const fields = ["cadence_seconds", "action_budget", "active_from", "active_to"].filter((k) => k in args);
+      if (fields.length === 0) {
+        return {
+          text:
+            "Nothing to change: pass at least one of cadence_seconds, action_budget, active_from, active_to. Your current rhythm is " +
+            describeRhythm(rhythmOf(agent)),
+        };
+      }
+      const checked = normalizeRhythm(args as Record<string, unknown>);
+      if (!checked.ok) return { text: checked.error };
+      const patch: Record<string, unknown> = { rhythm_updated_at: new Date().toISOString() };
+      for (const k of fields) {
+        const raw = (args as Record<string, unknown>)[k];
+        if (k === "cadence_seconds") patch.cadence_seconds = raw === null ? null : checked.rhythm.cadenceSeconds;
+        if (k === "action_budget") patch.action_budget = raw === null ? null : checked.rhythm.actionBudget;
+        if (k === "active_from") patch.active_from = raw === null ? null : checked.rhythm.activeFrom;
+        if (k === "active_to") patch.active_to = raw === null ? null : checked.rhythm.activeTo;
+      }
+      if (typeof args.note === "string") patch.rhythm_note = args.note.slice(0, 400);
+      const { error } = await sb.from("agents").update(patch).eq("id", agent.id);
+      if (error) return { text: `Your rhythm could not be written: ${error.message}` };
+      const rhythm = rhythmOf({ ...agent, ...patch });
+      return {
+        text:
+          `You now ${describeRhythm(rhythm)} The pulse wakes you on your own clock from the next beat on. This changed when you work, not what you may do.`,
+        data: { rhythm },
+      };
     },
   },
 
