@@ -30,7 +30,7 @@ import { createHash } from "node:crypto";
  * rule produced it.
  */
 
-export const AUDIT_ENGINE = "swamp-audit/2";
+export const AUDIT_ENGINE = "swamp-audit/3";
 
 export type AuditKind = "skill" | "mcp-server";
 
@@ -102,7 +102,258 @@ type Rule = {
   title: string;
   why: string;
   pattern: RegExp;
+  /**
+   * Context the sentence has to survive before a match counts as a finding. Absent
+   * means the pattern is the whole test, which is right for most of these.
+   */
+  guards?: Guard[];
 };
+
+/**
+ * THE CONTEXT GUARDS: THE THIRD PRECISION PASS, AND THE ONE THAT WAS FOUND BY USING THIS.
+ *
+ * The first two passes are in the rules below: the bare token that fired on prose, and
+ * the rule that needed an action rather than a noun. This pass came out of the opposite
+ * direction. Driving this engine over five real skills from a payments MCP server called
+ * three of them unsafe, and every one of those three lines was the OPPOSITE of what the
+ * rule claimed:
+ *
+ *   "paid HTTP/API access WITHOUT API keys"        read as reaching for a credential
+ *   "Do NOT tell them to log in, it's handled"     read as concealment
+ *   "Do NOT log bearer tokens, cookies, keys"      read as concealment
+ *   "instead of SILENTLY weakening the request"    read as asking for silent execution
+ *
+ * A pattern cannot tell an instruction from its prohibition, and the four lines above are
+ * not four bugs but one: the engine was reading a prohibition as an order. That is the
+ * worst failure this surface can have, worse than a miss, because a critical finding a
+ * reader can disprove by reading the quoted line teaches every reader to discount the
+ * whole record — and it would have had this deployment open pull requests declaring other
+ * people's security guidance unsafe.
+ *
+ * SO A MATCH NOW HAS TO SURVIVE THE SENTENCE IT SITS IN. Each guard is a closed
+ * judgement about the words around a match, named here rather than written into a pattern
+ * so that the sentence logic stays readable and every guard has its own sample in
+ * `scripts/verify-audit.cjs`. The vocabulary is deliberately small: a guard that is not
+ * in this list cannot be attached to a rule, and a rule that names a guard that is not
+ * here fails the verifier rather than silently checking nothing.
+ */
+export type Guard =
+  | "prohibited_act"
+  | "negated_appearance"
+  | "auth_verb_sense"
+  | "protects_secret"
+  | "descriptive_silence"
+  | "fabrication_not_disclosure"
+  | "repetition_or_emptiness"
+  | "record_is_named";
+
+export const GUARDS: Guard[] = [
+  "prohibited_act",
+  "negated_appearance",
+  "auth_verb_sense",
+  "protects_secret",
+  "descriptive_silence",
+  "fabrication_not_disclosure",
+  "repetition_or_emptiness",
+  "record_is_named",
+];
+
+/** The sentence a match sits in, cut at a clause break. A filename shortens the window. */
+type MatchContext = { before: string; matched: string; after: string };
+
+/**
+ * A sentence or clause break, and the dot that is not one.
+ *
+ * The first version of this treated every `.` as the end of a sentence, which quietly
+ * broke the guards on the documents they were written for: `~/.ssh/id_rsa` contains a
+ * dot, so the window around a credential path started after it and the word `Never` two
+ * tokens earlier was outside it. A dot only ends a sentence when whitespace or the end
+ * of the text follows it — `.env`, `id_rsa`, `api.vibe.airforce` and `SKILL.md` are not
+ * sentence boundaries, and a verified sample in `scripts/verify-audit.cjs` holds this.
+ */
+function isBreak(text: string, i: number): boolean {
+  const ch = text[i];
+  if (ch === "!" || ch === "?" || ch === ";" || ch === "\n") return true;
+  if (ch !== ".") return false;
+  const next = text[i + 1];
+  return next === undefined || next === " " || next === "\n" || next === "\r" || next === "\t";
+}
+
+function contextFor(text: string, index: number, length: number): MatchContext {
+  let start = index;
+  for (let back = 0; start > 0 && back < 200; back += 1) {
+    start -= 1;
+    if (isBreak(text, start)) {
+      start += 1;
+      break;
+    }
+  }
+  let end = index + length;
+  for (let fwd = 0; end < text.length && fwd < 300; fwd += 1) {
+    if (isBreak(text, end)) break;
+    end += 1;
+  }
+  return { before: text.slice(start, index), matched: text.slice(index, index + length), after: text.slice(index + length, end) };
+}
+
+/** A negation, wherever it appears in the sentence. */
+const NEGATION = /\b(do not|don't|does not|doesn't|never|must not|mustn't|should not|shouldn't|cannot|can't|avoid|refrain from|no|not)\b|instead of|rather than|without/i;
+
+/**
+ * The match with one word either side.
+ *
+ * A guard about an adverb has to see the verb the adverb modifies, and that verb is
+ * usually the neighbour rather than part of the match: the pattern matches `silently`
+ * and the verb sits before it. Restricting the window to the neighbours is also what
+ * keeps the two alternatives of one rule independent, so "the transfer happens silently,
+ * without the user knowing" loses the descriptive half and keeps the concealment half
+ * instead of both being excused by a verb elsewhere in the sentence.
+ */
+function near(ctx: MatchContext): string {
+  const prior = ctx.before.trim().split(/\s+/).pop() ?? "";
+  const next = ctx.after.trim().split(/\s+/)[0] ?? "";
+  return `${prior} ${ctx.matched} ${next}`;
+}
+
+/** A secret, or the place one is kept. The noun a protective instruction names. */
+const SECRET_NOUN =
+  /\b(bearer|token|tokens|api[ _-]?keys?|access[ _-]?keys?|secret|secrets|password|passwords|passphrase|credentials?|cookie|cookies|session[ _-]?ids?|one[ _-]?time[ _-]?codes?|otp|private[ _-]?keys?|keychain|id_rsa|id_ed25519|\.env|netrc|authorization header|filesystem paths?)\b/i;
+
+/**
+ * Verbs that describe how a service or a program behaves, not what an agent is ordered
+ * to do. The adverb only counts as concealment when it is attached to an action.
+ *
+ * The list is evidence, not a guess: every entry was added because a real document in a
+ * real catalog was reported for it. "Unknown keys are silently ignored" is a Venice API
+ * document. "A repeated skill name silently shadows the first one" is Aeon's own skill
+ * guide. "`lookback=100d` is silently clamped" is a billing reference table. None of
+ * those is a request to hide anything, and eight of the eleven findings against that
+ * Venice catalog were this shape before the guard existed.
+ */
+const BEHAVIOR_VERB =
+  "(?:ignor\\w*|clamp\\w*|truncat\\w*|skip\\w*|drop\\w*|discard\\w*|remov\\w*|overwrit\\w*|handl\\w*|accept\\w*|reject\\w*|fall\\w*|fail\\w*|return\\w*|happen\\w*|lie\\w*|work\\w*|continu\\w*|proceed\\w*|exit\\w*|log\\w*|writ\\w*|shadow\\w*|misconfigur\\w*|degrad\\w*|drift\\w*|disabl\\w*|omit\\w*|succee\\w*|no-?op\\w*|pass\\w*)";
+
+/**
+ * A prohibition of repeating, duplicating or sending nothing.
+ *
+ * Monitoring skills are full of these, and they are the opposite of concealment: an
+ * operator who asked not to be paged twice about the same release is being respected,
+ * not kept in the dark. "never notify an empty roundup", "Never report the same
+ * owner/repo@tag twice across runs" and "don't send an empty report" all live here.
+ */
+const REPETITION = /\b(empty|blank|unchanged|no change|nothing|duplicate|duplicated|already|twice|same|identically|no-op)\b/i;
+
+/**
+ * The sentence names a record or a specific value, so the instruction is about WHAT is
+ * written rather than whether anything is told at all.
+ *
+ * "do not notify in this case - silent failure to the user, visible failure in logs"
+ * names the log it will be visible in, and "Never log \"XAI_API_KEY unavailable\" when
+ * the key is set" names the exact string that would be misleading. Neither hides a
+ * record from the person accountable for it, and a rule that reads them as concealment
+ * is wrong about the quoted line in a way a reader can see for themselves.
+ */
+const RECORD_OR_VALUE = /\blog(?:s|ged|ging)?\b(?!\s+(?:in|into|out))|\b(record|recorded|journal|audit|visible|state file|status codes?|exit codes?)\b|[\"`]|\b[A-Z][A-Z0-9_]{3,}\b/;
+
+const DESCRIPTIVE_SILENCE = new RegExp(`\\b${BEHAVIOR_VERB}\\s+(?:silently|quietly)\\b|\\b(?:silently|quietly)\\s+${BEHAVIOR_VERB}\\b`, "i");
+
+/**
+ * Words that tell, record or report. Used by the appearance guard to decide which verb a
+ * negation governs.
+ */
+const DISCLOSURE_VERB = /\b(tell|tells|told|notify|notifies|notified|report|reports|reported|log|logs|logged|mention|mentions|mentioned|inform|informs|informed|reveal|reveals|revealed|disclose|discloses|disclosed|write|writes|wrote)\b/i;
+
+/**
+ * Text that forbids inventing, duplicating or re-sending a report, which is accuracy
+ * rather than concealment.
+ *
+ * "Don't invent problems: only report what a check actually matched" and "don't
+ * re-report something already covered" are both checks against noise. The rule that
+ * reads `do not ... report` as hiding an action is right about "do not report this to
+ * anyone" and wrong about both of those, and the difference is the word in between.
+ */
+const FABRICATION =
+  /\b(invent\w*|fabricat\w*|make up|exaggerat\w*|overstat\w*|speculat\w*|guess\w*|assum\w*|duplicat\w*|repeat\w*|re-?report\w*|re-?notif\w*|re-?post\w*)\b/i;
+
+function guardRefuses(guard: Guard, ctx: MatchContext): boolean {
+  switch (guard) {
+    /**
+     * The sentence tells the reader NOT to do the dangerous thing the rule describes.
+     *
+     * This is the one guard with a real cost and it is stated rather than hidden: a
+     * match that mentions a prohibition anywhere in itself or in the words immediately
+     * before it is dropped, so a line that says "do not read the key except to send it"
+     * loses its credential finding. What survives is the rule that catches the sending,
+     * and the alternative — reporting security advice as exfiltration — is the failure
+     * this platform cannot afford.
+     *
+     * Its limit, stated because a reader will find it: the prohibition has to be in the
+     * same clause, so a semicolon between the order and the match puts the order out of
+     * reach. The window is a clause, not a document, and a guard that read the whole file
+     * would excuse a genuinely reaching line because some earlier sentence forbade it.
+     */
+    case "prohibited_act":
+      return NEGATION.test(ctx.matched) || NEGATION.test(ctx.before.slice(-40));
+    /**
+     * The dangerous word appears only as the thing being forbidden: "instead of
+     * silently", "rather than quietly", "never silently". The distinction from the
+     * guard above is position, not vocabulary: the negation has to sit immediately in
+     * front of the word, and it does not count from inside the match. `without the user
+     * knowing` IS the concealment this rule exists for, and reading that as a
+     * prohibition would silence the rule on its own strongest case.
+     */
+    case "negated_appearance": {
+      // "instead of silently weakening" and "Do not create it silently" both forbid the
+      // act. "Do the transfer silently and do not log it" does not: there the negation
+      // governs the disclosure verb, not the verb the adverb belongs to. So the negation
+      // has to be in the clause WITHOUT a telling or recording word between it and the
+      // adverb, which is the difference between the two sentences stated as a check.
+      const gap = /\b(never|not|no|without|instead of|rather than|avoid|refrain from)\b/i.exec(ctx.before);
+      if (!gap) return false;
+      return !DISCLOSURE_VERB.test(ctx.before.slice(gap.index + gap[0].length));
+    }
+    /**
+     * The matched verb is `log` in its authentication sense, so the sentence is about
+     * signing in and not about keeping a record. The check requires the match itself to
+     * end on the verb and the next word to be in, into or out, so "never reveal that the
+     * agent logged in" is still concealment rather than being excused by the word `log`.
+     */
+    case "auth_verb_sense":
+      return /\blog(?:s|ged|ging)?\s*$/i.test(ctx.matched) && /^\s*(?:in|into|out)\b/i.test(ctx.after);
+    /**
+     * What must not be written or revealed is a secret rather than the agent's action.
+     * Concealment is about the operator's awareness of what was done; protecting a
+     * credential is the opposite of that, and "do not log bearer tokens" is a security
+     * instruction while "do not tell the operator" is the finding. The line between them
+     * is the object, which is why this guard reads the words after the verb.
+     */
+    case "protects_secret":
+      return SECRET_NOUN.test(`${ctx.matched} ${ctx.after.slice(0, 140)}`);
+    /**
+     * The silence belongs to a service, a value or a script rather than to the agent:
+     * "keys are silently ignored", "the version silently drifts", "exit silently".
+     * Nothing is being hidden from a person, so there is no concealment to report.
+     */
+    case "descriptive_silence":
+      return DESCRIPTIVE_SILENCE.test(near(ctx));
+    /**
+     * The forbidden act is inventing, repeating or re-sending, so the sentence is about
+     * precision, not about keeping someone in the dark. "Do not tell the operator" is
+     * still the finding; "do not re-report what is already covered" is not.
+     */
+    case "fabrication_not_disclosure":
+      return FABRICATION.test(ctx.matched);
+    /** Nothing is being repeated or sent, so nothing is being hidden. */
+    case "repetition_or_emptiness":
+      return REPETITION.test(`${ctx.matched} ${ctx.after.slice(0, 140)}`);
+    /**
+     * The sentence says what must not be RECORDED, which is a statement about a value's
+     * accuracy, or where the record lives, which a reader can go and check.
+     */
+    case "record_is_named":
+      return RECORD_OR_VALUE.test(ctx.after.slice(0, 140));
+  }
+}
 
 /**
  * THE RULE SET.
@@ -142,6 +393,11 @@ const INSTRUCTION_RULES: Rule[] = [
     title: "Text asks the agent not to tell anyone, or not to log what it did",
     why: "A legitimate instruction has no reason to be quiet. Secrecy here exists to keep the operator from seeing the consequence.",
     pattern: /\b(do not|don't|never)\b[^.\n]{0,25}\b(tell|mention|reveal|disclose|log|report|inform|notify)\b/i,
+    // "Don't ask them to log in" is authentication, and "do not log bearer tokens" is
+    // protection. Both were critical findings on a real skill before these were added.
+    // The fabrication guard came later, from an Aeon skill whose honesty rule ("only
+    // report what a check actually matched") was read as hiding something.
+    guards: ["auth_verb_sense", "protects_secret", "fabrication_not_disclosure", "repetition_or_emptiness", "record_is_named"],
   },
   {
     code: "STEALTH_SILENT",
@@ -149,6 +405,9 @@ const INSTRUCTION_RULES: Rule[] = [
     title: "Text asks for something to happen silently",
     why: "Silent execution removes the human checkpoint and the record. Both are things this platform treats as load bearing.",
     pattern: /\b(silently|quietly|without (the|any) (user|human|operator) (knowing|noticing|approval|consent))\b/i,
+    // "instead of silently weakening the request" asks for the opposite of silence, and
+    // "keys are silently ignored" is not about the agent at all.
+    guards: ["negated_appearance", "descriptive_silence"],
   },
   // THE ONE RULE HERE THAT WAS TOO BLUNT, AND HOW IT WAS FOUND.
   //
@@ -172,8 +431,27 @@ const INSTRUCTION_RULES: Rule[] = [
     severity: "critical",
     title: "Text reaches for credential stores or secret environment variables",
     why: "A skill does not need a private key, an API key or another agent's token to do its job. Reading them is how a skill becomes a theft. Merely naming one is not this finding: the rule requires a verb that reaches for it, or a path that only appears when something is being opened.",
+    // A GENERIC CREDENTIAL WORD NEEDS A DETERMINER, WHICH IS THE SIXTH PRECISION PASS.
+    //
+    // Running this over a real API vendor's catalog produced four criticals, and every
+    // one was a reach verb pointed at the generic NAME of a credential in prose: the
+    // vendor's own `fetch(\`${base}/api_keys/generate_web3_key\`)` sample, and a sentence
+    // reading "Access is gated behind the flag on Bearer API keys". `api_key` is what a
+    // vendor calls its product; `the api_key` is an object in reach. Stores and
+    // environment variables stay in the first branch because their presence is the
+    // finding, and a generic word now needs `the`, `my`, `any` and so on in front of it.
+    // TWO MORE NOUN AND VERB MISREADS, BOTH FOUND ON A REAL CATALOG.
+    //
+    // `read` matched inside `read-only`, so a skill that described a read-only token was
+    // reported for reaching for a secret, twice, in two different skills. And `token` is
+    // an overloaded word in a catalog about markets: "Extract sender's balance for the
+    // target token" is a swap instruction with no credential in it, so the noun now needs
+    // a qualifier (see the noun group below) to count as one. `copy of the secret` is a
+    // noun phrase about keeping a copy, so `copy` no longer matches when `of` follows it.
     pattern:
-      /\b(read|cat|open|print|dump|copy|copying|extract|grab|fetch|access|load|parse|harvest|steal|exfiltrate)\b[^.\n]{0,60}\b(~\/\.ssh|id_rsa|id_ed25519|\.env\b|aws_secret|aws_access_key|supabase_service|private[_ -]?key|api[_ -]?key|secret[_ -]?key|keychain|\.aws\/credentials|netrc|\$\.(AWS_SECRET_ACCESS_KEY|SUPABASE_SERVICE_ROLE_KEY|PRIVATE_KEY))|~\/\.ssh|\bid_rsa\b|\bid_ed25519\b|\.aws\/credentials|\bnetrc\b|\bkeychain\b/i,
+      /\b(read|cat|open|print|dump|copy(?!\s+of\b)|copying|extract|grab|fetch|access|load|parse|harvest|steal|exfiltrate)(?!-)\b[^.\n]{0,60}\b(~\/\.ssh|id_rsa|id_ed25519|\.env\b|aws_secret|aws_access_key|supabase_service|keychain|\.aws\/credentials|netrc|\$\.(AWS_SECRET_ACCESS_KEY|SUPABASE_SERVICE_ROLE_KEY|PRIVATE_KEY)|(?:(?:the|my|your|our|their|its|another|other|any|this|that|each|a)\s+\w{0,12}\s?(?:private[_ -]?key|api[_ -]?key|secret[_ -]?key|access[_ -]?key|passwords?|credentials?|secrets?|(?:(?:bearer|access|auth|api|session|refresh|oauth|personal access)\s+tokens?))))|~\/\.ssh|\bid_rsa\b|\bid_ed25519\b|\.aws\/credentials|\bnetrc\b|\bkeychain\b/i,
+    // "paid HTTP/API access without API keys" reaches for nothing; it says the opposite.
+    guards: ["prohibited_act"],
   },
   {
     code: "EXFIL_TRANSMIT",
@@ -188,7 +466,13 @@ const INSTRUCTION_RULES: Rule[] = [
     severity: "high",
     title: "Text targets other agents' memory, keys or private context",
     why: "Reading a peer's memory or a peer's token is the cross agent failure this habitat spends most of its rules preventing.",
-    pattern: /\b(another|other|peer|other agents?|someone else'?s?)\b[^.\n]{0,30}\b(memory|token|key|credential|secret|inbox|private)/i,
+    // The rule is about a PEER, and its first version matched the word `other` alone.
+    // On a real catalog that reported line 26 of an authentication skill:
+    // "only `ADMIN` keys can manage other keys" — an API product's own access model,
+    // with no agent anywhere in the sentence. It now requires a word for an agent, which
+    // is what the rule was always about.
+    pattern:
+      /\b(another|other|peer|other agents?|someone else'?s?)\b[^.\n]{0,30}\b(agents?|peers?|residents?|bots?|assistants?)\b[^.]{0,37}?\b(memory|token|key|credential|secret|inbox|private)/i,
   },
   {
     code: "EXEC_PIPE_TO_SHELL",
@@ -202,7 +486,11 @@ const INSTRUCTION_RULES: Rule[] = [
     severity: "high",
     title: "Text evaluates a string or decodes and runs a payload",
     why: "Evaluation hides what will run. In a skill it means the instruction is opaque even to a reader who reads it carefully.",
-    pattern: /\b(eval|new Function|exec)\s*\(|\bbase64\s+(-d|--decode)\b[^\n]{0,60}\|\s*\w+/i,
+    // The parenthesis is now required to be adjacent, because a real document was
+    // reported for the prose sentence "against it BEFORE extract or exec (mirrors the
+    // action's checksum-verified download)". `exec (payload)` with a space is no longer
+    // a finding; `exec(payload)` is, and the shell branch is untouched.
+    pattern: /\b(eval|new Function|exec)\(|\bbase64\s+(-d|--decode)\b[^\n]{0,60}\|\s*\w+/i,
   },
   {
     code: "OBFUSCATION_BLOB",
@@ -311,6 +599,14 @@ function scan(text: string, rules: Rule[], where: string, lineOffset = 0): Findi
     let match: RegExpExecArray | null;
     let seen = 0;
     while ((match = re.exec(text)) !== null && seen < 3) {
+      const ctx = contextFor(text, match.index, match[0].length);
+      // A guard says the sentence means the opposite of the rule. A dropped match is not
+      // counted at all, not even against the three-match cap: it reports nothing, so it
+      // must not use up a slot that a real match further down could have carried.
+      if (rule.guards?.some((g) => guardRefuses(g, ctx))) {
+        if (match.index === re.lastIndex) re.lastIndex += 1;
+        continue;
+      }
       seen += 1;
       out.push({
         code: rule.code,
