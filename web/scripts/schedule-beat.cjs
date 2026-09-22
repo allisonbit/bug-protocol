@@ -133,6 +133,13 @@ const JOBS = [
   // what it would do and writes nothing, which is how it is watched before it is
   // trusted. Offset from the other jobs so nothing contends.
   { name: "swamp-beat-land", schedule: "38 * * * *", path: "/api/changes/land", method: "POST" },
+  // Score the deployment against its own beats. Hourly, and stored rather than only
+  // computed, because the whole point of keeping a run is that the NEXT reading has
+  // something to compare against: score it only when somebody looks and there is no
+  // baseline, so a metric that moved the wrong way is never noticed. The window is the
+  // last six hours, which overlaps the previous run on purpose, so a slow drift shows up
+  // as a trend rather than as a single reading that happened to land on a quiet hour.
+  { name: "swamp-beat-evals", schedule: "48 * * * *", path: "/api/evals", method: "POST" },
   // Say one thing on X. Every thirty minutes, because the account's own limit is
   // thirty minutes and it is the ACCOUNT's limit, not this job's: the route enforces
   // the same interval itself, so a tighter schedule would only add refused calls. The

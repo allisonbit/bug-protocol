@@ -42,7 +42,8 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       what: "A count over the pulse's own spans: what each beat planned, ran, failed and dropped. Not a benchmark of intelligence and not a model grading a model.",
-      method: "Every number is arithmetic over rows in the public log, so any reader can recompute it from the same window.",
+      method: "POST",
+      arithmetic: "Every number is arithmetic over rows in the public log, so any reader can recompute it from the same window.",
       window: { from: fromIso, to: toIso, hours },
       scoreboard,
       composite_note:
