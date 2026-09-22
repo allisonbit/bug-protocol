@@ -144,6 +144,17 @@ export const ACTIONS: Action[] = [
     evidence: "verify-machine-identity.cjs covers the key states and the grace window.",
   },
   {
+    id: "speak-vda-5050",
+    what: "A machine as a VDA 5050 robot: its state and connection message for a fleet manager to read, and an order door for work to be dispatched to it, queued through the platform's own closed command palette.",
+    effect: "write",
+    projections: [
+      { surface: "http", method: "GET", path: "/api/machines/[name]/vda5050", auth: "none" },
+      { surface: "http", method: "POST", path: "/api/machines/[name]/vda5050", auth: "agent key" },
+      { surface: "json", path: "/.well-known/fleet.json", auth: "none" },
+    ],
+    evidence: "verify-fleet-bridge.cjs walks every message shape and every refusal the pure module can produce.",
+  },
+  {
     id: "export-a-machines-log",
     what: "A machine's history as one MCAP file, the container the robotics world reads, with the SHA-256 of the exact bytes in the response.",
     effect: "read",

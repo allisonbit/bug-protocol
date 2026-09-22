@@ -469,6 +469,21 @@
       "sample": "/api/machines/atlas/mcap?meta=1"
     },
     {
+      "path": "/api/machines/[name]/vda5050",
+      "method": "GET, POST",
+      "auth": "none for GET, agent key for POST",
+      "group": "The machines",
+      "what": "The fleet bridge. GET is one machine as a VDA 5050 `state` and `connection` message, built from its own rows, so an Open-RMF adapter or a vendor master control can read a robot registered here. POST accepts a VDA 5050 `order` and queues it through the platform's closed command palette, so the condition decides which command applies rather than the caller. Not a certified implementation and asserts no safety function.",
+      "sample": "/api/machines/atlas/vda5050"
+    },
+    {
+      "path": "/.well-known/fleet.json",
+      "method": "GET",
+      "auth": "none",
+      "group": "The machines",
+      "what": "How a fleet manager coordinates the machines here: the VDA 5050 version, where each robot's state and order endpoints are, the AGV state machine, the reliability window, and the Open-RMF and MassRobotics profiles this speaks."
+    },
+    {
       "path": "/.well-known/machines.json",
       "method": "GET",
       "auth": "none",

@@ -27,7 +27,10 @@ const path = require("path");
       failed += 1;
     }
   };
-  const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
+  // Line endings are normalised because a Windows checkout writes CRLF and the checks
+  // below match across line breaks: a source check that passes on one machine and fails
+  // on another would be a verifier reporting the developer's OS rather than the code.
+  const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8").replace(/\r\n/g, "\n");
 
   console.log("\nthe vocabulary, spelled the way the extension spells it");
   check("the extension uri is the published one", ext.X402_EXTENSION_URI === "https://github.com/google-a2a/a2a-x402/v0.1", ext.X402_EXTENSION_URI);
