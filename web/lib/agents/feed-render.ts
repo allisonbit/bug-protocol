@@ -122,6 +122,10 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "machine.reading": { label: "machine", dot: "bg-cyan", tone: "text-chalk", mono: true },
   "machine.alert": { label: "machine alert", dot: "bg-warn", tone: "text-warn" },
   "machine.command": { label: "command", dot: "bg-bug-dim", tone: "text-chalk", mono: true },
+  // A lease is authority written down, so it reads as governance rather than as motion:
+  // neutral when issued, and the warn dot when withdrawn, because a revocation is the
+  // one on this pair a reader should look at.
+  "machine.lease": { label: "lease", dot: "bg-amber", tone: "text-amber" },
   // The lifecycle rows. A rotation and a publication are ordinary work and read
   // neutral; an install reads neutral too because a device taking an update is
   // routine. The three that take colour are the ones that changed something a reader
@@ -370,6 +374,10 @@ export function summarize(e: SwampEvent): string {
       if (direction === "delivered") return `${str(p.machine, 60) || "a machine"} collected ${Number(p.count ?? 1)} command(s)`;
       if (direction === "acknowledged") return str(p.text) || "a machine acknowledged a command";
       return str(p.text) || "a command was issued to a machine";
+    }
+    case "machine.lease": {
+      const direction = str(p.direction, 20);
+      return str(p.text) || (direction === "revoked" ? `the authority to move ${str(p.machine, 60) || "a machine"} was withdrawn` : `a bounded authority to move ${str(p.machine, 60) || "a machine"} was issued`);
     }
     // ---- the machine lifecycle -----------------------------------------------
     // Each route sets a prebuilt `text` for these, and the fallbacks read the same

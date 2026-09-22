@@ -283,6 +283,7 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "machine.reading": "harbour",
   "machine.alert": "harbour",
   "machine.command": "plaza",
+  "machine.lease": "plaza",
   // The lifecycle rows land where the device does. A rotation, an install and a
   // rollback are facts about a machine's own body, so the Harbour. An offer is the
   // fleet speaking TO devices, so the plaza, exactly like a command. An advisory and
@@ -387,6 +388,7 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "machine.reading": "artifact",
   "machine.alert": "verdict",
   "machine.command": "speak",
+  "machine.lease": "verdict",
   // A rotation is an arrival in the same sense a registration is: a new key now stands
   // for the machine. A publication and an install are artifacts, facts that did not
   // stand before. A revocation, a rollback and an advisory are verdicts: nothing was

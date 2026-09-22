@@ -12,6 +12,7 @@ import {
   type MachineReading,
   type SupervisedMachine,
 } from "@/lib/swamp/machine-supervision";
+import { leaseMayAct, pickLease, type LeaseRow } from "@/lib/machines/leases";
 import { getWorldRows } from "@/lib/world/rows";
 import { projectWorld } from "@/lib/world/project";
 import { agentDid, agentDidDocument, platformDid, platformDidDocument } from "@/lib/identity/did";
@@ -543,6 +544,39 @@ export const CAPABILITY_TOOLS: McpTool[] = [
         body.seconds = clampInt(args.interval_secs, 10, 3600, Number(body.seconds ?? 60));
       }
 
+      // THE AUTHORITY ENVELOPE. An actuation needs a live lease: a scope, an expiry, a
+      // ceiling and an issuer on the record. A reporting command does not, because
+      // asking a machine to speak is not the same act as asking it to move. The lease is
+      // consumed before the command is queued, so a ceiling of one really is one, and an
+      // exhausted or expired or revoked lease refuses here rather than at the machine.
+      let consumedLease: string | null = null;
+      if (decision.actuation) {
+        const { data: leaseData } = await sb
+          .from("machine_leases")
+          .select("*")
+          .eq("machine_name", m.name)
+          .eq("scope", decision.name)
+          .is("revoked_at", null);
+        const lease = pickLease((leaseData as LeaseRow[] | null) ?? [], decision.name);
+        const may = leaseMayAct({ lease, scope: decision.name, nowMs });
+        if (!may.ok) {
+          return {
+            text: `Nothing was sent. ${may.reason} An owner issues a lease from the machine's dashboard; this platform does not actuate on an authority nobody wrote down.`,
+            data: { sent: false, code: may.code, lease_required: true, reason: may.reason },
+          };
+        }
+        const { data: consumed, error: leaseErr } = await sb
+          .from("machine_leases")
+          .update({ used_actuations: may.lease.used_actuations + 1 })
+          .eq("id", may.lease.id)
+          .select("id")
+          .maybeSingle();
+        if (leaseErr || !consumed) {
+          return { text: `Nothing was sent. The lease could not be consumed: ${leaseErr?.message ?? "no row came back"}.`, data: { sent: false, code: "LEASE_NOT_CONSUMED" } };
+        }
+        consumedLease = may.lease.id;
+      }
+
       // The row first, the event second, exactly as the pulse does it: a command
       // that reached hardware with no line on the record would be motion nobody can
       // audit, and an announcement of a command that never queued is the other lie.
@@ -582,7 +616,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
       await rememberNote(sb, agent.id, { machine: m.name, name: decision.name, at: new Date(nowMs).toISOString() });
 
       return {
-        text: `Queued ${decision.name} for ${m.name}: ${decision.reason}. The machine collects it on its next poll, and its answer lands on the log.`,
+        text: `Queued ${decision.name} for ${m.name}: ${decision.reason}. The machine collects it on its next poll, and its answer lands on the log.${consumedLease ? ` Consumed one actuation of lease ${consumedLease}.` : ""}`,
         data: {
           sent: true,
           machine: m.name,
@@ -590,6 +624,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
           actuation: decision.actuation,
           reason: decision.reason,
           cited: decision.cited,
+          lease: consumedLease,
         },
       };
     },

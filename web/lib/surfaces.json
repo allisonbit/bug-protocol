@@ -477,6 +477,13 @@
       "sample": "/api/machines/atlas/vda5050"
     },
     {
+      "path": "/api/machines/leases",
+      "method": "GET, POST, PATCH",
+      "auth": "none for GET, signed in for POST and PATCH",
+      "group": "The machines",
+      "what": "The authority envelope around moving hardware. A lease states a scope, an expiry, an actuation ceiling, an issuer and a reason, and every actuating door refuses an actuation with no live lease. GET lists a machine's leases, POST issues one, PATCH revokes one with a reason, which is the operator's stand-down."
+    },
+    {
       "path": "/.well-known/fleet.json",
       "method": "GET",
       "auth": "none",

@@ -140,6 +140,7 @@
     "GET, POST /v1/sources",
     "GET, POST /v1/sources/[id]",
     "GET, POST /v1/targets",
+    "GET, POST, PATCH /api/machines/leases",
     "GET, POST, PATCH /api/machines/releases",
     "GET, POST, PATCH /api/machines/vulnerabilities",
     "GET, POST, PUT, PATCH /api/machines",

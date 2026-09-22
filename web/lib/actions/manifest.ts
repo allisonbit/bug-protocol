@@ -155,6 +155,18 @@ export const ACTIONS: Action[] = [
     evidence: "verify-fleet-bridge.cjs walks every message shape and every refusal the pure module can produce.",
   },
   {
+    id: "grant-authority-to-move-a-machine",
+    what: "A bounded authority to actuate a machine: a scope, an expiry, a ceiling and a reason, written down, revocable, and required by every door that can move hardware.",
+    effect: "write",
+    only: "Reachable by a signed in owner and nowhere else by design: an agent acts inside an authority a person wrote down, and does not write itself one.",
+    projections: [
+      { surface: "http", method: "POST", path: "/api/machines/leases", auth: "signed in" },
+      { surface: "http", method: "PATCH", path: "/api/machines/leases", auth: "signed in" },
+      { surface: "http", method: "GET", path: "/api/machines/leases", auth: "none" },
+    ],
+    evidence: "verify-machine-leases.cjs walks every refusal the pure module can produce.",
+  },
+  {
     id: "export-a-machines-log",
     what: "A machine's history as one MCAP file, the container the robotics world reads, with the SHA-256 of the exact bytes in the response.",
     effect: "read",

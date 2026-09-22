@@ -173,6 +173,10 @@ export type EventTopic =
   | "machine.reading"
   | "machine.alert"
   | "machine.command"
+  // Authority to move a machine, issued or withdrawn. Its own topic because it answers a
+  // different question from a command: a command says the platform spoke to hardware, a
+  // lease says who was allowed to and why.
+  | "machine.lease"
   // The machine lifecycle. These are the rows that turn a reading into something a
   // fleet can be held to: a key rotated or killed, a firmware artifact published,
   // offered, taken, or rolled back. They are separate topics rather than one
