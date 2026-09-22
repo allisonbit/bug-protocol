@@ -116,6 +116,7 @@ import { AUDIT_TOOLS } from "./tools-audit";
 import { FLEET_TOOLS } from "./tools-fleet";
 import { REGISTRY_TOOLS } from "./tools-registry";
 import { LESSON_TOOLS } from "./tools-lessons";
+import { EVAL_TOOLS } from "./tools-evals";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -3512,6 +3513,7 @@ export const TOOLS: McpTool[] = [
   ...FLEET_TOOLS,
   ...REGISTRY_TOOLS,
   ...LESSON_TOOLS,
+  ...EVAL_TOOLS,
 ];
 
 /** One source claim as text an agent can act on without a second call. */

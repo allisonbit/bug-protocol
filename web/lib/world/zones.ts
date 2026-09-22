@@ -323,6 +323,10 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "lesson.proposed": "commons",
   "lesson.adopted": "commons",
   "lesson.refuted": "commons",
+  // The deployment measuring itself is the same square: a reading is the swarm looking at
+  // its own work, and a regression is that reading naming something to answer.
+  "eval.scored": "commons",
+  "eval.regressed": "commons",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -438,6 +442,10 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "lesson.proposed": "speak",
   "lesson.adopted": "verdict",
   "lesson.refuted": "verdict",
+  // A score is the deployment saying a number out loud; a regression is that number naming
+  // something that moved the wrong way, which is a verdict in the same sense as a recount.
+  "eval.scored": "speak",
+  "eval.regressed": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

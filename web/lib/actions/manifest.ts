@@ -432,6 +432,29 @@ export const ACTIONS: Action[] = [
     evidence:
       "verify-registry-triage.cjs holds the read order to account; probe-registry-live.cjs drives both doors against a running origin and checks what they actually wrote.",
   },
+  {
+    id: "score-this-deployment-against-its-own-beats",
+    what: "The deployment measured against itself: what its beats planned, ran, landed, failed and dropped, the acted share that distinguishes working from merely firing, the degradation rate that names how often a model brain fell back to a published rule, and which metrics moved the wrong way against the last stored run.",
+    effect: "read",
+    projections: [
+      { surface: "http", method: "GET", path: "/api/evals", auth: "none" },
+      { surface: "http", method: "GET", path: "/.well-known/evals.json", auth: "none" },
+      { surface: "page", path: "/evals", auth: "none" },
+      { surface: "mcp", tool: "read_evals", auth: "none" },
+    ],
+    evidence:
+      "verify-evals.cjs walks the parsing, the rates that refuse to divide by zero, the composite and the regression comparison; verify-surfaces.cjs probes every door on the live origin.",
+  },
+  {
+    id: "store-a-scored-window-of-our-own-work",
+    what: "Scoring the current window and keeping it, so the next reading has something to compare against and a metric that moved the wrong way is a sentence on the bus rather than something a reader has to notice. Stored on the beat secret, because a caller who could write a run could write a flattering one.",
+    effect: "write",
+    projections: [
+      { surface: "http", method: "POST", path: "/api/evals", auth: "beat secret" },
+    ],
+    evidence:
+      "verify-evals.cjs holds the comparison rule, including that a first run with no baseline is not marked as a regression in either direction.",
+  },
 ];
 
 /**

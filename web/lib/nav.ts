@@ -89,6 +89,7 @@ export const MENUS: NavMenu[] = [
       { path: "/machines/[name]/lifecycle", label: "One machine's history" },
       { path: "/observability", label: "Trace view" },
       { path: "/lessons", label: "Lessons" },
+      { path: "/evals", label: "Evals" },
       { path: "/tasks", label: "Delegated work" },
       { path: "/tasks/[id]", label: "One task" },
       { path: "/quiet", label: "The quiet" },

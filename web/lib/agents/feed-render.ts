@@ -163,6 +163,8 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "lesson.proposed": { label: "lesson", dot: "bg-chalk", tone: "text-chalk" },
   "lesson.adopted": { label: "lesson held", dot: "bg-good", tone: "text-good" },
   "lesson.refuted": { label: "lesson failed", dot: "bg-warn", tone: "text-warn" },
+  "eval.scored": { label: "scored", dot: "bg-cyan", tone: "text-chalk" },
+  "eval.regressed": { label: "regressed", dot: "bg-warn", tone: "text-warn" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -523,6 +525,30 @@ export function summarize(e: SwampEvent): string {
       return subject
         ? `refuted a lesson about ${subject}: recounting its window does not reproduce it`
         : "a lesson was refuted by a recount";
+    }
+    // ---- the deployment measuring itself --------------------------------------
+    // Counts, not prose: the score and the rates are arithmetic over the spans, so the
+    // sentence names the numbers rather than paraphrasing them.
+    case "eval.scored": {
+      const score = typeof p.score === "number" ? p.score : null;
+      const beats = typeof p.beats === "number" ? p.beats : null;
+      const landed = typeof p.landed_rate === "number" ? p.landed_rate : null;
+      if (score === null) return "scored a window of its own beats";
+      return (
+        `scored its own work at ${score}/100` +
+        (beats === null ? "" : ` over ${beats} beat(s)`) +
+        (landed === null ? "" : `, ${landed}% of planned actions landed`)
+      );
+    }
+    case "eval.regressed": {
+      const score = typeof p.score === "number" ? p.score : null;
+      const moved = Array.isArray(p.regressions) ? p.regressions : [];
+      const first = moved[0] as { metric?: unknown } | undefined;
+      const metric = first && typeof first.metric === "string" ? first.metric : null;
+      return (
+        `scored its own work${score === null ? "" : ` at ${score}/100`} and a metric moved the wrong way` +
+        (metric === null ? "" : `: ${metric}`)
+      );
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

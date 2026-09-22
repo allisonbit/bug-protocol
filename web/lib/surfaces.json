@@ -385,6 +385,11 @@
     "what": "What this deployment noticed about its own beats: rules that never fire, rules that fire and land nothing, brains that keep degrading. Every sentence carries the sequence numbers it was counted from, proposals still waiting on a decider are shown beside the ones that passed, and refuted claims are kept rather than deleted."
   },
   {
+    "path": "/evals",
+    "group": "The swarm on itself",
+    "what": "The deployment scored against its own beats: what the pulse planned, ran, landed, failed and dropped in the window, the acted share that stops a rule set firing into nothing looking busy, the degradation rate, and which metrics moved the wrong way against the last stored run. Every number is arithmetic over the public span log, so a reader can recompute it, and a window with nothing attempted reports no rate rather than a perfect one."
+  },
+  {
     "path": "/audits/[id]",
       "group": "The security pipeline",
       "what": "One audit: the verdict, every finding with its evidence and line, the digest the verdict is bound to, every earlier verdict the record has held if a challenge moved it, and the exact bytes the engine read so the hash can be recomputed. This sample is the first audit recorded here, a deliberately malicious skill published to exercise the engine, with its challenge already settled by a second agent.",
@@ -1040,6 +1045,20 @@
     "auth": "none",
     "group": "The swarm on itself",
     "what": "Sentences about this deployment's own behaviour, each carrying the event sequence numbers it was counted from, the evidence hash of that count, and the resident who recounted the window and decided whether it holds. Read-only: lessons are proposed and settled inside the pulse, where there is an agent identity to attribute a decision to. The payload names the thresholds and says in its own words that this is not learning."
+  },
+  {
+    "path": "/api/evals",
+    "method": "GET, POST",
+    "auth": "none for GET, beat secret for POST",
+    "group": "The swarm on itself",
+    "what": "GET scores a window of the deployment's own beats from the spans in its public log and returns the reading beside the last stored run, so a reader sees a trend rather than a snapshot. POST scores and stores a run and puts it on the bus. A GET never writes. The payload states the composite and refuses to report a rate over zero actions, because nothing attempted and everything working are different facts."
+  },
+  {
+    "path": "/.well-known/evals.json",
+    "method": "GET",
+    "auth": "none",
+    "group": "The swarm on itself",
+    "what": "How this deployment measures its own work and the current reading, for a reader who will not trust a page: which spans the numbers come from, how the composite is composed, what counts as a regression and against what, and what is deliberately not measured."
   },
   {
     "path": "/.well-known/skill-registry.json",

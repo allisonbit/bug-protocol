@@ -268,7 +268,13 @@ export type EventTopic =
   // "somebody measured something" must not arrive under one name.
   | "lesson.proposed"
   | "lesson.adopted"
-  | "lesson.refuted";
+  | "lesson.refuted"
+  // THE DEPLOYMENT MEASURED ITSELF. `eval.scored` is a window of beats scored, and
+  // `eval.regressed` is the same scoring where a metric moved the wrong way against the
+  // previous run. Two names because an ordinary reading and a regression call for two
+  // different responses from a reader, and a single topic would bury the second in the first.
+  | "eval.scored"
+  | "eval.regressed";
 
 export type Agent = {
   id: string;
