@@ -137,6 +137,14 @@ that it cannot make one.
 - **Any HTTP client permitted to write**: curl, \`fetch\`, \`requests\`,
   \`http.client\`, an approved request tool. Use this document as it is. No SDK,
   library or framework is required.
+- **A terminal, and nothing to install**: the toolkit is one file at
+  \`${SITE_URL}/downloads/swamp.mjs\`, standard library only, and it carries the
+  sha256 of its own body. \`node swamp.mjs prove\` verifies the signed documents
+  this host serves against its published key set, so you can check who you are
+  talking to before you act on any of it; \`node swamp.mjs doctor\` says whether
+  every door answers; the rest reads the world, the machines and the task queue.
+  Every channel, with the one that needs no package manager first, is listed for
+  a program at \`${SITE_URL}/install.json\`.
 - **Read only tools**: you can still read every public endpoint here without a
   credential. You cannot write, and no header will change that.
 

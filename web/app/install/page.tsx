@@ -10,8 +10,12 @@ import {
   NPM_VERSION,
   NOT_YET,
   PACKAGE_PATH,
+  RELEASE_TAG,
   SITE,
+  SINGLE_FILE_URL,
+  TAP_SLUG,
 } from "@/lib/distribution";
+import { bundleFacts } from "@/lib/downloads";
 import { MCP_ENDPOINT } from "@/lib/site";
 
 export const metadata = {
@@ -46,6 +50,9 @@ function State({ state }: { state: "live" | "after-publish" }) {
 
 export default function Install() {
   const live = CHANNELS.filter((c) => c.state === "live").length;
+  // Read from the bytes this deployment serves, so the number on the page cannot describe a
+  // file other than the one a downloader gets.
+  const bundle = bundleFacts();
 
   return (
     <div className="aurora">
@@ -69,9 +76,12 @@ export default function Install() {
           . A signature that verifies is evidence. A sentence on a page is not.
         </p>
         <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
-          {live} of {CHANNELS.length} channels work from this checkout right now. The rest carry the
-          artifact and the exact line that turns them on, because an install page that lists a command
-          nobody can run is the most ordinary kind of lie on the internet.
+          {live} of {CHANNELS.length} channels work right now, and every one of them is checked on
+          every run of the repository&apos;s verifier: the single file is fetched and hashed, the tarball
+          is installed into a throwaway prefix and asked its version, and the formula is compared
+          against the asset it names. The two that are not open say exactly what is left, because an
+          install page listing a command nobody can run is the most ordinary kind of lie on the
+          internet.
         </p>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
@@ -97,6 +107,11 @@ export default function Install() {
                 <State state={c.state} />
               </div>
               <Code label="Run this" body={c.command} />
+              {c.provenBy ? (
+                <p className="mt-3 text-xs leading-relaxed text-mist">
+                  Checked: <span className="font-mono text-[11px] break-all text-chalk">{c.provenBy}</span>
+                </p>
+              ) : null}
               <p className="mt-4 text-pretty text-sm leading-relaxed text-mist">{c.note}</p>
               {c.remaining ? (
                 <p className="mt-2 text-pretty text-xs leading-relaxed text-mist">
@@ -107,6 +122,42 @@ export default function Install() {
             </Card>
           ))}
         </div>
+
+        <h2 className="mt-14 text-xs tracking-widest text-mist uppercase">
+          Check the bytes before you run them
+        </h2>
+        <Card className="mt-5 p-6">
+          <p className="text-pretty leading-relaxed text-mist">
+            The single file carries the SHA-256 of its own body in its banner, so a downloader has two
+            independent ways to check it and one number to compare them against. This is the number
+            for the file this deployment is serving right now, hashed from the bytes on disk rather
+            than restated from a constant:
+          </p>
+          <Code
+            label="Compare the file against the number"
+            body={`curl -fsSL ${SINGLE_FILE_URL} -o swamp.mjs\nnode swamp.mjs --self-sha256\ntail -n +${
+              bundle.skipLine ?? "<n>"
+            } swamp.mjs | shasum -a 256`}
+          />
+          <p className="mt-4 text-sm leading-relaxed text-mist">
+            <span className="text-chalk">Expected: </span>
+            <span className="font-mono text-[11px] break-all text-chalk">{bundle.actual ?? "unavailable"}</span>
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-mist">
+            {bundle.state === "verified"
+              ? `The file on disk agrees with its own banner. ${bundle.bytes} bytes, version ${bundle.version}.`
+              : `The file and its banner do not agree, or the file is missing: ${bundle.state}. Do not run it until that is explained.`}
+          </p>
+          <p className="mt-4 text-pretty text-sm leading-relaxed text-mist">
+            The same numbers are published by machine at{" "}
+            <Link href="/install.json" className="text-bug-dim underline decoration-dotted hover:text-bug">
+              /install.json
+            </Link>
+            , which an agent or a build script can read directly. The package and the file come from one
+            source tree, and the verifier rebuilds the file and compares it byte for byte, so a hand
+            edit to either turns the suite red.
+          </p>
+        </Card>
 
         <h2 className="mt-14 text-xs tracking-widest text-mist uppercase">What it does</h2>
         <p className="mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-mist">
@@ -206,7 +257,9 @@ export default function Install() {
           </Link>
         </div>
         <p className="mt-4 text-xs leading-relaxed text-mist">
-          Version <span className="font-mono">{NPM_VERSION}</span>. The container image is defined for{" "}
+          Version <span className="font-mono">{NPM_VERSION}</span> from the release{" "}
+          <span className="font-mono">{RELEASE_TAG}</span>, mirrored to the Homebrew tap{" "}
+          <span className="font-mono break-all">{TAP_SLUG}</span>. The container image is defined for{" "}
           <span className="font-mono break-all">{IMAGE}</span> and is not pushed yet.
         </p>
       </div>

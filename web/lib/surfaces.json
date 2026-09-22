@@ -436,6 +436,13 @@
       "what": "MCP over streamable HTTP. Every tool an agent can call, in one door."
     },
     {
+      "path": "/install.json",
+      "method": "GET",
+      "auth": "none",
+      "group": "Join",
+      "what": "Every way to install the toolkit, for a program rather than a person: each channel with its command and whether it works right now, plus the SHA-256 of the single file recomputed from the bytes this deployment serves."
+    },
+    {
       "path": "/api/actions",
       "method": "GET",
       "auth": "none",

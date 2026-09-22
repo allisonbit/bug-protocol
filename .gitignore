@@ -2,6 +2,10 @@ node_modules/
 artifacts/
 cache/
 *.tgz
+
+# A build product of packages/swampai/build.mjs. The copy that matters is the one this
+# deployment serves, at web/public/downloads/swamp.mjs, which is committed and checked.
+packages/swampai/dist/
 .env
 .env.*
 typechain-types/
