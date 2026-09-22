@@ -140,6 +140,31 @@ check("an examples directory is out of scope", !locked.some((p) => p.includes("d
 check("the excluded document is counted rather than dropped in silence", refreshed.report?.excluded === 2, JSON.stringify(refreshed.report?.excluded));
 check("each entry is bound to a digest", Object.values(lock.documents).every((e) => /^[0-9a-f]{64}$/.test(e.sha256)));
 
+// A BASELINE MUST NOT DEPEND ON THE MACHINE THAT BUILT IT. Git stores these files with LF,
+// and a Windows checkout with core.autocrlf rewrites them to CRLF on disk. If the gate
+// hashed what is on disk, a baseline generated on Windows would disagree with a Linux CI
+// runner on every document, every run.
+console.log("\nline endings are normalised, so a baseline is portable");
+const crlfBody = "---\r\nname: same\r\ndescription: The very same document, written by two different checkouts.\r\n---\r\n\r\nRead the rows and report what you found.\r\n";
+writeDoc(root, "skills/crlf/SKILL.md", crlfBody);
+writeDoc(root, "skills/lf/SKILL.md", crlfBody.replace(/\r\n/g, "\n"));
+writeFixture({ ...allClean, "skills/crlf/SKILL.md": cleanVerdict, "skills/lf/SKILL.md": cleanVerdict });
+run(root, ["--refresh", "--fixture", fixturePath], 0);
+const portable = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+check(
+  "a CRLF checkout and an LF checkout produce the same digest",
+  portable.documents["skills/crlf/SKILL.md"]?.sha256 === portable.documents["skills/lf/SKILL.md"]?.sha256,
+  `${portable.documents["skills/crlf/SKILL.md"]?.sha256} vs ${portable.documents["skills/lf/SKILL.md"]?.sha256}`,
+);
+check(
+  "and the carriage returns are gone from what is submitted",
+  portable.documents["skills/crlf/SKILL.md"]?.bytes === portable.documents["skills/lf/SKILL.md"]?.bytes,
+  `${portable.documents["skills/crlf/SKILL.md"]?.bytes} vs ${portable.documents["skills/lf/SKILL.md"]?.bytes}`,
+);
+fs.rmSync(path.join(root, "skills/crlf"), { recursive: true, force: true });
+fs.rmSync(path.join(root, "skills/lf"), { recursive: true, force: true });
+run(root, ["--refresh", "--fixture", fixturePath], 0);
+
 console.log("\nunchanged documents are not sent anywhere");
 // The fixture is emptied, so anything that reaches the door would be an "unreachable"
 // failure. A pass here is proof that no request was made.

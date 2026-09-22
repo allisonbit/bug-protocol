@@ -165,6 +165,26 @@ const path = require("path");
   check("three kinds, and the door can be asked for each", engine.AUDIT_KINDS.length === 3 && engine.isAuditKind("instructions"), engine.AUDIT_KINDS.join(","));
   check("the door's refusal names what each kind reads", /"instructions" reads an AGENTS\.md/.test(read("app/api/audits/route.ts")), "route message");
 
+  // THE SAME DOCUMENT READ FROM TWO CHECKOUTS IS THE SAME DOCUMENT.
+  //
+  // Measured on a real repository: one SKILL.md was clean read from GitHub and caution with
+  // FRONTMATTER_NO_DESCRIPTION read from a Windows working tree, because core.autocrlf
+  // rewrites line endings on checkout and the quoted description scalar then ended with a
+  // carriage return. The fix has two halves and both are asserted: the reading is the same
+  // either way, and the DIGEST still differs, because the binding is to the bytes that were
+  // actually submitted rather than to the form the rules were read from.
+  console.log("\nthe same document from two checkouts reads the same");
+  const lfDoc = `${FRONTMATTER()}Does the thing. Read the rows and report what you found to the operator.\n`;
+  const crlfDoc = lfDoc.replace(/\n/g, "\r\n");
+  const readLf = engine.auditSkill({ text: lfDoc, url: null });
+  const readCrlf = engine.auditSkill({ text: crlfDoc, url: null });
+  check("a CRLF checkout reads the frontmatter", typeof readCrlf.frontmatter?.description === "string", JSON.stringify(readCrlf.frontmatter?.description ?? null));
+  check("and reaches the same verdict", readCrlf.verdict === readLf.verdict, `${readCrlf.verdict} vs ${readLf.verdict}`);
+  check("with the same findings", readCrlf.findings.map((f) => f.code).join(",") === readLf.findings.map((f) => f.code).join(","), readCrlf.findings.map((f) => f.code).join(","));
+  check("and the same findings, line numbers included", JSON.stringify(readCrlf.findings) === JSON.stringify(readLf.findings), readCrlf.findings.map((f) => f.line).join(","));
+  // The asymmetry is the point: one record per document pair of bytes, one reading.
+  check("while digest and size still describe the bytes as received", readCrlf.digest !== readLf.digest && readCrlf.bytes > readLf.bytes, `${readCrlf.bytes} vs ${readLf.bytes} bytes`);
+
   const engineSource = read("lib/audit/skill-audit.ts");
   const named = [...engineSource.matchAll(/guards: \[([^\]]+)\]/g)].flatMap((m) => [...m[1].matchAll(/"([a-z_]+)"/g)].map((g) => g[1]));
   const unguarded = [...new Set(named)].filter((g) => !engine.GUARDS.includes(g));

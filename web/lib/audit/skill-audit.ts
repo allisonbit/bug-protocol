@@ -675,7 +675,18 @@ const VERDICT_SENTENCE: Record<Verdict, string> = {
  * tools, since those are privileges however the file is named.
  */
 export function auditSkill(input: { text: string; url?: string | null; shape?: "skill" | "instructions" }): AuditResult {
-  const text = input.text;
+  const raw = input.text;
+  // A VERDICT MUST NOT DEPEND ON WHICH PLATFORM CHECKED THE FILE OUT.
+  //
+  // Measured on a real repository: the same SKILL.md was `clean` read from GitHub and
+  // `caution` with FRONTMATTER_NO_DESCRIPTION read from a Windows working tree, because
+  // core.autocrlf rewrites line endings on checkout and the quoted description scalar then
+  // ended with a carriage return the parser would not read. Nothing about the document was
+  // different; the machine was. So the parse and the pattern scan run over the canonical
+  // form, and the DIGEST STAYS OVER THE BYTES AS RECEIVED, because the binding is to what
+  // was actually submitted and pretending otherwise would make two different documents
+  // share one record.
+  const text = raw.includes("\r") ? raw.replace(/\r\n/g, "\n") : raw;
   const url = input.url ?? null;
   const shape = input.shape ?? "skill";
   const fm = parseFrontmatter(text);
@@ -830,8 +841,9 @@ export function auditSkill(input: { text: string; url?: string | null; shape?: "
     verdict,
     findings,
     counts: countsOf(findings),
-    digest: sha256Of(text),
-    bytes: Buffer.byteLength(text, "utf8"),
+    // Over the bytes as received, not over the canonical form the rules were read from.
+    digest: sha256Of(raw),
+    bytes: Buffer.byteLength(raw, "utf8"),
     subject: url,
     frontmatter: fm.fields,
     summary: VERDICT_SENTENCE[verdict],

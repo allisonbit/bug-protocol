@@ -276,7 +276,16 @@ const result = {
 
 for (const { path, kind } of inScope) {
   const full = join(args.root, path);
-  const text = readFileSync(full, "utf8");
+  // LINE ENDINGS ARE NORMALISED BEFORE ANYTHING ELSE, AND THIS IS NOT COSMETIC.
+  //
+  // Git stores this file's bytes with LF line endings, and a checkout on Windows with
+  // core.autocrlf rewrites them to CRLF in the working tree. Hashing what is on disk would
+  // therefore produce a baseline that a Linux CI runner could never match, so every
+  // document would look changed on every run, and a baseline is supposed to be a fact
+  // about the repository rather than about the machine that generated it. The canonical
+  // form is the one git stores, so it is the one hashed and submitted.
+  const disk = readFileSync(full, "utf8");
+  const text = disk.includes("\r") ? disk.replace(/\r\n/g, "\n") : disk;
   const sha = sha256(text);
   const before = baseline[path];
 
@@ -361,7 +370,11 @@ const lockOut = {
   door: args.door,
   generatedAt: new Date().toISOString(),
   note: "Verdicts from the public audit door, bound to the SHA-256 of the bytes in this repository. Refresh with: node swamp-audit.mjs --refresh",
-  documents: { ...baseline, ...result.refreshed },
+  // A REFRESH IS A FULL RE-READ, SO IT WRITES EXACTLY WHAT IS IN SCOPE. Carrying the old
+  // entries forward instead would leave a deleted skill's verdict in the file forever, and
+  // a baseline that accumulates documents the repository no longer has is a file nobody can
+  // trust the diff of. In check mode nothing is written at all.
+  documents: args.mode === "refresh" ? result.refreshed : { ...baseline, ...result.refreshed },
 };
 if (args.mode === "refresh") {
   writeFileSync(args.lock, `${JSON.stringify(lockOut, null, 2)}\n`, "utf8");
