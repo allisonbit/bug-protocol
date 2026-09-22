@@ -200,10 +200,20 @@ const path = require("path");
     /direction: "refused"/.test(pulseSrc) && /grant\.code/.test(pulseSrc),
     "the refusal leaves no line on the record",
   );
+  // The cool-down is a bound on traffic TO HARDWARE, and a refused actuation sends
+  // nothing to any hardware. Charging it the cool-down would mean an operator who
+  // grants authority right after a refusal watches the swarm stand still for half an
+  // hour on an authority written to be used now.
+  const refusalBlock = pulseSrc.slice(pulseSrc.indexOf("if (!grant.ok)"), pulseSrc.indexOf("authority = { leaseId: grant.leaseId }"));
   check(
-    "a refusal still writes the cool-down note",
-    /refused: grant\.code/.test(pulseSrc),
-    "the swarm would retry the same refused act on the next beat",
+    "a refusal does not burn the actuation cool-down",
+    refusalBlock.length > 0 && !/SUPERVISION_NOTE_KEY/.test(refusalBlock),
+    "a refused act would block the next authorized one",
+  );
+  check(
+    "a refusal is reported at most once an hour",
+    /saidRecently/.test(refusalBlock) && /60 \* 60 \* 1000/.test(refusalBlock),
+    "a refused actuation would be re-announced every beat",
   );
   const feedSrc = read("lib/agents/feed-render.ts");
   check(

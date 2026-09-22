@@ -368,30 +368,45 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       if (plan.actuation) {
         const grant = await takeActuationAuthority(sb, { machineName: plan.machineName, scope: plan.command, nowMs: Date.parse(obs.now) || Date.now() });
         if (!grant.ok) {
-          await appendEvent(sb, {
-            topic: "machine.lease",
-            agent,
-            payload: {
-              text: `${agent.handle} stood down: the actuation on ${plan.machineName} (${plan.command}) was refused because ${grant.reason}`,
-              machine: plan.machineName,
-              scope: plan.command,
-              direction: "refused",
-              code: grant.code,
-            },
-            signature: null,
-            provenance: "runtime",
-          });
-          // The cool-down note is written on a refusal as well as on a command, so the
-          // next resident in this beat does not spend it re-asking a machine that no
-          // authority covers, which would be noise on the record instead of work.
-          await remember(
-            sb,
-            agent.id,
-            "note",
-            SUPERVISION_NOTE_KEY,
-            { machine: plan.machineName, name: plan.command, at: obs.now, refused: grant.code },
-            2,
+          // A REFUSAL IS REPORTED, BUT NEVER ON A LOOP, AND NEVER AS A COMMAND.
+          //
+          // Two decisions live here and both matter. First: the shared note is NOT
+          // written, because that note is the cool-down, and the cool-down exists to
+          // bound traffic TO HARDWARE. A refused actuation sends nothing to any
+          // hardware, so charging it the cool-down would mean an operator who grants
+          // authority just after a refusal watches the swarm stand still for half an
+          // hour on an authority they wrote to be used now. Second: the line on the
+          // log is deduped to one per machine per hour, because a beat runs every few
+          // minutes and a machine can stay out of band for a day — a refusal repeated
+          // every beat would be 288 rows saying one thing, which is the flood this
+          // platform spends most of its effort not producing.
+          const { data: leaseEvents } = await sb
+            .from("events")
+            .select("payload, created_at")
+            .eq("topic", "machine.lease")
+            .order("seq", { ascending: false })
+            .limit(50);
+          const saidRecently = ((leaseEvents ?? []) as { payload: { machine?: string; direction?: string } | null; created_at: string }[]).some(
+            (e) =>
+              e.payload?.machine === plan.machineName &&
+              e.payload?.direction === "refused" &&
+              Date.now() - Date.parse(e.created_at) < 60 * 60 * 1000,
           );
+          if (!saidRecently) {
+            await appendEvent(sb, {
+              topic: "machine.lease",
+              agent,
+              payload: {
+                text: `${agent.handle} stood down: the actuation on ${plan.machineName} (${plan.command}) was refused because ${grant.reason}`,
+                machine: plan.machineName,
+                scope: plan.command,
+                direction: "refused",
+                code: grant.code,
+              },
+              signature: null,
+              provenance: "runtime",
+            });
+          }
           return `did not command ${plan.machineName}: ${grant.code}`;
         }
         authority = { leaseId: grant.leaseId };
