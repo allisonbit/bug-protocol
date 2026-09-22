@@ -32,10 +32,22 @@ import { createHash } from "node:crypto";
 
 export const AUDIT_ENGINE = "swamp-audit/3";
 
-export type AuditKind = "skill" | "mcp-server";
+export type AuditKind = "skill" | "mcp-server" | "instructions";
 
-/** The two kinds, as values, so a door can refuse a third by name. */
-export const AUDIT_KINDS: AuditKind[] = ["skill", "mcp-server"];
+/**
+ * The three kinds, as values, so a door can refuse a fourth by name.
+ *
+ * `instructions` IS NOT DECORATION. An AGENTS.md, a CLAUDE.md or a rules directory is an
+ * instruction document an agent loads, which makes it executable in exactly the way a
+ * skill is: the text steers the agent and the agent holds the credentials. It is not a
+ * SKILL.md, though, and the first version of this engine could only audit it as one,
+ * which meant reporting a conventions file for having no name and no description. That is
+ * a requirement of the Agent Skills specification, and a file that is not a skill cannot
+ * fail it. The distinction matters because these files are where the supply-chain
+ * argument actually bites: a skill is installed deliberately, and an agent instruction
+ * file is often just edited in a pull request nobody reads.
+ */
+export const AUDIT_KINDS: AuditKind[] = ["skill", "mcp-server", "instructions"];
 
 export function isAuditKind(v: unknown): v is AuditKind {
   return typeof v === "string" && (AUDIT_KINDS as string[]).includes(v);
@@ -654,14 +666,22 @@ const VERDICT_SENTENCE: Record<Verdict, string> = {
  * name is checked against the URL path when a URL is given, since the Skills extension
  * requires the final path segment to equal the name and a mismatch means the entry a
  * client builds from a URI describes a different skill.
+ *
+ * `shape` says which of the two shapes of instruction document these bytes are. The
+ * pattern rules are identical for both, because the same sentences do the same things
+ * wherever they are loaded from. What changes is the frontmatter: an `instructions`
+ * document is not required to have any, so the missing-frontmatter rules do not apply to
+ * it, while a frontmatter that IS present is still read for declared hooks and powerful
+ * tools, since those are privileges however the file is named.
  */
-export function auditSkill(input: { text: string; url?: string | null }): AuditResult {
+export function auditSkill(input: { text: string; url?: string | null; shape?: "skill" | "instructions" }): AuditResult {
   const text = input.text;
   const url = input.url ?? null;
+  const shape = input.shape ?? "skill";
   const fm = parseFrontmatter(text);
   const findings: Finding[] = [];
 
-  if (fm.error) {
+  if (fm.error && shape === "skill") {
     findings.push({
       code: "FRONTMATTER_MISSING",
       severity: "high",
@@ -675,7 +695,11 @@ export function auditSkill(input: { text: string; url?: string | null }): AuditR
 
   const name = typeof fm.fields.name === "string" ? fm.fields.name : "";
   const description = typeof fm.fields.description === "string" ? fm.fields.description : "";
-  if (!fm.error) {
+  // THE IDENTITY RULES ARE THE SPECIFICATION'S, SO THEY BELONG TO A SKILL.
+  // A name, a description, a name that matches the path segment and a URI that names the
+  // same thing: all four are requirements the Agent Skills extension places on a SKILL.md
+  // so a host can address and approve it. A conventions file has none of them to fail.
+  if (!fm.error && shape === "skill") {
     if (!name) {
       findings.push({
         code: "FRONTMATTER_NO_NAME",
@@ -725,10 +749,13 @@ export function auditSkill(input: { text: string; url?: string | null }): AuditR
         });
       }
     }
+  }
 
-    // Privilege declared in frontmatter. These are the fields that turn a document
-    // into something a host may run or grant, so they are read explicitly rather
-    // than pattern matched.
+  // PRIVILEGE IS READ FOR BOTH SHAPES. These are the fields that turn a document into
+  // something a host may run or grant, and an AGENTS.md that declares hooks is exactly as
+  // able to run code as a skill that declares them, so it is read explicitly rather than
+  // pattern matched, whatever the file is called.
+  if (!fm.error) {
     for (const [field, value] of Object.entries(fm.fields)) {
       const f = field.toLowerCase();
       if (["allowed-tools", "allowed_tools", "tools"].includes(f)) {
@@ -798,7 +825,7 @@ export function auditSkill(input: { text: string; url?: string | null }): AuditR
 
   const verdict = verdictOf(findings);
   return {
-    kind: "skill",
+    kind: shape === "instructions" ? "instructions" : "skill",
     engine: AUDIT_ENGINE,
     verdict,
     findings,

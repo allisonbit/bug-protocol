@@ -151,8 +151,17 @@ export async function runAudit(input: {
   }
 
   const body = text as string;
-  if (input.kind === "skill") {
-    return { ok: true, result: auditSkill({ text: body, url }), source, url, text: body };
+  if (input.kind === "skill" || input.kind === "instructions") {
+    // Two shapes, one set of pattern rules. `instructions` reads an AGENTS.md, a CLAUDE.md
+    // or a rules directory: the same sentences do the same things there, and the only
+    // rules that do not apply are the frontmatter requirements a non-skill cannot meet.
+    return {
+      ok: true,
+      result: auditSkill({ text: body, url, shape: input.kind === "instructions" ? "instructions" : "skill" }),
+      source,
+      url,
+      text: body,
+    };
   }
   let parsed: unknown;
   try {

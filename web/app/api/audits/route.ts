@@ -103,7 +103,7 @@ export async function POST(req: Request) {
   if (!isAuditKind(kind)) {
     return fail(
       "BAD_KIND",
-      `Say what is being audited with \`kind\`: "skill" reads a SKILL.md, "mcp-server" reads a server card or a tool catalogue. ${kind ? `"${kind}" is neither.` : "It was missing."}`,
+      `Say what is being audited with \`kind\`: "skill" reads a SKILL.md, "instructions" reads an AGENTS.md, a CLAUDE.md or a rules directory, and "mcp-server" reads a server card or a tool catalogue. ${kind ? `"${kind}" is none of the three.` : "It was missing."}`,
       400,
     );
   }
