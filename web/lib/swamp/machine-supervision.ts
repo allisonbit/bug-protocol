@@ -24,6 +24,11 @@ import "server-only";
  *      command. The decision reads a shared note (the same pattern the hardware
  *      digest uses), and the cooldown is per machine, not per agent, so a second
  *      commander inside the window sees the first one's note and stays still.
+ *      The two windows are separate and are read from separate rows: talking to a
+ *      machine is one thing and moving it is another, so the caller hands in the
+ *      newest command AND the newest actuation. Conflating them read the actuation
+ *      window from a reading and made an authorized actuation unreachable on any
+ *      machine that stayed out of band.
  *
  *   3. THE PALETTE IS CLOSED AND TYPED. Three commands exist. A resident cannot
  *      send prose to a machine, cannot lengthen an actuation past the cap, and
@@ -162,6 +167,21 @@ export function supervisionDecision(input: {
   machine: SupervisedMachine;
   nowIso: string;
   last: LastCommand;
+  /**
+   * The newest ACTUATION on this machine, from the same record.
+   *
+   * Separate from `last` because the two cooldowns answer different questions, and
+   * conflating them starves the larger one. `ACTUATION_COOLDOWN_MS` is documented as "one
+   * actuation per machine per this window", so it has to be measured from the last time
+   * we actually moved the machine. Measured from the last command of any kind instead, the
+   * fresh reading this rule asks for after a breach resets the actuation clock, and a
+   * machine that STAYS out of band is then asked for readings forever and never actuated:
+   * the operator's lease sits unused with its ceiling intact while the record fills with
+   * questions. That is the measured behaviour of atlas on 2026-09-22 — one actuation at
+   * 21:27, then a reading every ten to fifteen minutes — and no authorisation could have
+   * changed it, because the actuation branch was never reached to be authorised.
+   */
+  lastActuation: LastCommand;
   /** Pending commands already waiting on this machine, from the record. */
   pending: number;
 }): SupervisionCommand | null {
@@ -179,6 +199,8 @@ export function supervisionDecision(input: {
 
   const lastMs = last ? Date.parse(last.at) : Number.NaN;
   const sinceLast = Number.isFinite(lastMs) ? now - lastMs : Number.POSITIVE_INFINITY;
+  const actMs = input.lastActuation ? Date.parse(input.lastActuation.at) : Number.NaN;
+  const sinceActuation = Number.isFinite(actMs) ? now - actMs : Number.POSITIVE_INFINITY;
 
   const thresholds = machine.thresholds;
   const latest = machine.latest;
@@ -195,8 +217,13 @@ export function supervisionDecision(input: {
     if (breached) {
       const direction = value > band[1] ? "above" : "below";
       const reason = `${machine.name} reported ${latest.metric ?? "a value"} ${value}${latest.unit ? ` ${latest.unit}` : ""}, ${direction} its declared band ${band[0]} to ${band[1]}`;
-      // Actuation is the rarer, larger step: it needs both cooldowns to be clear.
-      const canActuate = sinceLast >= ACTUATION_COOLDOWN_MS && commandAllowed("pulse_relay", machine.kind);
+      // Actuation is the rarer, larger step, and it is held to both windows: nothing else
+      // of ours may be in flight (the command cooldown), and nothing may have MOVED this
+      // machine inside its own longer window (the actuation cooldown).
+      const canActuate =
+        sinceLast >= COMMAND_COOLDOWN_MS &&
+        sinceActuation >= ACTUATION_COOLDOWN_MS &&
+        commandAllowed("pulse_relay", machine.kind);
       if (canActuate) {
         const spec = byName.get("pulse_relay")!;
         return {

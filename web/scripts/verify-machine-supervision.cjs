@@ -54,8 +54,8 @@ const path = require("path");
     latest: { kind: "telemetry", metric: "temperature", value: 22.6, unit: "c", created_at: minutesAgo(1) },
     ...over,
   });
-  const decide = (over = {}, last = null, pending = 0) =>
-    supervisionDecision({ machine: machine(over), nowIso: NOW, last, pending });
+  const decide = (over = {}, last = null, pending = 0, lastActuation = null) =>
+    supervisionDecision({ machine: machine(over), nowIso: NOW, last, lastActuation, pending });
 
   // 1. In band, reporting on time, nothing outstanding: stand still. A rule that
   //    commands hardware without a condition is the failure this file exists for.
@@ -95,6 +95,39 @@ const path = require("path");
   check("past the actuation cooldown the response may actuate again", stepped !== null && stepped.actuation === true);
 
   check("the reporting cooldown is shorter than the actuation cooldown", COMMAND_COOLDOWN_MS < ACTUATION_COOLDOWN_MS);
+
+  // 4b. THE TWO CLOCKS ARE SEPARATE, and this is the pair that proves it. Measured from
+  //     the last command of any kind, the reading the rule asks for after a breach resets
+  //     the thirty minute actuation window, so a machine that STAYS out of band is asked
+  //     for readings forever and never actuated — the measured behaviour of atlas, whose
+  //     record holds one actuation followed by a reading every ten to fifteen minutes,
+  //     with an operator's lease sitting unused and its ceiling intact the whole time.
+  const breach = { latest: { kind: "telemetry", metric: "temperature", value: 41, unit: "c", created_at: minutesAgo(1) } };
+  const reportedRecently = { machine: "atlas", name: "report_now", at: minutesAgo(12) };
+
+  const starved = decide(
+    breach,
+    reportedRecently,
+    0,
+    { machine: "atlas", name: "pulse_relay", at: minutesAgo(ACTUATION_COOLDOWN_MS / 60000 + 5) },
+  );
+  check(
+    "a recent reading does not keep an authorized actuation out of reach",
+    starved !== null && starved.actuation === true,
+    starved ? `${starved.name}, actuation ${starved.actuation}` : "stood still",
+  );
+
+  const movedRecently = decide(breach, reportedRecently, 0, { machine: "atlas", name: "pulse_relay", at: minutesAgo(10) });
+  check(
+    "an actuation inside its own window steps the response down to asking",
+    movedRecently !== null && movedRecently.name === "report_now" && movedRecently.actuation === false,
+    movedRecently ? movedRecently.name : "stood still",
+  );
+
+  // A reading inside the reporting window still silences everything, whatever the
+  // actuation clock says: one thing of ours in flight at a time.
+  const toldRecently = decide(breach, { machine: "atlas", name: "report_now", at: minutesAgo(5) }, 0, null);
+  check("a command inside the reporting window still silences everything", toldRecently === null);
 
   // 5. Silence past three expected intervals asks the machine directly, and never
   //    actuates: an absence is not evidence of a fault.

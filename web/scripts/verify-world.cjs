@@ -78,7 +78,9 @@ function stable(w) {
 }
 
 (async () => {
-  const w = await world();
+  // Reassigned once below, deliberately: the present is refetched after the rewind so the
+  // growth comparison is against a moment no earlier than the rewind it is compared to.
+  let w = await world();
   console.log(`\nThe world at ${base}\n  seq ${w.seq}, ${w.bodies.length} bodies, ${w.zones.length} zones, ${w.events.length} events\n`);
 
   // ---- closed sets ---------------------------------------------------------
@@ -282,6 +284,20 @@ function stable(w) {
   const mid = w.events.length > 4 ? w.events[Math.floor(w.events.length / 2)].seq : null;
   if (mid != null) {
     const atMid = await world(`?seq=${mid}`);
+    // READ THE PRESENT AFTER THE PAST, not before it. These checks compare a rewind
+    // against now, and rows only accumulate, so "now" has to be the LATER of the two
+    // reads or the comparison is against a moment that predates the rewind: the swarm
+    // writes a fact between the two requests and the rewind appears to hold a building
+    // the present does not. That is what happened — `230 buildings at seq N vs 229 now`
+    // on a live beat — and the same shape as the hall carve-out below: the projection
+    // was right and the test's clock was wrong.
+    //
+    // The one boundary this cannot cover is a SOURCE WITH A HARD CAP (outputs, findings,
+    // sources, tasks, fixtures, facts): once such a source is at its cap a new row pushes
+    // the oldest out, and then a building really can leave the present. Every source is
+    // far below its cap today, and the projection publishes what it capped, so a failure
+    // here later is explained rather than mysterious.
+    w = await world();
     check(`a projection at seq ${mid} folds nothing after it`, atMid.events.every((e) => e.seq <= mid) && atMid.seq === mid, `seq ${atMid.seq}`);
     check(`a projection at seq ${mid} holds no more bodies than now`, atMid.bodies.length <= w.bodies.length + 0, `${atMid.bodies.length} vs ${w.bodies.length}`);
 
@@ -295,16 +311,44 @@ function stable(w) {
     // agents who have actually spoken in its convening, and that membership is
     // read from the newest N events. As the live log grows, an old convening's
     // speak events slide out of the window and its hall fades, so hall storeys
-    // are not monotone in the log by design. Every window-independent quantity
-    // stays strict here: the building count, the frontier ring, and the storeys
-    // of everything that is not a hall.
-    const storeysOf = (w, skip) => (w.structures || []).filter((x) => x.kind !== skip).reduce((n, x) => n + x.floors, 0);
+    // are not monotone in the log by design.
+    //
+    // MACHINES ARE THE SECOND, and this one was found by the first machine that
+    // ran a full command round trip: a machine's storey count is `1 + unanswered
+    // commands`, so the moment one command is queued the machine grows a storey
+    // and the moment the device answers it the storey goes. That is a faithful
+    // drawing of the record — the past really did hold an unanswered command —
+    // but it means a storey count can fall, which is not what "depth of record"
+    // means for anything else. So machines are held out of the monotone sum and
+    // bounded separately below, rather than this check being loosened for
+    // everything: a carve-out with its own assertion keeps the quantity honest
+    // instead of quietly dropping it.
+    //
+    // Every window-independent quantity stays strict here: the building count,
+    // the frontier ring, and the storeys of everything that is neither a hall nor
+    // a machine.
+    const STEADY = ["hall", "machine"];
+    const storeysOf = (w, skip) => {
+      const skipped = Array.isArray(skip) ? skip : [skip];
+      return (w.structures || []).filter((x) => !skipped.includes(x.kind)).reduce((n, x) => n + x.floors, 0);
+    };
     check(
       `the town at seq ${mid} is no larger and no further out than it is now`,
       (atMid.city?.buildings ?? 0) <= (city.buildings ?? 0) &&
-        storeysOf(atMid, "hall") <= storeysOf(w, "hall") &&
+        storeysOf(atMid, STEADY) <= storeysOf(w, STEADY) &&
         (atMid.city?.phase ?? 0) <= (city.phase ?? 0),
-      `${atMid.city?.buildings}/${storeysOf(atMid, "hall")}/ring${atMid.city?.phase} at ${mid} vs ${city.buildings}/${storeysOf(w, "hall")}/ring${city.phase} now`,
+      `${atMid.city?.buildings}/${storeysOf(atMid, STEADY)}/ring${atMid.city?.phase} at ${mid} vs ${city.buildings}/${storeysOf(w, STEADY)}/ring${city.phase} now`,
+    );
+
+    // What replaces the machine storeys in the argument above. A machine stands one
+    // storey, and two more while commands of ours are unanswered: nothing else can
+    // raise it, so four is not a number a machine can reach and the oscillation is
+    // bounded rather than open-ended.
+    const tallMachines = (w.structures || []).filter((s) => s.kind === "machine" && s.floors > 3);
+    check(
+      `no machine exceeds the storeys an unanswered command can add (${(w.structures || []).filter((s) => s.kind === "machine").length} machines)`,
+      tallMachines.length === 0,
+      tallMachines.map((s) => `${s.label}:${s.floors}`).join(", "),
     );
   }
 

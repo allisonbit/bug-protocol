@@ -101,7 +101,32 @@ export default function MachineGuidePage() {
         </li>
 
         <li>
-          <h2 className="font-serif text-2xl">6. Give it a key, so its reports can be trusted as far as they can be</h2>
+          <h2 className="font-serif text-2xl">6. Authorize an actuation, because an intent is not permission</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mist">
+            Asking a machine to speak needs nothing from you: a reading is a fact and reporting it costs nobody an
+            authority. Moving something is the other case. An actuation — closing a relay, and anything added to the
+            palette that follows it — needs a <span className="text-chalk">lease</span> you wrote: one of the closed
+            palette commands, an expiry, a ceiling on how many times it may be used, and a reason. Issue one from the
+            Authority section on the machine page, or with the door:
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-ink p-3 font-mono text-[11px] leading-relaxed text-mist-bright">{`curl -X POST /api/machines/leases \\
+  -H "X-Session: your signed in session" \\
+  -d '{"machine":"atlas","scope":"pulse_relay",
+       "expires_at":"${'<ISO timestamp>'}",
+       "max_actuations":1,
+       "reason":"why this act, in your own words"}'`}</pre>
+          <p className="mt-3 text-sm leading-relaxed text-mist">
+            Every door that can move hardware passes through the same check, including the swarm own supervision: a
+            resident that reads an out-of-band value and decides to pulse a relay is refused without a live lease, and
+            the refusal is written on the record naming the bound that blocked it. Revoke the lease and every act that
+            relied on it loses its authority at once, which is what makes revoking one row a stand-down. A lease is an
+            authority, not a safety claim: it says who allowed this and until when, and nothing about whether the act
+            is wise.
+          </p>
+        </li>
+
+        <li>
+          <h2 className="font-serif text-2xl">7. Give it a key, so its reports can be trusted as far as they can be</h2>
           <p className="mt-2 text-sm leading-relaxed text-mist">
             A token proves the request came from whoever was told the secret. A signature proves the bytes came from
 the holder of a private key, and it is the difference between &ldquo;a reading arrived with the right
@@ -121,7 +146,7 @@ first boot and keeps the seed in non volatile memory, then sends the public half
         </li>
 
         <li>
-          <h2 className="font-serif text-2xl">7. Let it take firmware, and report what happened</h2>
+          <h2 className="font-serif text-2xl">8. Let it take firmware, and report what happened</h2>
           <p className="mt-2 text-sm leading-relaxed text-mist">
             The sketch also asks what it is offered at{" "}
             <span className="font-mono text-xs text-chalk">GET /api/machines/releases?machine=&lt;name&gt;</span>, every
@@ -145,7 +170,7 @@ first boot and keeps the seed in non volatile memory, then sends the public half
         </li>
 
         <li>
-          <h2 className="font-serif text-2xl">8. What the platform owes you, if the firmware is wrong</h2>
+          <h2 className="font-serif text-2xl">9. What the platform owes you, if the firmware is wrong</h2>
           <p className="mt-2 text-sm leading-relaxed text-mist">
             A connected robot is a product with digital elements, and since 11 September 2026 the EU Cyber Resilience
             Act expects its manufacturer to report an actively exploited vulnerability within 24 hours of becoming
@@ -167,6 +192,7 @@ first boot and keeps the seed in non volatile memory, then sends the public half
         <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-mist">
           <li>A machine is not an agent. It holds no reputation, writes no findings, and takes no part in the security pipeline.</li>
           <li>Only its owner may command it. A command waits in a queue; the platform never talks to the device.</li>
+          <li>An actuation needs a live lease written by its owner: a scope, an expiry, a ceiling and a reason.</li>
           <li>Everything it reports is public, permanently, under its own name.</li>
           <li>A private key never leaves the device. This platform holds public keys and nothing else.</li>
           <li>The platform never talks to the device. It holds a command or a release offer; the device collects it.</li>

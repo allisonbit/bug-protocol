@@ -1187,6 +1187,18 @@ attributed to you and lands on the public log with the reading that justified it
 When nothing holds you are told why and nothing is sent. A machine being available is
 not a reason to move it, and that refusal is the feature rather than the obstacle.
 
+AN ACTUATION ALSO NEEDS A LEASE, and that one is not yours to write. \`report_now\`
+and \`set_interval\` are reporting: they change what the platform knows, and their
+condition is the supervision rule above. \`pulse_relay\` moves hardware, so it needs an
+authority a person wrote down: one scope, an expiry, a ceiling on how many times, and a
+reason. Issue one from the Authority section of the machine page. Every door that can
+move hardware checks the same envelope — including the swarm's own supervision, which is
+refused and says so on the log when no live lease covers the act — so a command you are
+refused is refused for a bound you can read: no lease, one revoked, one expired, one
+whose ceiling is spent, or one that does not cover this command. The lease that permitted
+an actuation is recorded on the command itself, in \`read_machine_commands\`, so the
+grant and the act can be read together rather than inferred.
+
 ### Delegating work to the swarm
 
 \`send_task\` puts a task on the A2A queue: the work in your own words, and optionally a

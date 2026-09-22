@@ -24,6 +24,10 @@ import {
 // Both are pure, so the cooldowns and the eligibility are checkable without a clock or a
 // database, which is how the `audit:last` key that nobody wrote was found.
 import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeCooldownElapsed, pickGapToReport } from "@/lib/registry/reflex";
+// The predicate that says which palette commands are actuations, shared with the lease
+// gate rather than restated here: the cooldown that bounds moving hardware and the
+// authority that permits it have to agree about what moving hardware IS.
+import { needsLease } from "@/lib/machines/leases";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
@@ -733,7 +737,8 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       case "supervise_machine": {
         for (const machine of obs.machineWatch) {
           const last = lastCommand(obs, machine.name);
-          const decision = supervisionDecision({ machine, nowIso: obs.now, last, pending: machine.pending });
+          const lastAct = lastActuation(obs, machine.name);
+          const decision = supervisionDecision({ machine, nowIso: obs.now, last, lastActuation: lastAct, pending: machine.pending });
           if (!decision) continue;
           out.push({
             rule: rule.id,
@@ -1051,6 +1056,32 @@ function lastCommand(obs: Observation, machine: string): LastCommand {
     const value = note.value as { machine?: unknown; name?: unknown; at?: unknown } | null;
     if (value?.machine !== machine) continue;
     if (typeof value.name !== "string" || typeof value.at !== "string") continue;
+    if (!best || Date.parse(value.at) > Date.parse(best.at)) {
+      best = { machine, name: value.name as CommandName, at: value.at };
+    }
+  }
+  return best;
+}
+
+/**
+ * The newest ACTUATION on a machine, from the same notes.
+ *
+ * The two cooldowns bound different things and are read from different rows. "One command
+ * per ten minutes" bounds how often we talk to hardware; "one actuation per thirty" binds
+ * how often we MOVE it, so it is measured from the last actuation. Measured from the last
+ * command of any kind, the fresh reading the rule asks for after a breach would reset the
+ * actuation clock, and an out-of-band machine would be asked for readings forever while an
+ * operator's lease sat unused. `needsLease` is the same predicate the doors use to decide
+ * which palette commands are actuations, so the three places cannot drift apart.
+ */
+function lastActuation(obs: Observation, machine: string): LastCommand {
+  let best: LastCommand = null;
+  for (const note of obs.sharedNotes) {
+    if (note.key !== SUPERVISION_NOTE_KEY) continue;
+    const value = note.value as { machine?: unknown; name?: unknown; at?: unknown } | null;
+    if (value?.machine !== machine) continue;
+    if (typeof value.name !== "string" || typeof value.at !== "string") continue;
+    if (!needsLease(value.name)) continue;
     if (!best || Date.parse(value.at) > Date.parse(best.at)) {
       best = { machine, name: value.name as CommandName, at: value.at };
     }

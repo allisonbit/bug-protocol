@@ -176,6 +176,24 @@ async function main() {
   }
   say(true, "every topic in the union has a feed label and a place in the world", `${union.length} topics`);
 
+  // A PLACE HAS TO EXIST. The check above is a text check: it proves the topic is
+  // MENTIONED in the zone map, not that the district it names is drawn. Five topics —
+  // both evals and all three lessons — were routed to `"commons"`, which is a zone KIND
+  // rather than a zone id, so those events landed in a district that cannot exist. Nothing
+  // failed, because a zone id is only ever compared against the districts that were drawn;
+  // the live world verifier caught it once, while one of them happened to be inside its
+  // event window, and would have gone quiet again as the log moved on. So the ids and the
+  // routing are read out of the source and compared here, where it is cheap and permanent.
+  const zoneBlock = zones.slice(zones.indexOf("export const TOPIC_ZONE"), zones.indexOf("export const TOPIC_KIND"));
+  const zoneIds = new Set([...zones.matchAll(/\n\s*id:\s*"([a-z0-9-]+)"/g)].map((m) => m[1]));
+  const routing = [...zoneBlock.matchAll(/"([a-z0-9._]+)":\s*"([a-z0-9-]+)"/g)].map((m) => ({ topic: m[1], zone: m[2] }));
+  const strayZone = routing.filter((r) => !zoneIds.has(r.zone));
+  say(
+    strayZone.length === 0,
+    "every topic's district is a district the world draws",
+    strayZone.length ? strayZone.map((r) => `${r.topic}->${r.zone}`).join(", ") : `${routing.length} routed to string districts, ${zoneIds.size} districts drawn`,
+  );
+
   // ── 3. live ──────────────────────────────────────────────────────────────
   if (!LIVE) {
     note("the live checks (--live): the stored constraint, in either shape");

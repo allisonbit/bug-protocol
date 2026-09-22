@@ -341,15 +341,24 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // ground rather than on the shore the world's things land on.
   "registry.mirrored": "harbour",
   "registry.gap": "plaza",
-  // A lesson is the swarm talking about its own behaviour, which is the commons rather than
-  // any one district: proposing it, and settling it by recounting, are the same square.
-  "lesson.proposed": "commons",
-  "lesson.adopted": "commons",
-  "lesson.refuted": "commons",
+  // A lesson is the swarm talking about its own behaviour rather than about any one
+  // district: proposing it, and settling it by recounting, are the same square. That
+  // square is THE PLAZA — the swarm's own ground, the same one `registry.gap` stands on
+  // for the same reason.
+  //
+  // IT USED TO SAY "commons", which is a zone KIND and not a zone id. The routing is
+  // returned to the renderer verbatim, so five topics — both evals, all three lessons —
+  // were drawn into a district that does not and cannot exist: the events landed nowhere,
+  // and `verify-world.cjs` failed with `eval.scored->commons` the first time a beat put
+  // one of them inside the fold's event window. Nothing else in the projection noticed,
+  // because a zone id is only ever compared against the drawn districts.
+  "lesson.proposed": "plaza",
+  "lesson.adopted": "plaza",
+  "lesson.refuted": "plaza",
   // The deployment measuring itself is the same square: a reading is the swarm looking at
   // its own work, and a regression is that reading naming something to answer.
-  "eval.scored": "commons",
-  "eval.regressed": "commons",
+  "eval.scored": "plaza",
+  "eval.regressed": "plaza",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */

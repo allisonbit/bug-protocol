@@ -234,6 +234,14 @@ export default async function MachinePage({ params }: { params: Promise<{ name: 
                 </span>
                 <span className="min-w-0 flex-1 text-mist">
                   {c.body}
+                  {c.lease_id && (
+                    <span
+                      className="mt-0.5 block text-[11px] text-bug"
+                      title="The grant whose actuation this command consumed. Its terms are in the Authority section above."
+                    >
+                      under the lease it consumed: {c.lease_id.slice(0, 8)}
+                    </span>
+                  )}
                   {c.note && <span className="mt-0.5 block text-[11px] text-mist-bright">the machine says: {c.note}</span>}
                 </span>
                 <span className="shrink-0 text-mist">{timeAgo(c.created_at)}</span>

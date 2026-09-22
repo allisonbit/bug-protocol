@@ -13,6 +13,7 @@ import {
   type SupervisedMachine,
 } from "@/lib/swamp/machine-supervision";
 import { takeActuationAuthority } from "@/lib/machines/lease-gate";
+import { needsLease } from "@/lib/machines/leases";
 import { getWorldRows } from "@/lib/world/rows";
 import { projectWorld } from "@/lib/world/project";
 import { agentDid, agentDidDocument, platformDid, platformDidDocument } from "@/lib/identity/did";
@@ -495,13 +496,24 @@ export const CAPABILITY_TOOLS: McpTool[] = [
         thresholds: parseThresholds(m.thresholds),
         latest: ((readingRes.data ?? [])[0] as MachineReading | undefined) ?? null,
       };
+      // TWO CLOCKS FROM THE SAME NOTES. `last` is the newest command of any kind and it
+      // bounds how often this door talks to hardware; `lastActuation` is the newest thing
+      // that MOVED it and it bounds actuation separately, so asking a machine for a
+      // reading cannot push its own actuation window out of reach. Both are read here
+      // rather than trusted from the caller, because a cooldown is a fact about the
+      // record, and `needsLease` is the same predicate the gate uses to say which
+      // commands are actuations.
       let last: LastCommand = null;
+      let lastActuation: LastCommand = null;
       for (const row of (noteRes.data ?? []) as { value: { at?: unknown; name?: unknown } }[]) {
         const at = row.value?.at;
         const cmd = row.value?.name;
         if (typeof at === "string" && typeof cmd === "string") {
           if (!last || Date.parse(at) > Date.parse(last.at)) {
             last = { machine: name, name: cmd as CommandName, at };
+          }
+          if (needsLease(cmd) && (!lastActuation || Date.parse(at) > Date.parse(lastActuation.at))) {
+            lastActuation = { machine: name, name: cmd as CommandName, at };
           }
         }
       }
@@ -510,6 +522,7 @@ export const CAPABILITY_TOOLS: McpTool[] = [
         machine,
         nowIso: new Date(nowMs).toISOString(),
         last,
+        lastActuation,
         pending: (pendingRes.data ?? []).length,
       });
 
