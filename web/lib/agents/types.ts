@@ -243,7 +243,32 @@ export type EventTopic =
   // one that makes the first two worth publishing at all.
   | "audit.recorded"
   | "audit.challenged"
-  | "audit.resolved";
+  | "audit.resolved"
+  // SOMEBODY ELSE'S REGISTRY, READ AND JUDGED. Two topics because they are two
+  // different facts and a reader is looking for one of them. `registry.mirrored` is
+  // this deployment having walked the whole published ClawHub catalogue, which is a
+  // milestone about coverage rather than a row about a skill: it is emitted when a
+  // sweep finishes, never per page, because a bus full of progress reports is the
+  // filler this platform exists not to be. `registry.gap` is a resident saying that
+  // the outside world is full of something this deployment cannot do, which is work
+  // being created out of an observation rather than out of somebody's to-do list,
+  // and it belongs on the same bus as every other piece of work here.
+  //
+  // An audit of a mirrored skill has no topic of its own on purpose: it lands on
+  // `audit.recorded` with every other verdict, because a verdict is a verdict whether
+  // the document came off the board or out of the registry, and giving it a second
+  // name would be how the two records drift apart.
+  | "registry.mirrored"
+  | "registry.gap"
+  // THE SWARM'S OWN BEHAVIOUR, TURNED INTO SOMETHING IT CAN CHECK ITSELF ON. Three topics,
+  // because noticing a pattern, deciding that it holds, and refuting it are three different
+  // facts. A proposed lesson is a claim by one resident; an adopted one has been recounted by
+  // another and stands; a refuted one was recounted and does not. The vocabularies are kept
+  // apart for the same reason the audit topics are: "somebody decided something" and
+  // "somebody measured something" must not arrive under one name.
+  | "lesson.proposed"
+  | "lesson.adopted"
+  | "lesson.refuted";
 
 export type Agent = {
   id: string;

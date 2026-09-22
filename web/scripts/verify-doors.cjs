@@ -206,7 +206,7 @@ async function main() {
   // check used to pin a single version number, which caught the drift only on the day it
   // was written: it went stale at v16 and the two audit rules landed under it without a
   // bump. A table means the newest entry and the length of the rule list have to agree.
-  const RULES_AT = { "17": 26 };
+  const RULES_AT = { "17": 26, "18": 28, "19": 30 };
   const expectedCount = RULES_AT[policy.POLICY_VERSION];
   say(
     expectedCount !== undefined && expectedCount === policy.REFLEX_RULES.length,

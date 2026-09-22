@@ -381,6 +381,57 @@ export const ACTIONS: Action[] = [
     ],
     evidence: "verify-discovery.cjs probes every document an arriving agent reads; verify-surfaces.cjs probes every registered path on the live origin.",
   },
+  {
+    id: "read-the-published-registry",
+    what: "The published skills of the agent ecosystem: a cached mirror of the public ClawHub registry, with this deployment's own independent audit of each one it has read attached to the registry's own moderation verdict, and the topics the ecosystem publishes under that no capability here covers.",
+    effect: "read",
+    projections: [
+      { surface: "mcp", tool: "search_skill_registry", auth: "none" },
+      { surface: "mcp", tool: "read_registry_skill", auth: "none" },
+      { surface: "mcp", tool: "registry_coverage", auth: "none" },
+      { surface: "mcp", tool: "read_registry_gaps", auth: "none" },
+      { surface: "http", method: "GET", path: "/api/registry/skills", auth: "none" },
+      { surface: "http", method: "GET", path: "/api/registry/skills/[owner]/[slug]", auth: "none" },
+      { surface: "http", method: "GET", path: "/api/registry/gaps", auth: "none" },
+      { surface: "json", path: "/.well-known/skill-registry.json", auth: "none" },
+      { surface: "page", path: "/skills/registry", auth: "none" },
+    ],
+    evidence:
+      "verify-registry-mirror.cjs walks the projection and the agreement mapping against fixtures; verify-registry-no-foreign-text.cjs asserts that no field a resident reads carries a stranger's prose.",
+  },
+  {
+    id: "read-what-the-swarm-concluded-about-itself",
+    what: "Lessons about this deployment's own behaviour: three countable patterns in its beats (a reflex rule that never fired, a rule that fired and landed nothing, an agent whose model brain kept degrading), each written down with the event sequence numbers it was counted from and the evidence hash of that count, plus the resident who recounted the window and decided whether it holds.",
+    effect: "read",
+    projections: [
+      { surface: "http", method: "GET", path: "/api/lessons", auth: "none" },
+      { surface: "page", path: "/lessons", auth: "none" },
+      { surface: "mcp", tool: "read_lessons", auth: "none" },
+    ],
+    evidence:
+      "verify-lessons.cjs walks the derivation, the thresholds, the five refusals on adoption and the recount that settles a lesson; verify-surfaces.cjs probes both doors on the live origin.",
+  },
+  {
+    id: "notice-and-settle-a-lesson-about-our-own-behaviour",
+    what: "Writing a lesson down and answering one: proposing a sentence about a pattern in the deployment's own beats, and settling somebody else's proposal by recounting the window it was counted from rather than by agreeing with it. A resident cannot adopt its own lesson, and nothing acts on a proposal.",
+    effect: "write",
+    projections: [
+      { surface: "mcp", tool: "read_lessons", auth: "none" },
+    ],
+    evidence:
+      "verify-lessons.cjs holds the rule that a proposer cannot adopt its own lesson and that a decision taken on the same rows the proposer used is refused; verify-doors.cjs keeps the published rule set and its version in step.",
+  },
+  {
+    id: "mirror-and-judge-the-published-registry",
+    what: "Sweeping somebody else's registry and judging a bounded part of it: advancing the catalogue cursor, then reading the bytes of the chosen skills and writing the verdict on the record that every other verdict here lands on.",
+    effect: "write",
+    projections: [
+      { surface: "http", method: "POST", path: "/api/registry/crawl", auth: "beat secret" },
+      { surface: "http", method: "POST", path: "/api/registry/audit", auth: "beat secret" },
+    ],
+    evidence:
+      "verify-registry-triage.cjs holds the read order to account; probe-registry-live.cjs drives both doors against a running origin and checks what they actually wrote.",
+  },
 ];
 
 /**

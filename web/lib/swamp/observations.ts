@@ -16,6 +16,17 @@ import { CHECK_IDS, type CheckId } from "./checks";
 import { recentFacts, type MemoryHypothesis, type MemorySkill } from "./memory";
 import { livenessOf } from "@/lib/machines";
 import { REFLEX_RULES, normalizeRules, type ReflexRule } from "./policy";
+// The registry comparison: the size and install thresholds a topic has to clear before its
+// absence is treated as a gap, the ranking itself, and the eligibility rule for citing a
+// published skill against one of this deployment's own capabilities. Pure, so the whole
+// measurement can be tested against fixtures with no mirror at all.
+import { MIN_GAP_INSTALLS, MIN_GAP_SKILLS, rankGaps, type GapRow, type TopicRow } from "@/lib/registry/gaps";
+import { rankCitations, type CitationRow } from "@/lib/registry/reflex";
+// The lessons layer: what this deployment noticed about its own behaviour, the derivation
+// that produces a proposal from the beat window, and the store that reads and writes the
+// record. Split the same way the rest of this layer is, decision pure and storage here.
+import { openProposals, readableLessons, type BeatObservation, type Lesson } from "./lessons";
+import { readBeatWindow, readLessons } from "./lesson-store";
 
 /**
  * WHAT AN AGENT CAN SEE.
@@ -187,6 +198,19 @@ export type SourceView = {
  * the writer is not touching.
  */
 export type SourceRead = { path: string; rev: string; sha256: string; bytes: number; content: string };
+
+/**
+ * One gap as a resident sees it: the measured counts, and the documents that make it up.
+ *
+ * The example list carries a ref, an install count and a verdict, and deliberately NOT the
+ * summary the publisher wrote. A directory page can show a publisher's own description of
+ * their work, attributed, because a reader is choosing whether to go and look. A resident is
+ * choosing what to do, and handing it a stranger's prose is how a registry of instructions
+ * becomes an instruction.
+ */
+export type ObservationGap = GapRow & {
+  examples: { ref: string; installs: number; digest: string | null; swamp_verdict: string | null }[];
+};
 
 export type Observation = {
   now: string;
@@ -484,6 +508,47 @@ export type Observation = {
    * looked asleep on a board with no hosts on it.
    */
   board: BoardReading;
+  /**
+   * The largest topics the published registry is full of and this deployment cannot do.
+   *
+   * A MEASUREMENT RATHER THAN A WISH LIST. Each one is the difference between the topics the
+   * mirrored ClawHub catalogue publishes skills under and the capabilities in this deployment's
+   * own action manifest, above thresholds on size and installs, and not yet reported by
+   * anybody. The examples are named by their owner-qualified ref with the digest our verdict is
+   * bound to, so a reader can check the count rather than trust it.
+   *
+   * STRUCTURED FIELDS ONLY, and that is the whole safety argument of this wave: a topic, a
+   * count, an install figure, a ref and a verdict. Not one word written by a stranger reaches a
+   * resident's context through here, which is what makes a mirror of tens of thousands of
+   * unsupervised documents safe to read.
+   */
+  registryGaps: ObservationGap[];
+  /**
+   * A published skill this deployment's own engine judged clean that does what one of its
+   * capabilities does, and that nothing has cited yet, or null.
+   *
+   * Citing it writes a row on the mirror naming the capability. It never copies anything: the
+   * bytes stay on the audit record where they can be hashed, and no part of the document is
+   * ever lifted into this platform's code, prompts or skills.
+   */
+  registryCitation: { ref: string; capability: string; topic: string; installs: number } | null;
+  /**
+   * The lesson record: what the swarm has concluded about itself, and the raw beats both a
+   * proposal and any later refutation are counted from.
+   *
+   * `adopted` is the only list a resident may act on. A proposal is somebody's claim and a
+   * refuted lesson has been measured and failed, so neither is behaviour, and the policy reads
+   * adopted rows alone. `beats` travels with them because `deriveLessons` and the refutation
+   * that settles a lesson are both counts over the same span rows: a decider that recounted
+   * from a different window would be answering a different question.
+   */
+  lessons: {
+    adopted: Lesson[];
+    proposed: Lesson[];
+    mine: string[];
+    beats: BeatObservation[];
+    latestSeq: number;
+  };
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -720,7 +785,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes, auditChallengesRes, auditsRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes, auditChallengesRes, auditsRes, registryTopicsRes, registryCiteRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -800,6 +865,29 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // is a repeated fetch and the cost of a shrinking window would be a stale "already
     // done" that never expires.
     sb.from("audits").select("subject").not("subject", "is", null).order("created_at", { ascending: false }).limit(300),
+    // THE OUTSIDE WORLD'S PUBLISHED SKILLS, as a measurement of what this deployment cannot
+    // do. Bounded to the topics that clear the gap thresholds and to the ones nobody has
+    // reported: `reported_at` is a row state on the rollup rather than a note here, because
+    // this is the guard that has to survive losing every note in the system.
+    sb
+      .from("skill_registry_topics")
+      .select("topic, skill_count, total_installs, audited_count, suspicious_count, reported_at")
+      .is("reported_at", null)
+      .gte("skill_count", MIN_GAP_SKILLS)
+      .gte("total_installs", MIN_GAP_INSTALLS)
+      .order("skill_count", { ascending: false })
+      .limit(60),
+    // And the other half: published work that does something this deployment already does,
+    // judged clean by its OWN engine, and not yet cited. Bounded by installs because the
+    // citation is a pointer a reader follows, and the ones worth following are the ones in use.
+    sb
+      .from("skill_registry")
+      .select("ref, topics, stats, swamp_verdict, clawhub_verdict, blocked, cited_at, digest")
+      .eq("blocked", false)
+      .is("cited_at", null)
+      .in("swamp_verdict", ["clean", "notes"])
+      .order("installs", { ascending: false, nullsFirst: false })
+      .limit(60),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -813,7 +901,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // the same reason: a guard that reads nothing does not fail, it lets
     // everything through. Any new shared note belongs here on the same commit as
     // the rule that writes it.
-    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%")
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%,key.like.registry:%,key.like.cite:%,key.like.lesson:%")
     .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it
@@ -976,6 +1064,61 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
         }
       : null;
 
+  // ---- the registry, as something a resident may act on rather than read -------------
+  //
+  // The gap is a measurement between two registers, so it is computed from the rollup rows
+  // against this deployment's own action manifest, and the top few are carried rather than
+  // one: the rule picks after applying its cooldown, and a rule that could only ever see one
+  // candidate would be unable to say anything when that one has just been reported.
+  const rankedGaps = rankGaps((registryTopicsRes.data as TopicRow[] | null) ?? [], { limit: 5, includeReported: false });
+  // The named documents a reader would go and look at, asked for only when there is a gap to
+  // name. This is the one query here that costs a round trip conditionally, and it is worth
+  // it: a count with no citations is a number nobody can check.
+  const topGap = rankedGaps[0] ?? null;
+  const { data: gapExamples } =
+    topGap && sb
+      ? await sb
+          .from("skill_registry")
+          .select("ref, stats, digest, swamp_verdict")
+          .eq("blocked", false)
+          .contains("topics", [topGap.topic])
+          .order("installs", { ascending: false, nullsFirst: false })
+          .limit(5)
+      : { data: null };
+  const registryGaps: ObservationGap[] = rankedGaps.map((g) => ({
+    ...g,
+    examples:
+      g.key === topGap?.key
+        ? ((gapExamples as { ref: string; stats: Record<string, unknown> | null; digest: string | null; swamp_verdict: string | null }[] | null) ?? []).map(
+            (e) => ({
+              ref: e.ref,
+              installs: Number((e.stats ?? {}).installs ?? 0) || 0,
+              digest: e.digest,
+              swamp_verdict: e.swamp_verdict,
+            }),
+          )
+        : [],
+  }));
+
+  const registryCitation = rankCitations(((registryCiteRes.data as CitationRow[] | null) ?? []) as CitationRow[])[0] ?? null;
+
+  // THE LESSON RECORD, in the two shapes two different rules need. `adopted` is what a
+  // resident may act on, and it is adopted rows only: a proposal is somebody's claim and a
+  // refuted one has been measured and failed. `proposed` is the queue waiting for a decider
+  // who did not write it. Both are small reads, and the beat window is the raw material a
+  // proposal and any later refutation are both counted from, so the two can never disagree
+  // about what the log says. A failure to read it leaves both empty, which is the right
+  // silence: a rule that would propose from a window it could not read proposes nothing.
+  const lessonRows = await readLessons(sb, 200);
+  const lessonBeats = await readBeatWindow(sb, nowIso);
+  const lessons = {
+    adopted: readableLessons(lessonRows),
+    proposed: openProposals(lessonRows, agent.id),
+    mine: lessonRows.filter((l) => l.proposed_by === agent.id).map((l) => l.id),
+    beats: lessonBeats,
+    latestSeq: lessonBeats.length > 0 ? lessonBeats[lessonBeats.length - 1].seq : 0,
+  };
+
   return {
     now: nowIso,
     agent,
@@ -1074,6 +1217,9 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       })),
     myReviewedChangeIds: [...reviewedChangeIds],
     sharedNotes: (sharedNoteRows as { key: string; value: Record<string, unknown> }[] | null) ?? [],
+    registryGaps,
+    registryCitation,
+    lessons,
     board,
   };
 }

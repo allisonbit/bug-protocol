@@ -19,6 +19,11 @@ import {
   pickAuditCandidate,
   pickChallengeToSettle,
 } from "@/lib/audit/candidates";
+// The registry rules: the pacing on reporting a gap the outside world is full of, and the
+// same for recording a published skill against a capability this deployment already has.
+// Both are pure, so the cooldowns and the eligibility are checkable without a clock or a
+// database, which is how the `audit:last` key that nobody wrote was found.
+import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeCooldownElapsed, pickGapToReport } from "@/lib/registry/reflex";
 import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
@@ -33,6 +38,17 @@ import {
   type Observation,
 } from "./observations";
 import type { AgentBrain } from "@/lib/agents/types";
+// The lessons layer: the derivation that turns a beat window into a sentence with citations,
+// the decision about whether a lesson holds, and the pacing on proposing. Pure, so every
+// branch this file takes on a lesson can be walked without a database or a clock.
+import {
+  LESSON_NOTE_KEY,
+  adoptionDecision,
+  deriveLessons,
+  proposalCooldownElapsed,
+  refutationVerdict,
+  type Lesson,
+} from "./lessons";
 
 /**
  * THE BRAIN: one interface, two implementations.
@@ -93,6 +109,51 @@ export type PlannedAction =
    * do honestly rather than a judgement it would have to fake.
    */
   | { rule: string; kind: "settle_audit_challenge"; challengeId: string; auditId: string; findingCode: string }
+  /**
+   * Say on the board that the outside world is full of something this deployment cannot do.
+   *
+   * The measurement is computed in the observation, not here: the gap, its counts and the
+   * documents it is made of all come from the mirrored registry compared against this
+   * deployment's own action manifest. The brain only carries a fact it was handed, which is
+   * why a deterministic agent may state it at all.
+   */
+  | {
+      rule: string;
+      kind: "report_registry_gap";
+      topic: string;
+      skills: number;
+      installs: number;
+      /** How many of those skills the registry's own moderation flagged. */
+      suspicious: number;
+      examples: { ref: string; installs: number; digest: string | null; swampVerdict: string | null }[];
+    }
+  /**
+   * Record a published skill against one of this deployment's own capabilities.
+   *
+   * A citation is a ROW, never a copy of anything. The document's bytes stay on the audit
+   * record where they can be hashed, and nothing is ever lifted out of it into this
+   * platform's code, prompts or skills.
+   */
+  | { rule: string; kind: "cite_registry_skill"; ref: string; capability: string; topic: string }
+  /** Write down a pattern this deployment's own beats support, with the sequence numbers. */
+  | { rule: string; kind: "propose_lesson"; candidate: ReturnType<typeof deriveLessons>[number] }
+  /**
+   * Settle somebody else's lesson by recounting its window, never by agreeing with it.
+   *
+   * `decision` is what the recount produced, computed in `decideReflex` from the same pure
+   * derivation that produced the lesson, and `reproduced` travels with it so the record says
+   * whether the pattern still held rather than only what was concluded.
+   */
+  | {
+      rule: string;
+      kind: "decide_lesson";
+      lessonId: string;
+      lessonKind: Lesson["kind"];
+      subject: string;
+      decision: "adopt" | "refute";
+      reason: string;
+      reproduced: boolean;
+    }
   /** Arrival. Happens once; the platform refuses a second. */
   | { rule: string; kind: "announce" }
   /**
@@ -742,6 +803,110 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         break;
       }
 
+      // r28, the mirror held up to the swarm. The gap is a row state and a measurement, not
+      // a judgement, so the whole of the decision here is: is there a gap, and has the swarm
+      // left the subject alone long enough. `reported_at` on the topic rollup is what stops a
+      // topic being reported twice; the shared note is only pacing, exactly like the audit
+      // cooldown and for the same reason: a guard that reads nothing lets everything through.
+      case "survey_registry": {
+        const gap = pickGapToReport({
+          gaps: obs.registryGaps ?? [],
+          lastReportedAt: noteTimestamp(sharedNote(obs, GAP_NOTE_KEY)),
+          now: obs.now,
+        });
+        if (!gap) break;
+        out.push({
+          rule: rule.id,
+          kind: "report_registry_gap",
+          topic: gap.topic,
+          skills: gap.skills,
+          installs: gap.installs,
+          suspicious: gap.suspicious,
+          examples: gap.examples.map((e) => ({
+            ref: e.ref,
+            installs: e.installs,
+            digest: e.digest,
+            swampVerdict: e.swamp_verdict,
+          })),
+        });
+        break;
+      }
+
+      // r29, recognising work this deployment already does. One candidate arrives in the
+      // observation already filtered: clean under this deployment's own audit, mapped onto a
+      // capability in its own manifest, and not yet cited. Nothing here decides whether the
+      // skill is any good, because that judgement was made by the engine over the bytes and is
+      // on the record bound to their digest.
+      case "cite_registry_skill": {
+        if (!citeCooldownElapsed(noteTimestamp(sharedNote(obs, CITE_NOTE_KEY)), obs.now)) break;
+        const candidate = obs.registryCitation;
+        if (!candidate) break;
+        out.push({
+          rule: rule.id,
+          kind: "cite_registry_skill",
+          ref: candidate.ref,
+          capability: candidate.capability,
+          topic: candidate.topic,
+        });
+        break;
+      }
+
+      // r30, noticing something about this deployment's own behaviour. The pattern is derived
+      // from span rows the pulse wrote about itself, so the only judgement in this branch is
+      // which candidate to write down first, and it is ranked by confidence: the strongest
+      // pattern is proposed before the four weaker ones waiting behind it. A pattern already
+      // on the record is not re-proposed, because that is what the derivation returns and the
+      // uniqueness is (kind, subject, evidence hash) rather than a note any rule could clear.
+      case "propose_lesson": {
+        if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, LESSON_NOTE_KEY)), obs.now)) break;
+        const candidates = deriveLessons({
+          beats: obs.lessons.beats,
+          policyRules: obs.policy.map((r) => r.id),
+          now: obs.now,
+        })
+          .filter((c) => c.subject !== obs.agent.handle)
+          .sort((a, b) => b.confidence - a.confidence);
+        const candidate = candidates[0];
+        if (!candidate) break;
+        out.push({ rule: rule.id, kind: "propose_lesson", candidate });
+        break;
+      }
+
+      // r31, settling somebody else's lesson. The decider does not vote on whether the
+      // proposer was right: it reruns the derivation over the window as it stands now and
+      // takes the answer. `adoptionDecision` inside the verdict owns the refusals that matter,
+      // including the one that makes this a swarm that corrects itself rather than one that
+      // agrees with itself, which is that nobody adopts their own lesson.
+      case "decide_lesson": {
+        const proposed = obs.lessons.proposed[0];
+        if (!proposed) break;
+        const reproduced = deriveLessons({
+          beats: obs.lessons.beats,
+          policyRules: [proposed.subject],
+          now: obs.now,
+        }).some((c) => c.kind === proposed.kind && c.subject === proposed.subject);
+        const verdict = refutationVerdict({
+          lesson: proposed,
+          deciderId: obs.agent.id,
+          latestSeq: obs.lessons.latestSeq,
+          reproduced,
+        });
+        // A refusal here is the rule declining to decide, which is not an action: a resident
+        // that published "I decided not to decide" would fill the bus with the absence of work.
+        if (verdict.decision === "refuse") break;
+        out.push({
+          rule: rule.id,
+          kind: "decide_lesson",
+          lessonId: proposed.id,
+          lessonKind: proposed.kind,
+          subject: proposed.subject,
+          decision: verdict.decision,
+          reason: verdict.reason,
+          reproduced,
+        });
+        break;
+      }
+
       case "post_to_board": {
         const reading = boardReading(obs, takenByAnyone(obs));
         if (reading) {
@@ -1104,6 +1269,17 @@ const FALLBACK_MODELS = (process.env.SWAMP_FALLBACK_MODELS || "alibaba/qwen3-32b
 function modelView(obs: Observation, budget: number): Record<string, unknown> {
   return {
     now: obs.now,
+    // What this deployment has concluded about its own behaviour and settled by recounting.
+    // Adopted rows only, newest first: a proposal is somebody's claim and a refuted lesson
+    // failed a recount, so neither is a fact a model should be reasoning from. This is the
+    // one place a lesson changes what happens, and it changes it by being read rather than
+    // by rewriting anything: the policy is still the policy, and the sentence is evidence.
+    adopted_lessons: obs.lessons.adopted.slice(0, 5).map((l) => ({
+      id: l.id,
+      about: l.subject,
+      statement: l.statement,
+      confidence: l.confidence,
+    })),
     me: { handle: obs.agent.handle, reputation: obs.agent.reputation },
     budget: { max_actions: budget },
     my_live_claim: obs.myClaim ? { target: obs.myTarget?.slug ?? null, subtask: obs.myClaim.subtask } : null,

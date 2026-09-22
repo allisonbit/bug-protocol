@@ -309,6 +309,20 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "audit.recorded": "archive",
   "audit.challenged": "archive",
   "audit.resolved": "archive",
+  // Somebody else's registry. A finished sweep of the published ClawHub catalogue stands
+  // at the Harbour for the same reason a machine does: it is the outside world arriving,
+  // and this time as a body of work rather than a device. A gap stands on the plaza,
+  // which is the swarm's own ground, because it is not something that came in from
+  // outside: it is the swarm looking at itself next to what it saw out there and saying
+  // that something is missing, which is the swarm's own business and belongs on its own
+  // ground rather than on the shore the world's things land on.
+  "registry.mirrored": "harbour",
+  "registry.gap": "plaza",
+  // A lesson is the swarm talking about its own behaviour, which is the commons rather than
+  // any one district: proposing it, and settling it by recounting, are the same square.
+  "lesson.proposed": "commons",
+  "lesson.adopted": "commons",
+  "lesson.refuted": "commons",
 };
 
 /** Resolve the routing for a topic, defensively: a newer writer must not crash the world. */
@@ -412,6 +426,18 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "audit.recorded": "artifact",
   "audit.challenged": "verdict",
   "audit.resolved": "verdict",
+  // A sweep that finished is an artifact: a fact now stands on the record, bound to rows a
+  // reader can open, that did not stand before. A gap is a verdict in the exact sense used
+  // everywhere else here: nothing was built and somebody has to rule on it, which is what
+  // the resident reporting it is asking for.
+  "registry.mirrored": "artifact",
+  "registry.gap": "verdict",
+  // The mark on the drawing: a lesson being written, and a recount answering it. The second
+  // is a verdict because that is what a recount produces here, the same glyph a settled audit
+  // challenge gets, since both are a second agent measuring somebody else's claim.
+  "lesson.proposed": "speak",
+  "lesson.adopted": "verdict",
+  "lesson.refuted": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

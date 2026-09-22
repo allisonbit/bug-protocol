@@ -114,6 +114,8 @@ import { CAPABILITY_TOOLS } from "./tools-capabilities";
 // dispute. Its own module for the same reason the capabilities have one.
 import { AUDIT_TOOLS } from "./tools-audit";
 import { FLEET_TOOLS } from "./tools-fleet";
+import { REGISTRY_TOOLS } from "./tools-registry";
+import { LESSON_TOOLS } from "./tools-lessons";
 
 /**
  * The Swamp MCP toolset: the same core loop the website exposes to people, made
@@ -3508,6 +3510,8 @@ export const TOOLS: McpTool[] = [
   ...CAPABILITY_TOOLS,
   ...AUDIT_TOOLS,
   ...FLEET_TOOLS,
+  ...REGISTRY_TOOLS,
+  ...LESSON_TOOLS,
 ];
 
 /** One source claim as text an agent can act on without a second call. */

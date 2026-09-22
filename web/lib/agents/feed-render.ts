@@ -154,6 +154,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "audit.recorded": { label: "audited", dot: "bg-cyan", tone: "text-chalk" },
   "audit.challenged": { label: "challenged", dot: "bg-amber", tone: "text-amber" },
   "audit.resolved": { label: "settled", dot: "bg-lime", tone: "text-bug" },
+  // Somebody else's registry. A finished sweep reads neutral and cyan, because it is a
+  // fact about coverage rather than a thing anybody has to look at. A gap takes the warn
+  // tone on purpose: it is the one row in this pair that says the swamp is missing
+  // something, and a reader should be able to pick it out of a column of ordinary work.
+  "registry.mirrored": { label: "mirrored", dot: "bg-cyan", tone: "text-chalk" },
+  "registry.gap": { label: "gap found", dot: "bg-warn", tone: "text-warn" },
+  "lesson.proposed": { label: "lesson", dot: "bg-chalk", tone: "text-chalk" },
+  "lesson.adopted": { label: "lesson held", dot: "bg-good", tone: "text-good" },
+  "lesson.refuted": { label: "lesson failed", dot: "bg-warn", tone: "text-warn" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -465,6 +474,55 @@ export function summarize(e: SwampEvent): string {
       return outcome
         ? `${reviewer} ${outcome} a challenge to ${str(p.finding_code, 40) || "a finding"} by rerunning the engine`
         : "a challenge was settled by a rerun";
+    }
+    // ---- the registry, read rather than watched -----------------------------
+    // Both carry a prebuilt `text` from whatever wrote them, because the sentence a
+    // reader wants names the count or the topic and the writer has it. The fallbacks
+    // read the same fields, so a row written by an older build still reads as English.
+    case "registry.mirrored": {
+      const text = str(p.text, 200);
+      if (text) return text;
+      const skills = Number(p.skills ?? 0);
+      return skills > 0
+        ? `mirrored the public ClawHub registry: ${skills} published skills`
+        : "finished a sweep of the public ClawHub registry";
+    }
+    case "registry.gap": {
+      const text = str(p.text, 240);
+      if (text) return text;
+      const topic = str(p.topic, 80);
+      const skills = Number(p.skills ?? 0);
+      if (!topic) return "a resident reported a capability this deployment does not have";
+      return skills > 0
+        ? `reported a gap: ${skills} published skills for "${topic}" and no capability here does it`
+        : `reported a gap: nothing here does "${topic}"`;
+    }
+    // ---- what the deployment concluded about itself ---------------------------
+    // All three carry a prebuilt `text`, because the sentence names a rule or an agent and
+    // the writer counted it. The fallbacks read the same fields, so a row from an older build
+    // still reads as English, and none of them runs a sentence through a model: these are
+    // counts, and the bus is not the place to paraphrase arithmetic.
+    case "lesson.proposed": {
+      const text = str(p.text, 400);
+      if (text) return text;
+      const subject = str(p.subject, 80);
+      return subject ? `proposed a lesson about ${subject}, on its own evidence` : "a resident proposed a lesson";
+    }
+    case "lesson.adopted": {
+      const text = str(p.text, 400);
+      if (text) return text;
+      const subject = str(p.subject, 80);
+      return subject
+        ? `adopted a lesson about ${subject} after recounting its window`
+        : "a lesson was adopted after a recount";
+    }
+    case "lesson.refuted": {
+      const text = str(p.text, 400);
+      if (text) return text;
+      const subject = str(p.subject, 80);
+      return subject
+        ? `refuted a lesson about ${subject}: recounting its window does not reproduce it`
+        : "a lesson was refuted by a recount";
     }
     // ---- the platform saying something in public ----------------------------
     case "x.posted": {

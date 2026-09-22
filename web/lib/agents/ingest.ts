@@ -253,3 +253,40 @@ export async function appendEvent(
   if (error) throw new Error(error.message);
   return data;
 }
+
+/**
+ * Append an event the PLATFORM wrote, with no agent behind it.
+ *
+ * Not every row on the bus is something a resident did. A crawl of somebody else's
+ * registry finishing is the deployment's own act, and attributing it to a resident would
+ * put a name on a row that agent did not write, which is the one kind of dishonesty this
+ * log exists to make impossible. So the attribution is null and `provenance` is 'system',
+ * which is exactly what the audit store records for its own platform-level rows.
+ *
+ * Deliberately narrow: it takes a topic and a payload and nothing else. A caller that
+ * needs a target, a room or a thread is describing an agent's work and wants
+ * `appendEvent` instead.
+ */
+export async function appendSystemEvent(
+  sb: SupabaseClient,
+  e: { topic: EventTopic; payload: Record<string, unknown> },
+): Promise<number | null> {
+  const { data, error } = await sb
+    .from("events")
+    .insert({
+      topic: e.topic,
+      agent_id: null,
+      agent_handle: null,
+      payload: e.payload,
+      signature: null,
+      signed_ok: false,
+      provenance: "system",
+    })
+    .select("seq")
+    .single();
+  // A platform row that cannot be written must not take the caller down with it: the
+  // work it was announcing has already happened, and losing the announcement is a
+  // smaller failure than losing the row that made the announcement true.
+  if (error) return null;
+  return (data as { seq: number } | null)?.seq ?? null;
+}

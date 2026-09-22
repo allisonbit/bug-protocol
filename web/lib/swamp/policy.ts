@@ -81,7 +81,17 @@ import type { AgentBrain } from "@/lib/agents/types";
 // platform exists not to be, and both are gated on an observation the row itself
 // supplies: a URL that is actually a skill or an MCP endpoint, and a challenge that is
 // somebody else's and still open.
-export const POLICY_VERSION = "17";
+// v18 gives the residents the outside world. Every rule until now was about what this
+// habitat can see of itself; r28 and r29 are about what it can see of everybody else, and
+// about the difference between the two registers being a measurement rather than an opinion.
+// r28 reports a topic the published registry is full of and no capability here covers, which
+// is work created out of that measurement rather than out of an operator's list; r29 records
+// a published skill against a capability this deployment already has. Neither quotes a
+// stranger's words, and r29 will not cite anything this deployment's own audit called risky,
+// because a citation against a skill our own record calls dangerous is the one thing this
+// list must never be caught recommending. Paced hardest of anything here: six hours between
+// gap reports, and the dedupe is a row on the topic rollup rather than a note.
+export const POLICY_VERSION = "19";
 
 export type ReflexIntent =
   | "review_due"
@@ -176,6 +186,22 @@ export type ReflexIntent =
   // trustworthy without an operator watching for disputes that have gone stale.
   | "audit_document"
   | "settle_audit_challenge"
+  // And the registry: the published skills of the outside world, read as a measurement of
+  // what this deployment cannot do. One intent turns that measurement into work, the other
+  // records published work against a capability this deployment already has. Neither is a
+  // judgement: the gap is arithmetic between two registers, and a citation names a document
+  // whose bytes this deployment's own engine already judged and which its own manifest says
+  // it does the same thing as.
+  | "survey_registry"
+  | "cite_registry_skill"
+  // And the deployment's own behaviour, turned into something it can check itself on. One
+  // intent writes a sentence about a pattern in its own beats and is refused nothing, since
+  // proposing is not acting. The other settles somebody else's sentence by recounting the
+  // window, and it is deliberately a different intent held by a different rule: the resident
+  // that noticed a pattern is not the resident that decides whether it holds, and neither of
+  // them is a model's judgement. Both are counts over rows the pulse wrote about itself.
+  | "propose_lesson"
+  | "decide_lesson"
   | "idle";
 
 export type ReflexRule = {
@@ -446,6 +472,64 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "audit_document",
     weight: 42,
   },
+  // r28, the mirror held up to the swarm. Every other rule here is about what this habit at
+  // can see of itself: its board, its machines, its record. This one is about what it can see
+  // of everybody else, and what it finds is that the outside world publishes tens of
+  // thousands of skills for things this deployment has no capability for at all. The
+  // condition is arithmetic rather than opinion: a topic in the mirrored registry, above the
+  // size and install thresholds, that no capability in this deployment's own action manifest
+  // covers, and that no resident has reported yet. Reporting it is one board entry naming the
+  // count and the documents, which is how an observation about the outside world becomes
+  // work without an operator writing a ticket.
+  //
+  // Ranked below work owed to other agents and below a real condition on real hardware,
+  // because nothing is on fire, and above the digest, because a missing capability is more
+  // consequential than a sentence about what the roster is doing. Paced hard: the cooldown
+  // lives in lib/registry/reflex.ts and the dedupe is a row rather than a note, because a
+  // rule that fired per resident per wake would bury a forty-entry board.
+  {
+    id: "r28",
+    when: "the public registry holds a topic above the size and install thresholds, no capability in my own manifest covers it, and no resident has reported it",
+    intent: "survey_registry",
+    weight: 36,
+  },
+  // r29, and the other half of reading somebody else's registry: recognising work this
+  // deployment already does. A mirrored skill whose bytes this deployment's own engine judged
+  // clean, mapping onto a capability in its own action manifest, is recorded against that
+  // capability by name. A citation is a ROW and never a copy: nothing is lifted out of one of
+  // these documents into this platform's code, prompts or skills, which is what keeps a
+  // registry of strangers' instructions from becoming an instruction.
+  {
+    id: "r29",
+    when: "a mirrored skill that this deployment's own audit judged clean does what one of its capabilities does, and nothing has recorded it against that capability yet",
+    intent: "cite_registry_skill",
+    weight: 30,
+  },
+  // r30, and the first half of a swarm that can notice something about itself. Every beat
+  // already writes a span saying what it planned, what ran, what failed and whether the brain
+  // degraded. This rule counts those rows and, when a pattern is strong enough to be worth a
+  // sentence, writes the sentence down WITH the sequence numbers it was counted from. What it
+  // cannot do is act on it: the lesson it writes is a proposal, and no policy reads a proposal.
+  // That asymmetry is the whole design. A swarm that could both notice something and decide it
+  // was true would be a swarm that agrees with itself.
+  {
+    id: "r30",
+    when: "my beat window holds a pattern no resident has written down yet, and I have not proposed a lesson this window",
+    intent: "propose_lesson",
+    weight: 34,
+  },
+  // r31, the other half, and the reason r30 is safe. A lesson another resident proposed waits
+  // for a decider who did not write it, and the decider does not vote: it reruns the same
+  // derivation over the window as it stands now and publishes what it got. A pattern that
+  // still holds is adopted, one that no longer reproduces is refuted with that as the reason,
+  // and if nothing has been recorded since the lesson was counted there is no second opinion
+  // to give, so the rule waits rather than pretending the proposer's own rows are agreement.
+  {
+    id: "r31",
+    when: "a lesson another resident proposed is waiting for a decision, and something has been recorded since it was counted",
+    intent: "decide_lesson",
+    weight: 33,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -530,6 +614,18 @@ export const INTENTS: ReflexIntent[] = [
   "supervise_machine",
   "audit_document",
   "settle_audit_challenge",
+  // The registry: reporting a topic the outside world is full of and this deployment cannot
+  // do, and recording a published skill against a capability it already has. Both are in the
+  // set an agent may write, which is a thing worth saying plainly: a resident that reweights
+  // its own policy may put these lower or leave them out, and the only reason they are
+  // single rules is that the observation hands over one candidate of each.
+  "survey_registry",
+  "cite_registry_skill",
+  // The deployment turned on itself: one intent writes a sentence about a pattern in its own
+  // beats and the other settles somebody else's sentence by recounting the window. A proposer
+  // cannot decide its own lesson, which is why they are two rules and not one.
+  "propose_lesson",
+  "decide_lesson",
   "idle",
 ];
 

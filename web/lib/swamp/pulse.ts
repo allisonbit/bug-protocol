@@ -25,6 +25,14 @@ import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
 import { DIGEST_NOTE_KEY } from "./machine-digest";
+// The registry's own pacing notes and the sentence a gap is reported in. Imported rather
+// than composed here for the same reason the audit rules are: the keys and the cooldowns
+// are read by a rule in brain.ts as well as written here, and two copies of a key that has
+// to match exactly is how the `digest:last` guard silently stopped working.
+import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeNoteValue, gapNoteValue } from "@/lib/registry/reflex";
+import { LESSON_NOTE_KEY, lessonNoteValue } from "./lessons";
+import { decideLesson, proposeLesson } from "./lesson-store";
+import { gapDescription } from "@/lib/registry/gaps";
 import { SUPERVISION_NOTE_KEY } from "./machine-supervision";
 // The audit rules, worked rather than read: the guarded fetch, the store that binds a
 // verdict to the bytes it read, and the two shared notes that hold the swarm to one
@@ -867,6 +875,168 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
     // rather than under the agent, because several residents share a domain and
     // the point of the note is that the reading has been reported once, not that
     // this agent was the one who reported it.
+    // r28, the mirror held up to the swarm. The board entry is the work: it names the topic,
+    // the counts and the documents, and the swarm's existing machinery takes it from there.
+    //
+    // TWO GUARDS, AND EACH ONE IS A DIFFERENT KIND OF FACT. The `reported_at` update is a row
+    // state, so a topic once reported stays reported even if every note in the system were
+    // lost; the shared note is only the pacing. That ordering is deliberate: this codebase
+    // shipped the other arrangement twice, and each time the bug was a guard that read a key
+    // nobody had written, which does not fail loudly, it lets everything through.
+    case "report_registry_gap": {
+      const body = gapDescription({
+        gap: { topic: plan.topic, skills: plan.skills, installs: plan.installs, suspicious: plan.suspicious },
+        examples: plan.examples.map((e) => ({
+          ref: e.ref,
+          installs: e.installs,
+          digest: e.digest,
+          swamp_verdict: e.swampVerdict,
+          canonical_url: null,
+        })),
+      });
+      const entry = await postBoardEntry(
+        sb,
+        agent,
+        { kind: "gap", title: `Gap: ${plan.topic}`.slice(0, 200), body },
+        null,
+        "runtime",
+      );
+
+      // Reported once. `.is("reported_at", null)` makes the write itself the race, so two
+      // residents waking together cannot file the same gap twice: the second update matches
+      // no row and the entry it already wrote stands as one voice rather than two.
+      const { data: marked, error: markError } = await sb
+        .from("skill_registry_topics")
+        .update({ reported_at: obs.now, report_event_seq: entry.seq })
+        .eq("topic", plan.topic)
+        .is("reported_at", null)
+        .select("topic")
+        .maybeSingle();
+      refused("recording a reported registry gap", markError);
+
+      await remember(sb, agent.id, "note", GAP_NOTE_KEY, gapNoteValue({ topic: plan.topic, skills: plan.skills }, obs.now), 3);
+
+      await appendEvent(sb, {
+        topic: "registry.gap",
+        agent,
+        payload: {
+          text:
+            `reported a gap: the public registry holds ${plan.skills} published skill(s) for "${plan.topic}", ` +
+            `installed ${plan.installs} time(s), and no capability here does it`,
+          topic: plan.topic,
+          skills: plan.skills,
+          installs: plan.installs,
+          suspicious: plan.suspicious,
+          board_seq: entry.seq,
+          // Named by identity only. The documents are where a reader goes to check the count,
+          // and none of their words travel onto this bus.
+          examples: plan.examples.slice(0, 5).map((e) => e.ref),
+          recorded: marked !== null,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return `reported a gap: ${plan.topic} (${plan.skills} published skill(s))`;
+    }
+
+    // r29, recognising work this deployment already does. A citation is a row and nothing
+    // else: the capability this skill matches is recorded against it, the document stays
+    // where it is, and no part of it is ever copied into this platform's own code, prompts
+    // or skills. The status an agent declares about itself is where skill claims belong; this
+    // is a pointer a reader can follow, not a claim to be.
+    case "cite_registry_skill": {
+      const { data: cited, error: citeError } = await sb
+        .from("skill_registry")
+        .update({ capability: plan.capability, cited_at: obs.now, updated_at: obs.now })
+        .eq("ref", plan.ref)
+        // The same race guard as everywhere else here: the citation is won by the update, so
+        // two residents cannot both write it and the rows cannot disagree about who did.
+        .is("cited_at", null)
+        .select("ref, canonical_url")
+        .maybeSingle();
+      refused("citing a registry skill", citeError);
+      if (!cited) return null;
+
+      await remember(sb, agent.id, "note", CITE_NOTE_KEY, citeNoteValue({ ref: plan.ref, capability: plan.capability }, obs.now), 3);
+
+      await appendEvent(sb, {
+        topic: "agent.action",
+        agent,
+        payload: {
+          text:
+            `recorded ${plan.ref} against "${plan.capability}": a published skill for "${plan.topic}" that does what this capability does, ` +
+            `judged clean by this deployment's own audit of its bytes`,
+          registry_ref: plan.ref,
+          capability: plan.capability,
+          topic: plan.topic,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return `cited ${plan.ref} against ${plan.capability}`;
+    }
+
+    // r30, writing down a pattern this deployment's own beats support. The insert is where the
+    // race lives: uniqueness is (kind, subject, evidence hash), so a second resident proposing
+    // the same pattern gets no row and this returns without publishing anything. That is the
+    // pacing guard and the dedupe at once, and it is a constraint rather than a check, because
+    // a check followed by an insert is two residents proposing one lesson.
+    case "propose_lesson": {
+      const row = await proposeLesson(sb, { candidate: plan.candidate, agentId: agent.id });
+      if (!row) return null;
+      await remember(sb, agent.id, "note", LESSON_NOTE_KEY, lessonNoteValue({ lessonId: row.id }, obs.now), 3);
+      await appendEvent(sb, {
+        topic: "lesson.proposed",
+        agent,
+        payload: {
+          text: `proposed a lesson about ${row.subject}: ${row.statement}`,
+          lesson_id: row.id,
+          kind: row.kind,
+          subject: row.subject,
+          confidence: row.confidence,
+          evidence_hash: row.evidence_hash,
+          evidence: row.evidence,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return `proposed a lesson about ${row.subject}`;
+    }
+
+    // r31, settling somebody else's lesson by recounting rather than by agreeing. The update
+    // itself carries the guard: the row only moves if it is still open and the decider is not
+    // the author, so a race between two deciders leaves one answer on the record.
+    case "decide_lesson": {
+      const row = await decideLesson(sb, {
+        lessonId: plan.lessonId,
+        deciderId: agent.id,
+        decision: plan.decision,
+        reason: plan.reason,
+        now: obs.now,
+      });
+      if (!row) return null;
+      await appendEvent(sb, {
+        topic: plan.decision === "adopt" ? "lesson.adopted" : "lesson.refuted",
+        agent,
+        payload: {
+          text:
+            plan.decision === "adopt"
+              ? `adopted a lesson about ${row.subject}: recounted its window and the pattern still holds`
+              : `refuted a lesson about ${row.subject}: recounting its window does not reproduce the pattern`,
+          lesson_id: row.id,
+          kind: row.kind,
+          subject: row.subject,
+          confidence: row.confidence,
+          evidence_hash: row.evidence_hash,
+          reproduced: plan.reproduced,
+          reason: plan.reason,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return plan.decision === "adopt" ? `adopted a lesson about ${row.subject}` : `refuted a lesson about ${row.subject}`;
+    }
+
     case "post_to_board": {
       const scope = obs.vaults?.scope ?? "swarm";
       const e = await postBoardEntry(
@@ -1404,6 +1574,11 @@ export async function runPulse(sb: SupabaseClient, opts: PulseOptions): Promise<
             }
           : {}),
         "swamp.actions.planned": decision.actions.length,
+        //  The reflex rules that fired, by id. This is what makes a lesson about a rule
+        //  countable: without it the span says how many actions ran and never which rule
+        //  asked for them, so "this rule never lands" would be unanswerable from the log.
+        //  Bounded because the policy is a fixed list and a span is not a place for a corpus.
+        "swamp.rules.fired": [...new Set(decision.actions.map((a) => a.rule))].slice(0, 16),
         "swamp.actions.ran": actions.filter((a) => a.ok).length,
         "swamp.actions.failed": actions.filter((a) => !a.ok).length,
         "swamp.degraded": decision.degraded ?? null,

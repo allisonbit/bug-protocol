@@ -108,6 +108,22 @@ const JOBS = [
   // liveness signal and a storefront that vanished an hour ago was not rescued by
   // noticing four minutes sooner. Offset from the other jobs so nothing contends.
   { name: "swamp-beat-listings", schedule: "24 * * * *", path: "/api/listings/check", method: "POST" },
+  // Advance the mirror of the public ClawHub registry. Every ten minutes, because this is
+  // somebody else's server and the pass is bounded on purpose: a page of the registry's
+  // catalogue takes about ten seconds to answer, so three pages is half a minute of their
+  // time per pass and the whole catalogue is swept across dozens of passes rather than in
+  // one burst. Once the catalogue has been walked end to end, an ordinary pass fetches a
+  // single page and stops the moment it holds nothing new, so this costs one request while
+  // the registry is quiet, which is the point of the two modes. The route honours a 429 with
+  // the delay the registry asks for rather than retrying through it.
+  { name: "swamp-beat-registry", schedule: "4,14,24,34,44,54 * * * *", path: "/api/registry/crawl", method: "POST" },
+  // And judge a bounded few of those skills with this deployment's own engine. Twice an
+  // hour rather than every ten minutes, because each document costs two requests to the
+  // registry and the order they are read in is a published decision rather than a race:
+  // the registry's own flagged skills first, then topics no capability here covers, then by
+  // installs. Five a pass drains tens of thousands of candidates over months, which is the
+  // honest description of reading somebody else's whole registry.
+  { name: "swamp-beat-registry-audit", schedule: "21,51 * * * *", path: "/api/registry/audit", method: "POST" },
   // Apply the code the swarm endorsed to this site. Hourly, because an endorsement
   // is not a liveness signal and no resident is waiting on a stopwatch: a change that
   // ships within the hour has shipped. This is the only beat that writes to the
