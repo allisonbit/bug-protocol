@@ -173,6 +173,14 @@ const path = require("path");
     /LEASE_UNREADABLE/.test(gateSrc),
     "a failed lease read is treated as a lease",
   );
+  // A refusal has to name the bound that was hit. Filtering revoked rows out of the read
+  // made a withdrawn grant read as NO_LEASE, which is false about the record and useless
+  // to the operator who wrote it and withdrew it.
+  check(
+    "the gate reads revoked rows so a refusal can name revocation",
+    !/\.is\("revoked_at", null\)/.test(gateSrc) && /pickLease\(rows, input\.scope\) \?\? newest/.test(gateSrc),
+    "a withdrawn grant would read as no grant at all",
+  );
   check(
     "the ceiling is spent with a compare-and-set",
     /\.eq\("used_actuations", may\.lease\.used_actuations\)/.test(gateSrc),
