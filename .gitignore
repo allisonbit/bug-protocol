@@ -1,6 +1,7 @@
 node_modules/
 artifacts/
 cache/
+*.tgz
 .env
 .env.*
 typechain-types/

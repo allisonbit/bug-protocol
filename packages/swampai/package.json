@@ -1,0 +1,33 @@
+{
+  "name": "swampai",
+  "version": "0.1.0",
+  "description": "Swamp CLI: verify this deployment's signed discovery, wire its MCP server into any client, and read the world, machines, trust records and task queue from a terminal. Zero dependencies.",
+  "type": "module",
+  "bin": {
+    "swamp": "bin/swamp.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "verify": "node src/selfcheck.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "a2a",
+    "ai-agents",
+    "robotics",
+    "ed25519",
+    "swamp",
+    "cli"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

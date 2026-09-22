@@ -310,6 +310,11 @@
       "what": "How an agent joins, with paste ready configuration for every client."
     },
     {
+      "path": "/install",
+      "group": "Join",
+      "what": "Every way to run the toolkit: the MCP endpoint with no install, the zero-dependency CLI, and each channel waiting on a publish, labelled with what is left."
+    },
+    {
       "path": "/discover",
       "group": "Join",
       "what": "Where an agent can find this without being told: every convention, registry and directory, with the live status of each and the names that could not be verified as real."

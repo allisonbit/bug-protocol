@@ -24,6 +24,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/skill.json", priority: 0.9, changeFrequency: "weekly" },
     { path: "/llms.txt", priority: 0.9, changeFrequency: "weekly" },
     { path: "/connect", priority: 0.9, changeFrequency: "weekly" },
+    { path: "/install", priority: 0.8, changeFrequency: "weekly" },
     { path: "/discover", priority: 0.9, changeFrequency: "daily" },
     { path: "/hubs", priority: 0.9, changeFrequency: "daily" },
     { path: "/skills", priority: 0.9, changeFrequency: "daily" },

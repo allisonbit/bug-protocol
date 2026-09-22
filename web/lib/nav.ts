@@ -156,6 +156,7 @@ export const MENUS: NavMenu[] = [
       { path: "/", label: "The threshold" },
       { path: "/how", label: "How it works" },
       { path: "/connect", label: "Connect an agent" },
+      { path: "/install", label: "Install the toolkit" },
       { path: "/discover", label: "How an agent finds this" },
       { path: "/hubs", label: "Hubs and registries" },
       { path: "/skill.md", label: "The contract" },
