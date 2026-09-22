@@ -170,7 +170,7 @@ export async function POST(req: Request) {
     .insert(duties.map((d) => ({ vulnerability_id: vuln.id, duty: d.duty, due_at: d.due_at })));
   if (dutyError) return fail("DUTIES_FAILED", dutyError.message, 500);
 
-  await admin
+  const { error: w1 } = await admin
     .from("events")
     .insert({
       topic: "vuln.opened",
@@ -188,7 +188,7 @@ export async function POST(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w1) console.warn("[write refused] events:vuln.opened: " + (w1.message ?? w1));
 
   return NextResponse.json(
     {
@@ -238,8 +238,11 @@ export async function PATCH(req: Request) {
   const duty = typeof body.duty === "string" ? body.duty.trim() : "";
   if (!duty) {
     if (!state) return fail("NOTHING_TO_DO", "Nothing to change: send `duty` to mark one met, or `state` to move the advisory.", 400);
-    await admin.from("machine_vulnerabilities").update(changed).eq("id", vuln.id);
-    await admin
+    const { error: stateErr } = await admin.from("machine_vulnerabilities").update(changed).eq("id", vuln.id);
+    // The reply below says the advisory moved. A refusal here would make that reply a
+    // description of a state the record does not hold, so it is an error instead.
+    if (stateErr) return fail("RECORD_FAILED", `The advisory could not be moved to ${state}: ${stateErr.message}`, 500);
+    const { error: w2 } = await admin
       .from("events")
       .insert({
         topic: state === "fixed" || state === "wontfix" ? "vuln.closed" : "vuln.opened",
@@ -250,7 +253,7 @@ export async function PATCH(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w2) console.warn("[write refused] events row: " + (w2.message ?? w2));
     return NextResponse.json({ ok: true, advisory_id: advisoryId, state, note: "The clock is unchanged; only what the fleet is told changed." }, { headers: { "cache-control": "no-store" } });
   }
 
@@ -267,17 +270,23 @@ export async function PATCH(req: Request) {
   if (!existing) {
     const derived = dutiesFor(vuln).find((d) => d.duty === duty);
     if (!derived) return fail("NOT_OWED", `The record does not owe a \`${duty}\` duty for this advisory, so marking one met would invent a duty rather than meet it.`, 400);
-    await admin.from("machine_vulnerability_duties").insert({ vulnerability_id: vuln.id, duty, due_at: derived.due_at, met_at: nowIso, met_by: String(body.evidence).trim().slice(0, 500), note: typeof body.note === "string" ? body.note.trim().slice(0, 500) : null });
+    const { error: metErr } = await admin.from("machine_vulnerability_duties").insert({ vulnerability_id: vuln.id, duty, due_at: derived.due_at, met_at: nowIso, met_by: String(body.evidence).trim().slice(0, 500), note: typeof body.note === "string" ? body.note.trim().slice(0, 500) : null });
+    // Marking a duty met is a claim about the world that only this row carries. If the
+    // write is refused the duty is still owed, so the reply says that rather than saying
+    // it was met.
+    if (metErr) return fail("DUTY_NOT_MET", `The citation for ${duty} could not be recorded: ${metErr.message}. The duty is still owed.`, 500);
   } else {
-    await admin
+    const { error: metErr } = await admin
       .from("machine_vulnerability_duties")
       .update({ met_at: nowIso, met_by: String(body.evidence).trim().slice(0, 500), note: typeof body.note === "string" ? body.note.trim().slice(0, 500) : null })
       .eq("id", (existing as { id: string }).id);
+    if (metErr) return fail("DUTY_NOT_MET", `The citation for ${duty} could not be recorded: ${metErr.message}. The duty is still owed.`, 500);
   }
 
-  await admin.from("machine_vulnerabilities").update(changed).eq("id", vuln.id);
+  const { error: vulnErr } = await admin.from("machine_vulnerabilities").update(changed).eq("id", vuln.id);
+  if (vulnErr) return fail("RECORD_FAILED", `The advisory was not updated alongside its duty: ${vulnErr.message}`, 500);
 
-  await admin
+  const { error: w3 } = await admin
     .from("events")
     .insert({
       topic: "vuln.duty.met",
@@ -294,7 +303,7 @@ export async function PATCH(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w3) console.warn("[write refused] events:vuln.duty.met: " + (w3.message ?? w3));
 
   return NextResponse.json(
     {

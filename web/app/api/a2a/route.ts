@@ -229,7 +229,7 @@ async function messageSend(
     if (gateError) return rpcError(id, -32000, `The gated task could not be recorded: ${gateError.message}`, 500);
     const gated = gateRow as { id: string; created_at: string };
 
-    await sb
+    const { error: w1 } = await sb
       .from("events")
       .insert({
         topic: "a2a.task.input",
@@ -246,17 +246,18 @@ async function messageSend(
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w1) console.warn("[write refused] events:a2a.task.input: " + (w1.message ?? w1));
 
     if (mandate) {
-      await sb.from("a2a_mandates").insert({
+      const { error: w2 } = await sb.from("a2a_mandates").insert({
         task_id: gated.id,
         caller,
         intent: mandate.intent,
         budget: mandate.budget,
         signature: mandate.signature,
         key_id: mandate.keyId,
-      }).then(undefined, () => null);
+      });
+      if (w2) console.warn("[write refused] a2a_mandates: " + (w2.message ?? w2));
     }
 
     return NextResponse.json(
@@ -355,7 +356,7 @@ async function messageSend(
     // simultaneous continuations cannot both release the task. Paid once means queued
     // once, and the second caller is told the task already moved rather than being
     // handed a second release of the same work.
-    const { data: releasedRow } = await sb
+    const { data: releasedRow, error: releaseErr } = await sb
       .from("a2a_tasks")
       .update({ state: "submitted", payment_gate: { ...gateTerms, ...metadata }, updated_at: new Date().toISOString() })
       .eq("id", held.id)
@@ -363,11 +364,18 @@ async function messageSend(
       .select("*")
       .maybeSingle();
     if (!releasedRow) {
-      return rpcError(id, -32000, `Task ${held.id} was released by another call a moment ago. The payment is recorded; the task has already been queued.`, 409);
+      return rpcError(
+        id,
+        -32000,
+        releaseErr
+          ? `Task ${held.id} could not be released: ${releaseErr.message}. The payment is recorded; the task is still held.`
+          : `Task ${held.id} was released by another call a moment ago. The payment is recorded; the task has already been queued.`,
+        409,
+      );
     }
     await bindPaymentToTask(sb, payment.id, held.id);
 
-    await sb
+    const { error: w3 } = await sb
       .from("events")
       .insert({
         topic: "a2a.task.submitted",
@@ -384,7 +392,7 @@ async function messageSend(
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w3) console.warn("[write refused] events:a2a.task.submitted: " + (w3.message ?? w3));
 
     return NextResponse.json(
       {
@@ -428,7 +436,7 @@ async function messageSend(
   // an Agent and a caller from outside is deliberately not one: this is the same
   // system-event shape the orchestrator tick uses, provenance "system", honest
   // about having no agent behind it.
-  await sb
+  const { error: w4 } = await sb
     .from("events")
     .insert({
       topic: "a2a.task.submitted",
@@ -448,7 +456,7 @@ async function messageSend(
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w4) console.warn("[write refused] events:a2a.task.submitted: " + (w4.message ?? w4));
 
   // The mandate lands after the task, because it references it. A refused
   // mandate write is reported to the caller in the error, with the task id it
@@ -470,7 +478,7 @@ async function messageSend(
       mandateError = mandateInsert.message;
     } else {
       mandateState = "recorded";
-      await sb
+      const { error: w5 } = await sb
         .from("events")
         .insert({
           topic: "a2a.mandate.signed",
@@ -486,7 +494,7 @@ async function messageSend(
           signed_ok: false,
           provenance: "system",
         })
-        .then(undefined, () => null);
+        if (w5) console.warn("[write refused] events:a2a.mandate.signed: " + (w5.message ?? w5));
     }
   }
 

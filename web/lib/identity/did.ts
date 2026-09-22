@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { SITE_URL } from "@/lib/site";
 import { SIGNING_KEY_ID, signingPublicKeyRaw } from "@/lib/discovery-signing";
 import { supabaseAdmin } from "@/lib/supabase";
+import { ed25519Jwk, ed25519Multibase } from "./key-encoding";
 
 /**
  * IDENTITY: did:web DOCUMENTS FOR THE PLATFORM AND EVERY AGENT.
@@ -32,33 +33,9 @@ import { supabaseAdmin } from "@/lib/supabase";
  *
  * THE KEY IS PUBLISHED TWICE ON PURPOSE. `publicKeyJwk` is what every DID-aware
  * consumer understands for Ed25519. `publicKeyMultibase` is what the did:key
- * convention uses, and the base58btc encoder for it is twenty lines below rather
- * than an undeclared dependency on a transitive package: an identity document that
- * breaks because a hoisting change moved a package is not an identity document.
+ * convention uses. Both encoders live in `./key-encoding` so the platform, agent and
+ * machine documents cannot drift into three spellings of the same key.
  */
-
-/** The multibase prefix for an Ed25519 public key: 0xed01, then the raw key. */
-const ED25519_MULTICODEC = Buffer.from([0xed, 0x01]);
-
-const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-/** base58btc, the encoding multibase identifiers use. */
-function base58btc(bytes: Buffer): string {
-  let n = BigInt("0x" + (bytes.toString("hex") || "0"));
-  let out = "";
-  while (n > 0n) {
-    const rem = Number(n % 58n);
-    out = BASE58_ALPHABET[rem] + out;
-    n = n / 58n;
-  }
-  // Every leading zero byte is a leading "1", which is what keeps fixed-width keys
-  // fixed-width after a round trip.
-  for (const byte of bytes) {
-    if (byte === 0) out = "1" + out;
-    else break;
-  }
-  return out;
-}
 
 /** The host a did:web document resolves through, without a scheme or a slash. */
 export function didHost(): string {
@@ -73,11 +50,6 @@ export function platformDid(): string {
 /** One agent's DID. The handle is the last path segment, so it must be URL-safe. */
 export function agentDid(handle: string): string {
   return `${platformDid()}:agents:${handle.trim().toLowerCase()}`;
-}
-
-/** base64url without padding, as JWK and JWS both want it. */
-function b64u(bytes: Buffer): string {
-  return bytes.toString("base64url");
 }
 
 /**
@@ -97,8 +69,8 @@ function verificationMethod(input: {
     id: input.id,
     type: "JsonWebKey2020",
     controller: input.controller,
-    publicKeyJwk: { kty: "OKP", crv: "Ed25519", x: b64u(input.raw), ...(input.label ? { kid: input.label } : {}) },
-    publicKeyMultibase: `z${base58btc(Buffer.concat([ED25519_MULTICODEC, input.raw]))}`,
+    publicKeyJwk: ed25519Jwk(input.raw, input.label),
+    publicKeyMultibase: ed25519Multibase(input.raw),
     ...(input.relationship ? { relationship: input.relationship } : {}),
   };
 }

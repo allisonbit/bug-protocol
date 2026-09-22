@@ -92,7 +92,7 @@ export async function POST(req: Request) {
     );
   }
 
-  await sb
+  const { error: w1 } = await sb
     .from("events")
     .insert({
       topic: "machine.key.rotated",
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w1) console.warn("[write refused] events:machine.key.rotated: " + (w1.message ?? w1));
 
   return NextResponse.json(
     {
@@ -177,7 +177,7 @@ export async function PUT(req: Request) {
   const { error } = await sb.from("machine_keys").insert({ machine_id: machine.id, kid, public_key: parsed.publicKey, algo: "ed25519", label });
   if (error) return fail("KEY_REFUSED", error.message, 500);
 
-  await sb
+  const { error: w2 } = await sb
     .from("events")
     .insert({
       topic: "machine.key.rotated",
@@ -193,7 +193,7 @@ export async function PUT(req: Request) {
       signed_ok: false,
       provenance: "machine",
     })
-    .then(undefined, () => null);
+    if (w2) console.warn("[write refused] events:machine.key.rotated: " + (w2.message ?? w2));
 
   return NextResponse.json(
     {
@@ -255,7 +255,7 @@ export async function PATCH(req: Request) {
   if (error) return fail("REVOKE_FAILED", error.message, 500);
   if (!data) return fail("NOT_FOUND", `No live key ${kid} on ${name}. It may already be revoked.`, 404);
 
-  await admin
+  const { error: w3 } = await admin
     .from("events")
     .insert({
       topic: "machine.key.revoked",
@@ -266,7 +266,7 @@ export async function PATCH(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w3) console.warn("[write refused] events:machine.key.revoked: " + (w3.message ?? w3));
 
   return NextResponse.json(
     {

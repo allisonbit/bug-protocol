@@ -135,15 +135,21 @@ export async function POST(req: Request) {
   const { error: secretErr } = await admin.from("machine_secrets").insert({ machine_id: m.id, api_token_hash: sha256Hex(token) });
   if (secretErr) {
     // The same rollback rule arrivals hold: a machine that half-exists is worse
-    // than one that was refused.
-    await admin.from("machines").delete().eq("id", m.id);
-    return fail("REGISTRATION_FAILED", secretErr.message, 500);
+    // than one that was refused. The rollback's own refusal is reported rather than
+    // assumed away, because a machine left behind by a failed rollback is exactly the
+    // half-existence this rule exists to prevent.
+    const { error: rollbackErr } = await admin.from("machines").delete().eq("id", m.id);
+    return fail(
+      "REGISTRATION_FAILED",
+      `${secretErr.message}${rollbackErr ? `. The machine row could not be rolled back either: ${rollbackErr.message}. It exists with no token, so it can never report.` : " The machine row was rolled back."}`,
+      500,
+    );
   }
 
   // One event on the bus: hardware arrived. Written as `system` because no
   // agent authored it, the platform recorded its own new resident.
   {
-    await admin
+    const { error: w1 } = await admin
       .from("events")
       .insert({
         topic: "machine.registered",
@@ -159,7 +165,7 @@ export async function POST(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w1) console.warn("[write refused] events:machine.registered: " + (w1.message ?? w1));
   }
 
   return NextResponse.json(
@@ -282,7 +288,11 @@ export async function PUT(req: Request) {
   if (error) return fail("REPORT_REFUSED", error.message, 500);
 
   const nowIso = new Date().toISOString();
-  await sb.from("machines").update({ last_report_at: nowIso, updated_at: nowIso }).eq("id", machine.id);
+  const { error: seenErr } = await sb.from("machines").update({ last_report_at: nowIso, updated_at: nowIso }).eq("id", machine.id);
+  // The readings are written; this only moves the clock the liveness badge reads. A
+  // refusal here is said out loud rather than swallowed, because a fleet that cannot
+  // record when it last heard from a robot shows a live robot as dead.
+  if (seenErr) console.warn(`[write refused] machines:last_report_at for ${machine.name}: ${seenErr.message}`);
 
   // ONE bus event per report, carrying what a reader needs: the count, the
   // telemetry names, and, for the two kinds that are news, the summaries.
@@ -301,7 +311,7 @@ export async function PUT(req: Request) {
       : parts.length > 0
         ? `${machine.name} reported ${readings.length} reading(s): ${parts.join(", ")}`
         : `${machine.name} reported ${readings.length} reading(s)`;
-    await admin
+    const { error: w2 } = await admin
       .from("events")
       .insert({
         topic: alerts.length > 0 ? "machine.alert" : "machine.reading",
@@ -324,7 +334,7 @@ export async function PUT(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w2) console.warn("[write refused] events row: " + (w2.message ?? w2));
   }
 
   // The command queue rides the same call, so a device on a schedule never
@@ -340,13 +350,17 @@ export async function PUT(req: Request) {
 
   const cmds = (pending as Pick<MachineCommand, "id" | "body" | "created_at">[] | null) ?? [];
   if (cmds.length > 0) {
-    await sb
+    const { error: deliverErr } = await sb
       .from("machine_commands")
       .update({ status: "delivered", delivered_at: nowIso })
       .in("id", cmds.map((c) => c.id));
+    // A command marked delivered is a claim the device has seen it. If the mark does
+    // not stick the command is handed out again on the next report, which is the safe
+    // direction, but the refusal is still recorded here rather than assumed.
+    if (deliverErr) console.warn(`[write refused] machine_commands:delivered for ${machine.name}: ${deliverErr.message}`);
     const adminOk = admin;
     if (adminOk) {
-      await adminOk
+      const { error: w3 } = await adminOk
         .from("events")
         .insert({
           topic: "machine.command",
@@ -362,7 +376,7 @@ export async function PUT(req: Request) {
           signed_ok: false,
           provenance: "system",
         })
-        .then(undefined, () => null);
+        if (w3) console.warn("[write refused] events:machine.command: " + (w3.message ?? w3));
     }
   }
 
@@ -417,7 +431,7 @@ export async function PATCH(req: Request) {
 
   const admin = supabaseAdmin();
   if (admin) {
-    await admin
+    const { error: w4 } = await admin
       .from("events")
       .insert({
         topic: "machine.command",
@@ -434,7 +448,7 @@ export async function PATCH(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w4) console.warn("[write refused] events:machine.command: " + (w4.message ?? w4));
   }
 
   return NextResponse.json({ ok: true, status }, { headers: { "cache-control": "no-store" } });

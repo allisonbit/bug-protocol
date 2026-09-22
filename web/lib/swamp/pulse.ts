@@ -191,14 +191,18 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       // moves to working only if it is still submitted, so two residents waking
       // together cannot both hold it. The event is written with the resident's
       // own attribution, runtime provenance, like every other action here.
-      const claimed = await sb
+      const { data: claimedData, error: claimErr } = await sb
         .from("a2a_tasks")
         .update({ state: "working", assignee: agent.id, updated_at: obs.now })
         .eq("id", plan.taskId)
         .eq("state", "submitted")
         .select("id")
         .maybeSingle();
-      const row = (claimed.data as { id: string } | null) ?? null;
+      // A refused claim and a lost race both leave no row, and they are not the same
+      // fact: one means the task was already taken, the other means the store would not
+      // take it. The refusal is reported so the second cannot masquerade as the first.
+      refused("claiming an a2a task", claimErr);
+      const row = (claimedData as { id: string } | null) ?? null;
       if (!row) return null;
       await enforceRateLimit(sb, agent.id);
       await appendEvent(sb, {
@@ -219,7 +223,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
       const task = taskRow as { message: { parts?: { text?: string }[] }; caller: string } | null;
       const ask = (task?.message?.parts ?? []).map((p) => (typeof p?.text === "string" ? p.text : "")).join(" ").slice(0, 300);
       const answer = `Taken by ${agent.handle}. What the record says, from the public log: the swamp currently holds ${obs.machines.length} connected machine(s) and ${obs.peers.length} known resident(s); the task's question was "${ask || "(empty)"}". A full answer needs an agent with a live claim to work it; this record states what the habitat can answer without one.`;
-      const done = await sb
+      const { data: doneData, error: doneErr } = await sb
         .from("a2a_tasks")
         .update({ state: "completed", result: { role: "agent", parts: [{ kind: "text", text: answer }] }, completed_at: obs.now, updated_at: obs.now })
         .eq("id", plan.taskId)
@@ -227,7 +231,8 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         .eq("assignee", agent.id)
         .select("id")
         .maybeSingle();
-      if ((done.data as { id: string } | null) ?? null) {
+      refused("completing an a2a task", doneErr);
+      if ((doneData as { id: string } | null) ?? null) {
         await appendEvent(sb, {
           topic: "a2a.task.completed",
           agent,
@@ -244,12 +249,12 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         // active on the record, which is the safe direction to fail in — an
         // auditor sees a mandate that looks unspent and can read the task's
         // own terminal state beside it.
-        await sb
+        const { error: consumeErr } = await sb
           .from("a2a_mandates")
           .update({ state: "consumed", consumed_at: obs.now })
           .eq("task_id", plan.taskId)
-          .eq("state", "active")
-          .then(undefined, () => null);
+          .eq("state", "active");
+        refused("consuming an a2a mandate", consumeErr);
         return `completed task ${plan.taskId.slice(0, 8)}`;
       }
       return `took task ${plan.taskId.slice(0, 8)}`;

@@ -225,7 +225,7 @@ export async function POST(req: Request) {
   }
   const release = data as Release;
 
-  await admin
+  const { error: w1 } = await admin
     .from("events")
     .insert({
       topic: "machine.release.published",
@@ -244,7 +244,7 @@ export async function POST(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w1) console.warn("[write refused] events:machine.release.published: " + (w1.message ?? w1));
 
   return NextResponse.json(
     {
@@ -319,7 +319,7 @@ export async function PATCH(req: Request) {
     );
   if (error) return fail("ROLLOUT_FAILED", error.message, 500);
 
-  await admin
+  const { error: w2 } = await admin
     .from("events")
     .insert({
       topic: "machine.release.offered",
@@ -336,7 +336,7 @@ export async function PATCH(req: Request) {
       signed_ok: false,
       provenance: "system",
     })
-    .then(undefined, () => null);
+    if (w2) console.warn("[write refused] events:machine.release.offered: " + (w2.message ?? w2));
 
   return NextResponse.json(
     {

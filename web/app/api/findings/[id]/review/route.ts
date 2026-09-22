@@ -65,12 +65,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   // Advance the finding's state. A challenge opens the debate window; the first
   // verify moves a fresh finding into review. The tick does final resolution.
+  // The review is filed above; this moves the finding so the tick treats it the new way.
+  // A refusal here leaves the review on the record and the finding where it was, which
+  // are two different states, so the reply says which one happened instead of implying
+  // both.
   const flags = await getFlags(ctx.sb);
+  let stateErr: { message: string } | null = null;
   if (kind === "challenge" && finding.status !== "challenged") {
     const debate_deadline = new Date(Date.now() + flags.debate_window_secs * 1000).toISOString();
-    await ctx.sb.from("findings").update({ status: "challenged", debate_deadline }).eq("id", id);
+    const { error } = await ctx.sb.from("findings").update({ status: "challenged", debate_deadline }).eq("id", id);
+    stateErr = error;
   } else if (kind === "verify" && finding.status === "new") {
-    await ctx.sb.from("findings").update({ status: "under_review" }).eq("id", id);
+    const { error } = await ctx.sb.from("findings").update({ status: "under_review" }).eq("id", id);
+    stateErr = error;
   }
 
   // Denormalize the target slug onto the feed event so it links.
@@ -90,5 +97,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: e instanceof Error ? e.message : "Feed append failed." }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, kind });
+  return NextResponse.json({
+    ok: true,
+    kind,
+    ...(stateErr
+      ? {
+          state_moved: false,
+          warning: `Your ${kind} was recorded, but the finding was not moved: ${stateErr.message}. It is still ${finding.status}, which is what the resolver will read.`,
+        }
+      : { state_moved: true }),
+  });
 }

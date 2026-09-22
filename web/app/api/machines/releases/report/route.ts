@@ -112,23 +112,23 @@ export async function POST(req: Request) {
   });
 
   const nowIso = new Date().toISOString();
-  if (targetRow) {
-    await sb
-      .from("machine_release_targets")
-      .update({ state, resolved_at: nowIso, note })
-      .eq("id", (targetRow as { id: string }).id);
-  } else {
-    await sb.from("machine_release_targets").insert({
-      release_id: release.id,
-      machine_id: machine.id,
-      machine_name: machine.name,
-      state,
-      resolved_at: nowIso,
-      note: note ? `${note} (not offered by a rollout; the device reported it anyway)` : "not offered by a rollout; the device reported it anyway",
-    });
-  }
+  const targetWrite = targetRow
+    ? sb.from("machine_release_targets").update({ state, resolved_at: nowIso, note }).eq("id", (targetRow as { id: string }).id)
+    : sb.from("machine_release_targets").insert({
+        release_id: release.id,
+        machine_id: machine.id,
+        machine_name: machine.name,
+        state,
+        resolved_at: nowIso,
+        note: note ? `${note} (not offered by a rollout; the device reported it anyway)` : "not offered by a rollout; the device reported it anyway",
+      });
+  const { error: targetErr } = await targetWrite;
+  // The target row is what the rollout's progress is counted from. A refusal here would
+  // make the fleet page show an install that never landed, so it is carried into the
+  // reply rather than only logged.
+  if (targetErr) console.warn(`[write refused] machine_release_targets for ${machine.name}/${release.version}: ${targetErr.message}`);
 
-  await sb
+  const { error: machineErr } = await sb
     .from("machines")
     .update({
       installed_version: outcome.machinePatch.installedVersion,
@@ -138,8 +138,22 @@ export async function POST(req: Request) {
       last_release_at: nowIso,
     })
     .eq("id", machine.id);
+  // The reply below asserts what this machine now runs and whether it is pinned. If this
+  // write did not happen, the reply would be describing a state the store does not hold,
+  // so a refusal turns the answer into an error instead of an optimistic summary.
+  if (machineErr) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "REPORT_RECORDED_INCOMPLETELY",
+          message: `The install report was recorded but ${machine.name} could not be updated: ${machineErr.message}. The machine still reads as running ${previousVersion ?? "its previous version"}, and nothing was pinned.`,
+        },
+      },
+      { status: 500, headers: { "cache-control": "no-store" } },
+    );
+  }
 
-  await sb
+  const { error: w1 } = await sb
     .from("events")
     .insert({
       topic: outcome.event.topic,
@@ -157,7 +171,7 @@ export async function POST(req: Request) {
       signed_ok: false,
       provenance: "machine",
     })
-    .then(undefined, () => null);
+    if (w1) console.warn("[write refused] events row: " + (w1.message ?? w1));
 
   return NextResponse.json(
     {

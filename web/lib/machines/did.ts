@@ -1,4 +1,5 @@
 import type { Machine } from "@/lib/agents/types";
+import { ed25519Jwk, ed25519Multibase } from "@/lib/identity/key-encoding";
 import { activeKey, keyState, type MachineKey } from "./identity";
 
 /**
@@ -21,6 +22,14 @@ import { activeKey, keyState, type MachineKey } from "./identity";
  * with two live keys would force a verifier to guess which one signed a report.
  * Retired keys stay in the document behind a revocation-or-retirement assertion, so
  * a report signed before a rotation still has a key to check against.
+ *
+ * THE KEY IS ENCODED THE WAY A RESOLVER EXPECTS, NOT THE WAY THIS STORE HAPPENS TO
+ * KEEP IT. The rows hold raw hex, but a JsonWebKey2020 method is a JWK: a document
+ * that declares that type and then publishes only hex, or a null multibase, gives a
+ * conformant consumer nothing to verify with, however readable it looks to us. So
+ * every method carries `publicKeyJwk` and `publicKeyMultibase` computed by the same
+ * encoders the platform and agent documents use, and keeps `publicKeyHex` as the
+ * store's own spelling for readers of this platform.
  */
 
 /** The DID for a machine on this deployment. */
@@ -61,7 +70,8 @@ export type MachineDidDocument = {
     id: string;
     type: string;
     controller: string;
-    publicKeyMultibase: null;
+    publicKeyJwk: { kty: string; crv: string; x: string; kid?: string };
+    publicKeyMultibase: string;
     publicKeyHex: string;
     retiredAt: string | null;
     revokedAt: string | null;
@@ -87,23 +97,28 @@ export function machineDidDocument(input: {
 }): MachineDidDocument {
   const did = machineDid(input.machine.name, input.siteUrl);
   const current = activeKey(input.keys);
-  const verificationMethod = input.keys.map((k) => ({
-    id: `${did}#${k.kid}`,
-    type: "JsonWebKey2020",
-    controller: did,
-    // Only hex, deliberately: a multibase form we did not compute would be a second
-    // encoding of the same key and a chance for the two to disagree.
-    publicKeyMultibase: null,
-    publicKeyHex: k.public_key,
-    retiredAt: k.retired_at ?? null,
-    revokedAt: k.revoked_at ?? null,
-    note:
-      keyState(k) === "active"
-        ? "The key this machine signs with now."
-        : keyState(k) === "revoked"
-          ? `Revoked${k.revoked_reason ? `: ${k.revoked_reason}` : ""}. Nothing signed with it is accepted.`
-          : "Retired by a rotation. It verifies only reports inside the rotation grace window.",
-  }));
+  const verificationMethod = input.keys.map((k) => {
+    const raw = Buffer.from(k.public_key.replace(/^0x/i, ""), "hex");
+    return {
+      id: `${did}#${k.kid}`,
+      type: "JsonWebKey2020",
+      controller: did,
+      // The same encoders the platform and agent documents use, so the three cannot
+      // disagree about how one key is spelled.
+      publicKeyJwk: ed25519Jwk(raw, k.kid),
+      publicKeyMultibase: ed25519Multibase(raw),
+      // The store's own spelling, kept because this platform's own readers use it.
+      publicKeyHex: k.public_key,
+      retiredAt: k.retired_at ?? null,
+      revokedAt: k.revoked_at ?? null,
+      note:
+        keyState(k) === "active"
+          ? "The key this machine signs with now."
+          : keyState(k) === "revoked"
+            ? `Revoked${k.revoked_reason ? `: ${k.revoked_reason}` : ""}. Nothing signed with it is accepted.`
+            : "Retired by a rotation. It verifies only reports inside the rotation grace window.",
+    };
+  });
 
   return {
     "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"],

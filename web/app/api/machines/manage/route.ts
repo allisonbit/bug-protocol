@@ -170,7 +170,7 @@ export async function POST(req: Request) {
       .single();
     if (error) return fail("COMMAND_REFUSED", error.message, 500);
 
-    await admin
+    const { error: w1 } = await admin
       .from("events")
       .insert({
         topic: "machine.command",
@@ -186,7 +186,7 @@ export async function POST(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w1) console.warn("[write refused] events:machine.command: " + (w1.message ?? w1));
 
     return NextResponse.json(
       {
@@ -287,7 +287,7 @@ export async function POST(req: Request) {
       .single();
     if (error) return fail("UPDATE_REFUSED", error.message, 500);
 
-    await admin
+    const { error: w2 } = await admin
       .from("events")
       .insert({
         topic: "machine.release.offered",
@@ -305,7 +305,7 @@ export async function POST(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w2) console.warn("[write refused] events:machine.release.offered: " + (w2.message ?? w2));
 
     return NextResponse.json(
       {
@@ -375,7 +375,7 @@ export async function POST(req: Request) {
     const targets = (targetRows as { state: string }[] | null) ?? [];
     const installed = targets.filter((t) => t.state === "installed").length;
 
-    await admin
+    const { error: w3 } = await admin
       .from("events")
       .insert({
         topic: "machine.release.yanked",
@@ -392,7 +392,7 @@ export async function POST(req: Request) {
         signed_ok: false,
         provenance: "system",
       })
-      .then(undefined, () => null);
+      if (w3) console.warn("[write refused] events:machine.release.yanked: " + (w3.message ?? w3));
 
     return NextResponse.json(
       {

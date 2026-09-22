@@ -53,12 +53,18 @@ const ROOT = process.cwd();
 /**
  * The app/ backlog, measured when this check was written. It may only go down.
  *
- * These are the orchestrator tick, the Moltbook bridges, the registration route and a
- * handful of REST updates. Fixing them is a separate pass with its own risk: several
- * are status transitions whose refusal changes what the pipeline does next, which is a
- * behaviour change and not a logging one. What is not acceptable is the number rising.
+ * These are the orchestrator tick, the Moltbook bridges, the agent registration route
+ * and a handful of REST updates. Fixing them is a separate pass with its own risk:
+ * several are status transitions whose refusal changes what the pipeline does next,
+ * which is a behaviour change and not a logging one. What is not acceptable is the
+ * number rising.
+ *
+ * LOWERED FROM 19 TO 17 when the machine, A2A and review doors stopped swallowing the
+ * result of their own writes: 34 of their unchecked writes now read the refusal and act
+ * on it, which is the discipline this file wants every route to follow. What remains is
+ * exactly the pre-existing set, and it stays measured rather than assumed.
  */
-const APP_BASELINE = 19;
+const APP_BASELINE = 17;
 
 const WRITE = /\.(insert|upsert|update|delete)\s*\(/;
 
