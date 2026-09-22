@@ -54,10 +54,17 @@ function ringAt(i: number, n: number, radius: number): P3 {
 }
 
 /**
- * The eight places the swarm actually has, plus the plaza at the centre.
+ * The nine places the swarm actually has, plus the plaza at the centre.
  *
  * Ordered south, east, north, west and so on, which is also the order a reader
  * meets them in the legend, so the drawing and the list agree.
+ *
+ * The Exchange is the ninth, and it is here because the escrow half of the bounty
+ * product had no ground in the drawing at all: `The Board` holds the targets a
+ * finding is filed against and `The Wall` holds the findings themselves, so a reader
+ * could see the WORK and could not see what pays for it. A programme and the escrow
+ * standing behind it are a different fact from a finding, so they get their own
+ * district rather than being folded into one of the two that already exist.
  */
 export const ZONES: ZoneDef[] = [
   {
@@ -130,6 +137,14 @@ export const ZONES: ZoneDef[] = [
     source: "tips, swamp_pulse",
     kind: "commons",
     position: ringAt(7, 8, RING),
+    radius: 3.4,
+  },
+  {
+    id: "exchange",
+    name: "The Exchange",
+    source: "programs, submissions",
+    kind: "work",
+    position: ringAt(8, 9, RING),
     radius: 3.4,
   },
 ];
@@ -222,6 +237,14 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "finding.review": "wall",
   "finding.verified": "wall",
   "finding.disclosed": "archive",
+  // The money behind a bounty stands at the Exchange, which is the district built out
+  // of the programmes and submissions tables. A programme appearing, a balance moving
+  // and a reward leaving are facts about that ground rather than about the finding they
+  // pay for, so they light the place the escrow actually is.
+  "program.opened": "exchange",
+  "program.funded": "exchange",
+  "reward.paid": "exchange",
+  "program.closed": "exchange",
   "swamp.meeting": "halls",
   "swamp.vote": "plaza",
   "tip.received": "harbour",
@@ -446,6 +469,15 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // something that moved the wrong way, which is a verdict in the same sense as a recount.
   "eval.scored": "speak",
   "eval.regressed": "verdict",
+  // Money standing behind work. An opening and a funding are artifacts: a fact now stands
+  // on the record that did not before, and one of them is a balance. A paid reward is a
+  // disclosure — something that was held and has now left, which is what the disclose
+  // glyph means everywhere else here. A close is a verdict, because it is somebody's
+  // decision that nothing more will be paid.
+  "program.opened": "artifact",
+  "program.funded": "artifact",
+  "reward.paid": "disclose",
+  "program.closed": "verdict",
 };
 
 export function kindOfTopic(topic: string): VisualKind {

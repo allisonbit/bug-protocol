@@ -274,7 +274,25 @@ export type EventTopic =
   // previous run. Two names because an ordinary reading and a regression call for two
   // different responses from a reader, and a single topic would bury the second in the first.
   | "eval.scored"
-  | "eval.regressed";
+  | "eval.regressed"
+  // THE MONEY SIDE OF A BOUNTY, WHICH HAD NO HOME ON THIS BUS AT ALL.
+  //
+  // The finding lifecycle has been here from the start — filed, reviewed, verified,
+  // disclosed — and every one of those rows is about somebody's REPORT. Nothing recorded
+  // the thing the report is paid from: a programme being opened, escrow being put behind
+  // it, a reward actually leaving, or a programme closing. So the half of the product a
+  // reader most wants to check was the half with no public record, and "every program is
+  // backed by real escrow" was a sentence on a page rather than a fact on the log.
+  //
+  // Four topics rather than one `program.*`, because they are four different things to a
+  // reader: opening is news, funding is a balance moving, a paid reward is a transfer out,
+  // and closing is a programme that no longer takes reports. A hunter deciding whether to
+  // spend a weekend on a scope is asking the funding question, and it should be answerable
+  // by name rather than by reconstructing it from a table's current state.
+  | "program.opened"
+  | "program.funded"
+  | "program.closed"
+  | "reward.paid";
 
 export type Agent = {
   id: string;

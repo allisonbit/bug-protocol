@@ -132,6 +132,50 @@ export async function getProgramBySlug(slug: string): Promise<PublicProgram | nu
   return (data as unknown as PublicProgram) ?? null;
 }
 
+/**
+ * The escrow ledger: the money side of the bounty product, in public.
+ *
+ * The finding lifecycle has been on the log from the start, but the thing a finding
+ * is paid from had no public record at all. This reads the two halves that do: the
+ * programmes table for what stands in escrow right now, and the four escrow topics
+ * on the append-only bus for every movement of it — opened, funded, paid, closed —
+ * so "backed by real escrow" is a row a reader can open rather than a sentence they
+ * have to believe.
+ */
+export type EscrowLedger = {
+  programmes: PublicProgram[];
+  /** The escrow history, newest first, straight off the bus. */
+  events: SwampEvent[];
+  totals: { pool: number; paid: number; programmes: number };
+};
+
+const ESCROW_TOPICS = ["program.opened", "program.funded", "reward.paid", "program.closed"];
+
+export async function getEscrowLedger(limit = 80): Promise<EscrowLedger> {
+  const sb = await supabaseServer();
+  if (!sb) return { programmes: [], events: [], totals: { pool: 0, paid: 0, programmes: 0 } };
+  const [programmes, events] = await Promise.all([
+    sb
+      .from("programs")
+      .select("*, owner_profile:profiles(handle,display_name,avatar_url)")
+      .in("status", ["live", "paused", "closed"])
+      .order("pool", { ascending: false }),
+    sb.from("events").select("*").in("topic", ESCROW_TOPICS).order("seq", { ascending: false }).limit(limit),
+  ]);
+  if (programmes.error) logQueryError("getEscrowLedger:programs", programmes.error);
+  if (events.error) logQueryError("getEscrowLedger:events", events.error);
+  const rows = (programmes.data as unknown as PublicProgram[]) ?? [];
+  return {
+    programmes: rows,
+    events: (events.data as SwampEvent[]) ?? [],
+    totals: {
+      pool: rows.reduce((s, p) => s + Number(p.pool || 0), 0),
+      paid: rows.reduce((s, p) => s + Number(p.paid_out || 0), 0),
+      programmes: rows.length,
+    },
+  };
+}
+
 export type SubmissionWithHunter = Submission & {
   hunter_profile: Pick<Profile, "handle" | "display_name" | "avatar_url"> | null;
 };

@@ -8,6 +8,12 @@ import { chainMeta } from "@/lib/chains";
 import { readChainProgram, readChainSubmission, toBugAmount } from "@/lib/onchain";
 import { mirrorChainSubmission } from "@/lib/chainMirror";
 import { slugify, type Severity, type SubmissionStatus, type ProgramStatus } from "@/lib/db";
+import {
+  emitProgramOpened,
+  emitProgramFunded,
+  emitRewardPaid,
+  emitProgramClosed,
+} from "@/lib/bounty/escrow";
 
 /**
  * Server actions: the real write path. Each runs through the request-scoped,
@@ -53,6 +59,14 @@ export async function createProgram(formData: FormData) {
 
   const status: ProgramStatus = str(formData.get("status")) === "live" ? "live" : "draft";
 
+  const currency = str(formData.get("currency")) || "USDC";
+  const tiers = {
+    tier_low: num(formData.get("tier_low")),
+    tier_medium: num(formData.get("tier_medium")),
+    tier_high: num(formData.get("tier_high")),
+    tier_critical: num(formData.get("tier_critical")),
+  };
+
   const { data, error } = await sb
     .from("programs")
     .insert({
@@ -62,11 +76,8 @@ export async function createProgram(formData: FormData) {
       summary: str(formData.get("summary")) || null,
       description: str(formData.get("description")) || null,
       targets,
-      currency: str(formData.get("currency")) || "USDC",
-      tier_low: num(formData.get("tier_low")),
-      tier_medium: num(formData.get("tier_medium")),
-      tier_high: num(formData.get("tier_high")),
-      tier_critical: num(formData.get("tier_critical")),
+      currency,
+      ...tiers,
       pool: num(formData.get("pool")),
       response_days: num(formData.get("response_days"), 14),
       safe_harbor: formData.get("safe_harbor") === "on",
@@ -76,6 +87,13 @@ export async function createProgram(formData: FormData) {
     .single();
 
   if (error) throw new Error(error.message);
+
+  // A live programme is news; a draft is not. The escrow side of the product had
+  // no public row at all before this, so a programme that takes reports now says
+  // so on the bus the moment it does.
+  if (status === "live") {
+    await emitProgramOpened({ slug: data.slug, name, currency, ...tiers });
+  }
 
   revalidatePath("/programs");
   revalidatePath("/dashboard");
@@ -351,10 +369,12 @@ export async function triageSubmission(formData: FormData) {
 
   const { data: progData } = await sb
     .from("programs")
-    .select("id,owner,onchain_program_id")
+    .select("id,owner,onchain_program_id,slug,name,currency")
     .eq("id", sub.program_id)
     .maybeSingle();
-  const program = progData as { id: string; owner: string; onchain_program_id: number | null } | null;
+  const program = progData as
+    | { id: string; owner: string; onchain_program_id: number | null; slug: string; name: string; currency: string }
+    | null;
   if (!program || program.owner !== user.id) {
     throw new Error("Only the program owner can triage a finding.");
   }
@@ -377,6 +397,26 @@ export async function triageSubmission(formData: FormData) {
     const { error } = await sb.from("submissions").update({ triage_note: note || null }).eq("id", id);
     if (error) throw new Error(error.message);
 
+    // The escrow moved on chain, and the public trace of that had nowhere to go
+    // before this. Read the mirrored row back and announce the payout the contract
+    // decided, not a number from the form.
+    const { data: after } = await sb
+      .from("submissions")
+      .select("status,reward,assigned_severity,severity")
+      .eq("id", id)
+      .maybeSingle();
+    const a = after as { status: string; reward: number | null; assigned_severity: string | null; severity: string } | null;
+    if (a && a.status === "accepted" && Number(a.reward ?? 0) > 0) {
+      await emitRewardPaid({
+        slug: program.slug,
+        name: program.name,
+        currency: program.currency,
+        amount: Number(a.reward),
+        severity: a.assigned_severity ?? a.severity,
+        submission: id,
+      });
+    }
+
     revalidatePath(`/submissions/${id}`);
     revalidatePath("/dashboard");
     return;
@@ -396,6 +436,20 @@ export async function triageSubmission(formData: FormData) {
 
   const { error } = await sb.from("submissions").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
+
+  // An accepted finding with money on it is a payout, and a payout belongs on the
+  // public record the way a funded programme does. Only on acceptance, and only
+  // when a reward was actually set: an accepted zero-severity report moved nothing.
+  if (status === "accepted" && reward > 0) {
+    await emitRewardPaid({
+      slug: program.slug,
+      name: program.name,
+      currency: program.currency,
+      amount: reward,
+      severity: assigned || "medium",
+      submission: id,
+    });
+  }
 
   revalidatePath(`/submissions/${id}`);
   revalidatePath("/dashboard");
@@ -455,6 +509,28 @@ export async function setProgramStatus(formData: FormData) {
   const slug = str(formData.get("slug"));
   const status = str(formData.get("status")) as ProgramStatus;
 
+  // Read the row first so the bus can say what changed rather than only that
+  // something did, and so a reopening programme carries its own balance again.
+  const { data: before } = await sb
+    .from("programs")
+    .select("status,slug,name,currency,pool,paid_out,tier_low,tier_medium,tier_high,tier_critical")
+    .eq("id", id)
+    .maybeSingle();
+  const prior = before as
+    | {
+        status: string;
+        slug: string;
+        name: string;
+        currency: string;
+        pool: number;
+        paid_out: number;
+        tier_low: number;
+        tier_medium: number;
+        tier_high: number;
+        tier_critical: number;
+      }
+    | null;
+
   // RLS already restricts updates to the owner; scope by owner too for belt-and-braces.
   const { error } = await sb
     .from("programs")
@@ -462,6 +538,65 @@ export async function setProgramStatus(formData: FormData) {
     .eq("id", id)
     .eq("owner", user.id);
   if (error) throw new Error(error.message);
+
+  // The listing change is the escrow product's own news, so it goes on the same
+  // record the money does: going live is a programme opening, and closing is the
+  // end of it, announced with what it paid out before it stopped.
+  if (prior && prior.status !== status) {
+    if (status === "live") {
+      await emitProgramOpened({
+        slug: prior.slug,
+        name: prior.name,
+        currency: prior.currency,
+        tier_low: prior.tier_low,
+        tier_medium: prior.tier_medium,
+        tier_high: prior.tier_high,
+        tier_critical: prior.tier_critical,
+      });
+    } else if (status === "closed") {
+      await emitProgramClosed({ slug: prior.slug, name: prior.name, currency: prior.currency, paid_out: Number(prior.paid_out ?? 0) });
+    }
+  }
+
+  revalidatePath(`/programs/${slug}`);
+  revalidatePath("/programs");
+  revalidatePath("/dashboard");
+}
+
+/**
+ * Puts more money behind a programme, and says so on the record.
+ *
+ * The pool could previously only be set once, in the create form. A programme that
+ * wanted to grow its rewards had to be closed and recreated, which threw away its
+ * history and its findings: the escrow number a hunter is weighing was frozen at
+ * birth. This is the missing top-up, and it emits `program.funded` with the new
+ * balance so a reader sees the total rather than having to add the deltas up.
+ */
+export async function fundProgram(formData: FormData) {
+  const sb = await supabaseServer();
+  const user = await currentUser();
+  if (!sb || !user) redirect("/login");
+
+  const id = str(formData.get("program_id"));
+  const slug = str(formData.get("slug"));
+  const amount = num(formData.get("amount"));
+  if (!id) throw new Error("A program id is required.");
+  if (amount <= 0) throw new Error("A top-up has to be a positive amount.");
+
+  const { data: prog } = await sb
+    .from("programs")
+    .select("pool,name,currency,status")
+    .eq("id", id)
+    .eq("owner", user.id)
+    .maybeSingle();
+  const p = prog as { pool: number; name: string; currency: string; status: string } | null;
+  if (!p) throw new Error("No such program, or you don't own it.");
+
+  const pool = Number(p.pool ?? 0) + amount;
+  const { error } = await sb.from("programs").update({ pool }).eq("id", id).eq("owner", user.id);
+  if (error) throw new Error(error.message);
+
+  await emitProgramFunded({ slug: slug || id, name: p.name, currency: p.currency, pool, added: amount });
 
   revalidatePath(`/programs/${slug}`);
   revalidatePath("/programs");

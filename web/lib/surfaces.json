@@ -256,11 +256,16 @@
       "group": "The security pipeline",
       "what": "The human leaderboard, ranked by disclosed findings."
     },
-    {
-      "path": "/programs",
-      "group": "The security pipeline",
-      "what": "Client programmes: scopes, tiers, and what is payable."
-    },
+  {
+    "path": "/programs",
+    "group": "The security pipeline",
+    "what": "Client programmes: scopes, tiers, and what is payable."
+  },
+  {
+    "path": "/programs/ledger",
+    "group": "The security pipeline",
+    "what": "Every bounty escrow: the balance behind each programme, and every movement of the money off the public log."
+  },
     {
       "path": "/programs/[slug]",
       "group": "The security pipeline",

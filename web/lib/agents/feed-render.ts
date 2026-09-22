@@ -165,6 +165,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   "lesson.refuted": { label: "lesson failed", dot: "bg-warn", tone: "text-warn" },
   "eval.scored": { label: "scored", dot: "bg-cyan", tone: "text-chalk" },
   "eval.regressed": { label: "regressed", dot: "bg-warn", tone: "text-warn" },
+  // The money side of a bounty. An opening reads as work rather than as an alarm, and
+  // funding takes the lime dot because escrow arriving is the one good fact a hunter is
+  // looking for. A paid reward is the loudest of the four on purpose: it is the promise
+  // the whole product rests on, and a reader scanning the bus should be able to see one
+  // land. A close is neutral, because a programme ending is ordinary news.
+  "program.opened": { label: "programme opened", dot: "bg-cyan", tone: "text-chalk" },
+  "program.funded": { label: "escrow funded", dot: "bg-lime", tone: "text-bug" },
+  "reward.paid": { label: "reward paid", dot: "bg-good", tone: "text-good" },
+  "program.closed": { label: "programme closed", dot: "bg-mist", tone: "text-mist" },
 };
 
 /** What an unrecognised topic renders as: a neutral dot carrying the raw topic
@@ -432,6 +441,37 @@ export function summarize(e: SwampEvent): string {
       const network = str(p.network, 40);
       const settled = p.settlement_ref ? `, settled as ${str(p.settlement_ref, 80)}` : ", verified only";
       return amount ? `payment of ${amount} atomic USDC on ${network}${settled}` : str(p.text) || "a payment was recorded";
+    }
+    // ---- the escrow behind a bounty ------------------------------------------
+    // The money a finding is paid from, which the bus had no row for. Each carries a
+    // prebuilt `text` where a route builds one, and the fallbacks read the fields the
+    // doors actually set, so a bounty reads as a programme with a balance rather than
+    // as the word "funded".
+    case "program.opened": {
+      const name = str(p.program, 60);
+      const top = str(p.top_reward, 40);
+      return str(p.text) || (name ? `a programme opened: ${name}${top ? `, up to ${top}` : ""}` : "a programme opened");
+    }
+    case "program.funded": {
+      const name = str(p.program, 60);
+      const amount = str(p.amount, 40);
+      const pool = str(p.pool, 40);
+      if (str(p.text)) return str(p.text);
+      if (!name) return "escrow was funded";
+      return `${amount ? `${amount} went into` : "escrow funded for"} ${name}${pool ? `, now ${pool}` : ""}`;
+    }
+    case "reward.paid": {
+      const name = str(p.program, 60);
+      const amount = str(p.amount, 40);
+      const severity = str(p.severity, 16);
+      if (str(p.text)) return str(p.text);
+      if (!amount) return name ? `a reward was paid out of ${name}` : "a reward was paid";
+      return `${amount}${severity ? ` for a ${severity}` : ""} finding left escrow${name ? ` in ${name}` : ""}`;
+    }
+    case "program.closed": {
+      const name = str(p.program, 60);
+      const paid = str(p.paid_out, 40);
+      return str(p.text) || (name ? `${name} closed${paid ? `, having paid out ${paid}` : ""}` : "a programme closed");
     }
     // ---- the pulse's own trace ----------------------------------------------
     // One row per agent per beat. It carries no prebuilt text, so the sentence is
