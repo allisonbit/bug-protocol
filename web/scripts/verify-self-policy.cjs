@@ -54,6 +54,13 @@ const fs = require("fs");
     check(`${id} cannot be disabled`, /structural/.test(S.checkPolicyOp({ op: "disable", ruleId: id }).reason));
   }
   check("announce really is r11 in the shipped list", P.REFLEX_RULES.some((r) => r.id === "r11" && r.intent === "announce"));
+  // THE FLOOR IS ONLY A FLOOR IF THE IDS NAME RULES THAT EXIST. The set held "idle"
+  // once, and no rule has ever carried that id, so the protection it promised was
+  // vacuum. Each structural id must name a rule in the shipped list, and the
+  // intents the floor is FOR must be the intents those rules carry.
+  for (const [id, intent] of [["r11", "announce"], ["r34", "propose_metabolism"], ["r10", "idle"]]) {
+    check(`structural ${id} is in the shipped list and carries ${intent}`, P.REFLEX_RULES.some((r) => r.id === id && r.intent === intent));
+  }
 
   // ---- 3. The bundle bounds --------------------------------------------------
   check("an empty bundle is refused", S.checkOpsBundle([]).ok === false);
@@ -116,6 +123,23 @@ const fs = require("fs");
   check("the brain publishes the digest over what actually runs", /obs\.policyAmended\s*\?\s*obs\.policyDigest/.test(fs.readFileSync("lib/swamp/brain.ts", "utf8")));
   const actions = fs.readFileSync("lib/agents/actions.ts", "utf8");
   check("self_policy is a registered vote kind", actions.includes('"self_policy"'));
+
+  // ---- 6. The MCP door -------------------------------------------------------
+  // The swarm's dials are only open to the residents that live here if the doors
+  // that reach them are on the hosted MCP surface, with the bounds IN THE SCHEMA:
+  // an agent that cannot see a bound before proposing is being set up to waste
+  // the swarm's ballot window on a refusal.
+  const tools = fs.readFileSync("lib/mcp/tools.ts", "utf8");
+  for (const name of ["propose_metabolism", "propose_self_policy"]) {
+    check(`${name} is on the MCP surface`, tools.includes(`name: "${name}"`));
+  }
+  const meta = tools.match(/name: "propose_metabolism"[\s\S]{0,4000}?name: "propose_self_policy"[\s\S]{0,5000}?(?=\n  \{\n    name: ")/);
+  check("the metabolism schema states the pulse_max_agents bounds", meta !== null && /0 \(every hosted resident\) or 1-100/.test(meta[0]));
+  check("the metabolism schema states the per-wake bounds", meta !== null && /pulse_actions_per_agent: 1-8/.test(meta[0]));
+  check("the self-policy schema states the weight bounds", meta !== null && /0-1000/.test(meta[0]));
+  check("the self-policy schema names the structural rules", meta !== null && /r11 \(announce\)/.test(meta[0]) && /r34 \(the homeostat\)/.test(meta[0]) && /r10 \(idle\)/.test(meta[0]));
+  check("the self-policy schema says there is no reorder op", meta !== null && /no reorder/.test(meta[0]));
+  check("propose_vote points at the dedicated doors", /propose_vote[\s\S]{0,600}propose_metabolism and propose_self_policy/.test(tools));
 
   console.log(failed === 0 ? "\nall self-policy checks pass" : `\n${failed} check(s) failed`);
   process.exit(failed === 0 ? 0 : 1);

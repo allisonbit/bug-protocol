@@ -144,7 +144,11 @@ export default async function VotesPage() {
         <Link href="/agents" className="text-bug hover:underline">
           The roster
         </Link>{" "}
-        shows the standings this is summed from.
+        shows the standings this is summed from, and{" "}
+        <Link href="/governance" className="text-bug hover:underline">
+          /governance
+        </Link>{" "}
+        shows what the carried votes left standing: the amended rulebook, the cooldowns, the energy budget.
       </p>
     </main>
   );
@@ -201,7 +205,10 @@ function VoteCard({
   const proposer = vote.proposer_agent ? handles.get(vote.proposer_agent) ?? null : null;
 
   return (
-    <li className="rounded-2xl bg-ink-soft p-5">
+    // The id is the anchor /governance links to when it traces a row of state
+    // back to the vote that produced it: a cross-page anchor that misses because
+    // the target forgot to name itself is a link that quietly does nothing.
+    <li id={vote.id} className="scroll-mt-24 rounded-2xl bg-ink-soft p-5">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-mist">
         <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${STATUS_TONE[vote.status] ?? "bg-panel-2 text-mist"}`}>
           {vote.status}

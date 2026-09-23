@@ -25,8 +25,19 @@ import { INTENTS, MAX_RULES, type ReflexRule } from "./policy";
  * checkable from scripts/verify-self-policy.cjs without a swarm.
  */
 
-/** The rule ids no amendment may touch. Announce sits directly under the killswitch; idle is the honest end of a thought. */
-export const STRUCTURAL_RULE_IDS = new Set(["r11", "r34", "idle"]);
+/**
+ * The rule ids no amendment may disable. Announce sits directly under the killswitch,
+ * idle is the honest end of a thought, and r34 is the homeostat — the swarm's way of
+ * noticing its own starvation.
+ *
+ * MEASURED DEFECT, found while wiring the MCP proposal doors: this set named "idle",
+ * and no rule has ever had that id — the idle rule in REFLEX_RULES is r10. A Set with
+ * a key nothing carries disables nothing, so the floor the migration comment promised
+ * did not exist for the one rule that ends a wake. The ids are pinned against the
+ * shipped list by scripts/verify-self-policy.cjs, which is what stops a rename from
+ * reopening the hole silently.
+ */
+export const STRUCTURAL_RULE_IDS = new Set(["r11", "r34", "r10"]);
 // r11 is announce. r34 is the metabolism reflex added in this build; it is
 // structural because it is how the swarm notices its own starvation — disabling
 // it would be the swarm choosing not to feel hungry. Kept here rather than

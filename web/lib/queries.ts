@@ -1346,3 +1346,67 @@ export async function getBallots(voteIds: string[]): Promise<VoteBallot[]> {
   if (error) logQueryError("getBallots", error);
   return (data as VoteBallot[]) ?? [];
 }
+
+/** One row of the swarm's own cooldowns, as the executor wrote it on a carried vote. */
+export type PacingRow = {
+  key: string;
+  value_ms: number;
+  vote_id: string;
+  status: string;
+  adopted_at: string;
+  updated_at: string;
+};
+
+/**
+ * The swarm's pacing table, every status, newest adoption first.
+ *
+ * The active rows are what the cooldown consumers read; the suspended and
+ * withdrawn ones are shown too, because a governance page that only shows what
+ * is in force would read a reversal as if it had never happened. World-readable
+ * by policy, so this is a plain read like every other page read here.
+ */
+export async function getPacingRows(): Promise<PacingRow[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("pacing")
+    .select("key, value_ms, vote_id, status, adopted_at, updated_at")
+    .order("adopted_at", { ascending: false })
+    .limit(50);
+  if (error) logQueryError("getPacingRows", error);
+  return (data as PacingRow[]) ?? [];
+}
+
+/** One policy amendment, with the ops the carried vote enacted. */
+export type AmendmentRow = {
+  id: string;
+  vote_id: string;
+  ops: unknown;
+  summary: string;
+  digest: string;
+  status: string;
+  proposed_by: string | null;
+  adopted_at: string;
+  updated_at: string;
+};
+
+/**
+ * The swarm's amendments to its own rulebook, every status, newest first.
+ *
+ * `ops` stays untyped on purpose: what the ops mean is decided by
+ * `lib/swamp/self-policy.ts`, and this page renders what the executor accepted
+ * rather than re-deriving it. `proposed_by` is nullable on the table (an agent
+ * row can be removed without unmaking the amendment it proposed), so the page
+ * attributes what it can and says "the swarm" for the rest.
+ */
+export async function getAmendments(): Promise<AmendmentRow[]> {
+  const sb = await supabaseServer();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("policy_amendments")
+    .select("id, vote_id, ops, summary, digest, status, proposed_by, adopted_at, updated_at")
+    .order("adopted_at", { ascending: false })
+    .limit(50);
+  if (error) logQueryError("getAmendments", error);
+  return (data as AmendmentRow[]) ?? [];
+}

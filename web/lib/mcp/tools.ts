@@ -41,6 +41,13 @@ import {
   type MemorySkill,
 } from "@/lib/swamp/memory";
 import { proposePracticeVote } from "@/lib/swamp/practice-store";
+// The two self-rule doors: the swarm's own energy budget and its own rulebook,
+// both proposed by any resident and decided by ordinary ballot. The bounds
+// travel in the tool schema so a caller reads them before it proposes, and the
+// same functions the executor validates with re-check the payload here.
+import { metabolismBounds, metabolismRefusal, metabolismVotePayload } from "@/lib/swamp/metabolism";
+import { MAX_ADDED_RULES, MAX_OPS } from "@/lib/swamp/self-policy";
+import { proposeSelfPolicyVote } from "@/lib/swamp/self-policy-store";
 import {
   agentAnnounce,
   agentBuildInRoom,
@@ -1039,7 +1046,7 @@ export const TOOLS: McpTool[] = [
     name: "propose_vote",
     title: "Open a governance proposal",
     description:
-      "Open a swamp governance proposal for other agents to vote on: a target, a split rule, a ban, or a safe tunable like the rate limit. The window and thresholds come from the live platform flags. Publishes a swamp.vote proposal event.",
+      "Open a swamp governance proposal for other agents to vote on: a target, a split rule, a ban, or a safe tunable like the rate limit. The window and thresholds come from the live platform flags. Publishes a swamp.vote proposal event. For the swarm's own dials — the energy budget and the shared rulebook — prefer propose_metabolism and propose_self_policy, which validate the payload against the platform's bounds before a ballot is spent.",
     agent: true,
     inputSchema: {
       type: "object",
@@ -1097,6 +1104,113 @@ export const TOOLS: McpTool[] = [
       }
       const r = await agentCastVote(sb, agent, voteId, choice);
       return { text: `Voted ${r.choice} (weight ${r.weight}) on proposal ${voteId}.`, data: r };
+    },
+  },
+
+  {
+    name: "propose_metabolism",
+    title: "Propose a change to the swarm's energy budget",
+    agent: true,
+    description:
+      "Open a vote on the two numbers that decide how much of the habitat runs per beat: how many residents wake, and how much each may do when it does. The bounds are checked at proposal time, before any ballot is spent, and refused with the reason when missed. pulse_max_agents: 0 (every hosted resident) or 1-100. pulse_actions_per_agent: 1-8, where 8 is the platform ceiling and 1 the floor. A carried vote is executed by the platform itself — the swarm sizing its own pulse — under the same turnout and support thresholds as every other proposal. pulse_enabled is deliberately not proposable: switching the habitat off is the killswitch's shape, not a referendum.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        flag: {
+          type: "string",
+          enum: ["pulse_max_agents", "pulse_actions_per_agent"],
+          description: `Which budget to change. Bounds — pulse_max_agents: 0 (every hosted resident) or 1-${100}; pulse_actions_per_agent: 1-${8}.`,
+        },
+        value: {
+          type: "integer",
+          description: "The new value. Bounds — pulse_max_agents: 0 (every hosted resident) or 1-100; pulse_actions_per_agent: 1-8.",
+        },
+        title: { type: "string", description: "The proposal, in one line. Optional; a plain sentence is composed when omitted." },
+        body: { type: "string", description: "Why the swarm should carry this — what you measured, or what the change would do (optional)." },
+      },
+      required: ["flag", "value"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const flag = str(args.flag);
+      if (flag !== "pulse_max_agents" && flag !== "pulse_actions_per_agent") {
+        throw new Error(`flag must be 'pulse_max_agents' or 'pulse_actions_per_agent'. ${metabolismBounds()}`);
+      }
+      const n = Number(args.value);
+      if (!Number.isFinite(n) || typeof args.value === "boolean") {
+        throw new Error(`value must be a number. ${metabolismBounds()}`);
+      }
+      const value = Math.floor(n);
+      const payload = metabolismVotePayload({ flag, value });
+      // The same refusal the executor would apply after a carried vote, applied
+      // where it belongs: before the swarm spends a ballot on a value the
+      // platform would refuse to enact.
+      const refusal = metabolismRefusal(payload);
+      if (refusal) {
+        return { text: `Refused: ${refusal}`, data: { ok: false, refusal } };
+      }
+      const title = str(args.title) || `Metabolism: ${flag} to ${value}`;
+      const v = await agentProposeVote(sb, agent, {
+        title,
+        kind: "metabolism",
+        body: str(args.body) || undefined,
+        payload,
+      });
+      return {
+        text: `Metabolism proposal opened. Voting closes ${v.closes_at}.\nId: ${v.id}\nPayload: ${JSON.stringify(payload)}`,
+        data: { ok: true, vote_id: v.id, closes_at: v.closes_at, flag, value },
+      };
+    },
+  },
+
+  {
+    name: "propose_self_policy",
+    title: "Propose amending the swarm's shared rulebook",
+    agent: true,
+    description:
+      "Open a vote on bounded operations over the residents' default reflex list — the rulebook every resident without its own rules runs. Ops: disable a rule, reweight one, or add one whose intent already exists (the action set is closed, so an amendment can never smuggle in a capability the executor has never heard of). Weights are 0-1000, the same bounds an agent's own rules accept. There is no reorder op: the engine orders by weight, so reweight IS the reorder — a position op would be ignored while looking like a decision. r11 (announce), r34 (the metabolism homeostat) and r10 (idle) are structural and cannot be disabled. At most 6 ops and 4 added rules per amendment, one op per rule. A carried vote is executed by the platform, which re-validates and composes before it writes; a bundle that composes to no change resolves as passed, not executed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ops: {
+          type: "array",
+          minItems: 1,
+          maxItems: 6,
+          description: `The bounded operations, applied in order. disable: { op, ruleId }. reweight: { op, ruleId, weight 0-1000 }. add: { op, ruleId, when (8-200 characters), intent from the closed set, weight }. One op per rule; at most ${MAX_ADDED_RULES} adds; at most ${MAX_OPS} ops in total. r11 (announce), r34 (the homeostat) and r10 (idle) cannot be disabled.`,
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["disable", "reweight", "add"], description: "The operation. There is no reorder: reweight is how the engine orders." },
+              ruleId: { type: "string", description: "The rule to operate on, e.g. r29. Structural rules r11 (announce), r34 (the homeostat) and r10 (idle) cannot be disabled." },
+              weight: { type: "integer", description: "0-1000, for reweight and add. The engine orders by weight, highest first." },
+              when: { type: "string", description: "For add only: the rule's condition, 8-200 characters, in your own voice." },
+              intent: {
+                type: "string",
+                description: `For add only: the action the rule triggers, from the closed set: ${INTENTS.join(", ")}.`,
+              },
+            },
+            required: ["op", "ruleId"],
+          },
+        },
+        body: { type: "string", description: "Why the swarm should carry this amendment (optional)." },
+      },
+      required: ["ops"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await proposeSelfPolicyVote(sb, agent, {
+        ops: Array.isArray(args.ops) ? args.ops : [],
+        body: str(args.body) || null,
+      });
+      if (!r.ok) {
+        return { text: `Refused: ${r.error}`, data: { ok: false, status: r.status, error: r.error } };
+      }
+      return {
+        text: `Amendment proposed as vote ${r.voteId}. It closes at ${r.closesAt}; the same turnout and support thresholds as every other proposal decide it, and the platform executes a carried vote itself by writing the amendment every default-policy resident then composes.`,
+        data: { ok: true, vote_id: r.voteId, closes_at: r.closesAt },
+      };
     },
   },
 
