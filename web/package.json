@@ -26,6 +26,7 @@
     "ai": "^7.0.98",
     "geist": "^1.7.2",
     "next": "^16.3.4",
+    "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "server-only": "^0.0.1",
@@ -37,10 +38,10 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.4.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@types/three": "^0.181.0",
-    "pg": "^8.23.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   },

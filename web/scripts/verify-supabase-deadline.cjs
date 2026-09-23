@@ -234,18 +234,36 @@ function check(name, ok, detail = "") {
 
   /* ---------- wiring ---------- */
 
-  const clients = [
-    "lib/supabase/index.ts",
-    "lib/supabase/server.ts",
-    "lib/supabase/client.ts",
-    "lib/supabase/bearer.ts",
-  ];
-  for (const rel of clients) {
+  /**
+   * The server clients reach the database through the fetch that can fall back to
+   * the pooler, and the browser client does not. That split is the whole point: a
+   * browser has no pooler credential and must never be handed a path that assumes
+   * one, while a page that cannot reach the REST API still has somewhere to go.
+   */
+  const serverClients = ["lib/supabase/index.ts", "lib/supabase/server.ts", "lib/supabase/bearer.ts"];
+  for (const rel of serverClients) {
     const src = fs.readFileSync(path.join(root, rel), "utf8");
-    check(`${rel} imports the deadline fetch`, /from "\.\/deadline"/.test(src));
-    check(`${rel} passes it to the client`, /fetch:\s*supabaseFetch/.test(src));
+    check(`${rel} imports the server fetch`, /from "\.\/server-fetch"/.test(src));
+    check(`${rel} passes it to the client`, /fetch:\s*supabaseServerFetch/.test(src));
     check(`${rel} turns the client's own retries off`, /retry:\s*false/.test(src));
   }
+
+  const browser = fs.readFileSync(path.join(root, "lib", "supabase", "client.ts"), "utf8");
+  check("the browser client imports the plain deadline fetch", /from "\.\/deadline"/.test(browser));
+  check("the browser client passes it to the client", /fetch:\s*supabaseFetch/.test(browser));
+  check("the browser client turns the client's own retries off", /retry:\s*false/.test(browser));
+  check(
+    "the browser client is never given the pooler fetch",
+    !/server-fetch/.test(browser),
+    "client.ts must not reach the pooler path",
+  );
+
+  const serverFetch = fs.readFileSync(path.join(root, "lib", "supabase", "server-fetch.ts"), "utf8");
+  check("the server fetch marks itself as server only", /^import "server-only";/m.test(serverFetch));
+  check(
+    "the first attempt is capped below the deadline when a fallback exists",
+    /PRIMARY_BUDGET_MS/.test(serverFetch) && /pgConfigured\(\)/.test(serverFetch),
+  );
 
   /**
    * The health route has to report the deadline that is actually enforced, so it

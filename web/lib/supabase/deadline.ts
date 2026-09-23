@@ -107,6 +107,10 @@ function describe(input: RequestInfo | URL): string {
 /**
  * Drop-in replacement for fetch that aborts after the deadline. A caller's own
  * signal is honoured too: whichever fires first ends the request.
+ *
+ * This is the whole of the browser's path. The server's path adds one thing on
+ * top of it, in ./server-fetch.ts: a retry of the same request over the
+ * database pooler, which a browser could not reach and must not try to.
  */
 export const supabaseFetch: typeof fetch = async (input, init) => {
   const breakerMs = supabaseBreakerMs();

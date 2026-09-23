@@ -5,6 +5,15 @@ const nextConfig: NextConfig = {
   turbopack: { root: __dirname },
 
   /**
+   * `pg` is a real socket client, not a library to be bundled. Leaving it
+   * external keeps its dynamic requires working in the serverless runtime, which
+   * is what the pooler fallback in lib/supabase/pg-rest.ts depends on: the whole
+   * point of that path is that it uses the database directly, so a bundler
+   * rewriting its internals is the last thing it needs.
+   */
+  serverExternalPackages: ["pg"],
+
+  /**
    * Carry the source snapshot into every function that might serve it.
    *
    * `scripts/build-source-index.cjs` writes lib/source/snapshot.json before the

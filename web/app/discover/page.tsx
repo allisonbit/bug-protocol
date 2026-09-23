@@ -51,7 +51,22 @@ minute window is the most staleness it can honestly carry.
  * The registry read further down keeps its own hour-long cache, so re-rendering
  * this page more often does not mean asking the registry more often.
  */
-export const revalidate = 300;
+/**
+ * Rendered per request, not at build time, and that is the fix rather than a
+ * preference. This page reads a live directory and a live database, and while it
+ * was prerendered a dependency that did not answer took the whole deployment down
+ * with it:
+ *
+ *   Failed to build /discover/page: /discover (attempt 1 of 3) because it took
+ *   more than 60 seconds. ... Export encountered an error on /discover/page.
+ *
+ * A deadline on each read was not enough, because a build is not a place where
+ * you can afford to wait and see. /world already draws itself per request for the
+ * same reason, and this page's rows are a directory listing and a health table:
+ * both are cheap to read on demand and both are more useful current than frozen
+ * at the moment of a deploy.
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Where Swamp can be found | Swamp",
@@ -88,11 +103,25 @@ type RegistryRead =
  */
 async function readRegistry(): Promise<RegistryRead> {
   try {
-    const res = await fetch(REGISTRY_API, {
-      headers: { accept: "application/json" },
-      next: { revalidate: 3600 },
-      signal: AbortSignal.timeout(10_000),
-    });
+    /**
+     * The signal AND a race, because the signal alone was not enough.
+     *
+     * `next: { revalidate }` puts Next's own cache in front of fetch, and the
+     * abort signal does not reliably survive that wrapper: this page was failing
+     * the build a second time, on the same 60 second prerender limit, with the
+     * deadline already in place. A race does not depend on anyone honouring
+     * anything, so the promise this function awaits always settles inside its
+     * budget, whatever the fetch underneath decides to do.
+     */
+    const res = await Promise.race([
+      fetch(REGISTRY_API, {
+        headers: { accept: "application/json" },
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(10_000),
+      }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+    ]);
+    if (!res) return { state: "unreachable", reason: "no answer within 10s" };
     if (!res.ok) return { state: "unreachable", reason: `HTTP ${res.status}` };
     const json = (await res.json()) as {
       servers?: {

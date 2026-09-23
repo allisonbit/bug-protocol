@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { supabaseFetch } from "./deadline";
+import { supabaseServerFetch } from "./server-fetch";
 
 /**
  * Server side Supabase, service-role. Storage writes, the tool mirror, and any
@@ -32,7 +32,7 @@ export function supabaseAdmin(): SupabaseClient | null {
   if (!_client) {
     _client = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
-      global: { fetch: supabaseFetch },
+      global: { fetch: supabaseServerFetch },
       /**
        * No retries. supabase-js retries a failed GET three times with backoff,
        * so a deadline of ten seconds was really forty-seven: the read above was
