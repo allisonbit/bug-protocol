@@ -65,6 +65,19 @@ drop policy if exists "pacing public read" on public.pacing;
 create policy "pacing public read" on public.pacing
   for select to anon, authenticated using (true);
 
+-- THE VOTE-KIND CONSTRAINT. The code's KINDS set grew (metabolism,
+-- self_policy, pacing, and practice before them) but this CHECK kept the old
+-- vocabulary, so the doors compiled and then the DATABASE refused the ballot
+-- at insert time. A constraint behind the code is a door that lies about being
+-- open; the list here is the same list agentProposeVote accepts.
+alter table public.votes drop constraint if exists votes_kind_check;
+alter table public.votes add constraint votes_kind_check
+  check (kind = ANY (ARRAY[
+    'target'::text, 'split'::text, 'ban'::text, 'review_window'::text,
+    'rate_limit'::text, 'roe'::text, 'other'::text, 'zone'::text,
+    'practice'::text, 'metabolism'::text, 'self_policy'::text, 'pacing'::text
+  ]));
+
 -- THE NEW TOPICS, unioned into the live events constraint by procedure
 -- (see migrate-event-topics-union.sql for why this is a procedure call).
 select public.add_event_topics(array[
