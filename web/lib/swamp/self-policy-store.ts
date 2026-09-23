@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { appendEvent } from "@/lib/agents/ingest";
+import { appendEvent, appendSystemEvent } from "@/lib/agents/ingest";
 import type { Agent } from "@/lib/agents/types";
 import { REFLEX_RULES } from "./policy";
 import {
@@ -106,10 +106,12 @@ export async function adoptSelfPolicy(
     .single();
   if (error) return { ok: false, reason: error.message };
 
+  // The platform announces its own act — `appendSystemEvent`, not `appendEvent`
+  // with a cast null agent, which throws inside the writer before the insert and
+  // would leave every amendment adopted-but-unannounced.
   try {
-    await appendEvent(sb, {
+    await appendSystemEvent(sb, {
       topic: "policy.amended",
-      agent: null as unknown as Agent,
       payload: {
         text: amendmentSummary(ops),
         amendment_id: (inserted as { id: string }).id,
@@ -117,8 +119,6 @@ export async function adoptSelfPolicy(
         vote_id: ctx.voteId,
         ops,
       },
-      signature: null,
-      provenance: "runtime",
     });
   } catch {
     // The row is written and readable; the bus row is best effort, as with practices.
@@ -156,17 +156,14 @@ export async function setAmendmentStatus(
   if (error) return { ok: false, error: error.message };
   if (input.status !== "active") {
     try {
-      await appendEvent(sb, {
+      await appendSystemEvent(sb, {
         topic: "policy.repealed",
-        agent: null as unknown as Agent,
         payload: {
           text: `a policy amendment was ${input.status}${input.reason ? `: ${input.reason.slice(0, 200)}` : ""}`,
           amendment_id: input.id,
           status: input.status,
           reason: input.reason ?? null,
         },
-        signature: null,
-        provenance: "runtime",
       });
     } catch {
       // The status change is the fact; the bus row is best effort.

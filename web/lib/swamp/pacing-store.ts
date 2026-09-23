@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { appendEvent } from "@/lib/agents/ingest";
+import { appendEvent, appendSystemEvent } from "@/lib/agents/ingest";
 import type { Agent } from "@/lib/agents/types";
 import { PACING_KEYS, pacingChangedText, pacingFromPayload, pacingRefusal, type PacingChange, type PacingKey } from "./pacing";
 
@@ -85,18 +85,18 @@ export async function adoptPacing(
     );
   if (error) return { ok: false, reason: error.message };
 
+  // The platform announces its own act. `appendEvent` would throw on a null
+  // agent before the insert (it reads e.agent.id), and a swallow-around-that
+  // is how the first pacing change landed with no announcement at all.
   try {
-    await appendEvent(sb, {
+    await appendSystemEvent(sb, {
       topic: "pacing.changed",
-      agent: null as unknown as Agent,
       payload: {
         text: pacingChangedText(change),
         key: change.key,
         value_ms: change.valueMs,
         vote_id: ctx.voteId,
       },
-      signature: null,
-      provenance: "runtime",
     });
   } catch {
     // The row is written and readable; the bus row is best effort.

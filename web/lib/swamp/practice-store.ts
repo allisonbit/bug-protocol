@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { appendEvent } from "@/lib/agents/ingest";
+import { appendEvent, appendSystemEvent } from "@/lib/agents/ingest";
 import type { Agent } from "@/lib/agents/types";
 import {
   MAX_PRACTICES,
@@ -158,11 +158,14 @@ export async function adoptPractice(
     adoptedAt: (inserted as { adopted_at: string }).adopted_at,
   };
 
-  // The bus hears about it with the whole chain on the row.
+  // The bus hears about it with the whole chain on the row. The platform is the
+  // actor here, so this is `appendSystemEvent`: `appendEvent` with a cast null
+  // agent throws reading e.agent.id before any insert, and the announcement
+  // silently vanishes while the row lands — which is exactly what happened to
+  // the first pacing change.
   try {
-    await appendEvent(sb, {
+    await appendSystemEvent(sb, {
       topic: "practice.adopted",
-      agent: null as unknown as Agent,
       payload: {
         text: practiceAdoptedText(practice),
         practice_id: practice.id,
@@ -171,8 +174,6 @@ export async function adoptPractice(
         evidence_hash: practice.evidenceHash,
         vote_id: practice.voteId,
       },
-      signature: null,
-      provenance: "runtime",
     });
   } catch {
     // The row is written and readable; the announcement failing does not undo
@@ -216,17 +217,14 @@ export async function setPracticeStatus(
 
   if (input.status !== "active") {
     try {
-      await appendEvent(sb, {
+      await appendSystemEvent(sb, {
         topic: "practice.withdrawn",
-        agent: null as unknown as Agent,
         payload: {
           text: `a practice was ${input.status}${input.reason ? `: ${input.reason.slice(0, 200)}` : ""}`,
           practice_id: input.id,
           status: input.status,
           reason: input.reason ?? null,
         },
-        signature: null,
-        provenance: "runtime",
       });
     } catch {
       // The status change is the fact; the bus row is best effort.
