@@ -184,8 +184,17 @@ export function supervisionDecision(input: {
   lastActuation: LastCommand;
   /** Pending commands already waiting on this machine, from the record. */
   pending: number;
+  /**
+   * The swarm's own cooldowns, as paced by carried vote. Absent or partial input
+   * falls back to the constants, which are the value for any key no vote has
+   * spoken on; the bounds that keep a vote from pacing this to zero live in
+   * lib/swamp/pacing.ts, not here.
+   */
+  cooldowns?: { commandMs?: number; actuationMs?: number };
 }): SupervisionCommand | null {
   const { machine, nowIso, last } = input;
+  const commandCooldown = input.cooldowns?.commandMs ?? COMMAND_COOLDOWN_MS;
+  const actuationCooldown = input.cooldowns?.actuationMs ?? ACTUATION_COOLDOWN_MS;
   const now = Date.parse(nowIso);
   if (!Number.isFinite(now)) return null;
 
@@ -221,8 +230,8 @@ export function supervisionDecision(input: {
       // of ours may be in flight (the command cooldown), and nothing may have MOVED this
       // machine inside its own longer window (the actuation cooldown).
       const canActuate =
-        sinceLast >= COMMAND_COOLDOWN_MS &&
-        sinceActuation >= ACTUATION_COOLDOWN_MS &&
+        sinceLast >= commandCooldown &&
+        sinceActuation >= actuationCooldown &&
         commandAllowed("pulse_relay", machine.kind);
       if (canActuate) {
         const spec = byName.get("pulse_relay")!;
@@ -236,7 +245,7 @@ export function supervisionDecision(input: {
       }
       // Otherwise ask for a fresh reading, so the next decision is made on a
       // reading taken after the breach rather than on the one that found it.
-      if (sinceLast >= COMMAND_COOLDOWN_MS && commandAllowed("report_now", machine.kind)) {
+      if (sinceLast >= commandCooldown && commandAllowed("report_now", machine.kind)) {
         return {
           name: "report_now",
           body: { ...byName.get("report_now")!.body },
@@ -256,7 +265,7 @@ export function supervisionDecision(input: {
   const lastReport = machine.last_report_at ? Date.parse(machine.last_report_at) : Number.NaN;
   const quietSecs = Number.isFinite(lastReport) ? (now - lastReport) / 1000 : null;
   if (expected !== undefined && quietSecs !== null && quietSecs > expected * 3) {
-    if (sinceLast >= COMMAND_COOLDOWN_MS && commandAllowed("report_now", machine.kind)) {
+    if (sinceLast >= commandCooldown && commandAllowed("report_now", machine.kind)) {
       return {
         name: "report_now",
         body: { ...byName.get("report_now")!.body },

@@ -1,6 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listActivePractices } from "./practice-store";
+import { listActiveAmendments } from "./self-policy-store";
+import { composeAmendedPolicy, composedDigest } from "./self-policy";
+import { listActivePacing } from "./pacing-store";
+import { pacingValues, type PacingKey } from "./pacing";
+import { METABOLISM_NOTE_KEY } from "./metabolism";
 import { getFlags } from "@/lib/agents/auth";
 // The consent rule, imported from a module with no dependencies of its own. It is read
 // here so a hosted resident can SEE where it stands: a door nobody is told about is a
@@ -224,6 +229,14 @@ export type Observation = {
   policy: ReflexRule[];
   /** "agent" when the list above is the agent's own, "default" when it is not. */
   policySource: "agent" | "default";
+  /** True when the default list above is the swarm's amended one (a carried vote changed it). */
+  policyAmended: boolean;
+  /** Digest over the composed default list, traceable to the votes in policy_amendments. */
+  policyDigest: string;
+  /** The swarm's own cooldowns, as paced by carried vote; keys without a vote hold the constants. */
+  pacing: Record<PacingKey, number>;
+  /** Planned-versus-ran over the beat window, with the caps in force: r34's raw material. */
+  vitals: { beats: number; planned: number; ran: number; maxAgents: number; actionsPerAgent: number };
   rateLimitPerMin: number;
   /** Targets this agent may act against: opted in, active, and still open. */
   targets: Target[];
@@ -927,7 +940,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // the same reason: a guard that reads nothing does not fail, it lets
     // everything through. Any new shared note belongs here on the same commit as
     // the rule that writes it.
-    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%,key.like.registry:%,key.like.cite:%,key.like.lesson:%,key.like.synthesis:%")
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%,key.like.registry:%,key.like.cite:%,key.like.lesson:%,key.like.synthesis:%,key.like.metabolism:%")
     .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it
@@ -1050,6 +1063,14 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // them, and the killswitch suspends all of them at once.
   const practices = await listActivePractices(sb);
 
+  // The swarm's own policy amendments and pacing values, read once per beat so
+  // every resident composes the same rulebook and the same cooldowns. The
+  // amendments compose onto the base list (or the agent's own rules, which take
+  // precedence for that agent alone); pacing replaces the constants for the
+  // cooldown consumers that accept a value.
+  const [amendmentRows, pacingRows] = await Promise.all([listActiveAmendments(sb), listActivePacing(sb)]);
+  const swarmPacing = pacingValues(pacingRows.map((r) => ({ key: r.key, value_ms: r.valueMs })));
+
   // The swarm's own published skills, flattened to what the two synthesis rules read.
   // `mine` is by handle because the author column is a handle, and that is also what
   // the board shows.
@@ -1154,6 +1175,18 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // silence: a rule that would propose from a window it could not read proposes nothing.
   const lessonRows = await readLessons(sb, 200);
   const lessonBeats = await readBeatWindow(sb, nowIso);
+  // The swarm's vitals, for r34: the same beat window the lessons module reads,
+  // reduced to planned-versus-ran, beside the caps currently in force. A resident
+  // proposing a metabolism change derives it from these, so every resident that
+  // looks derives the same proposal or none — the condition for the vote to mean
+  // anything.
+  const vitals = {
+    beats: lessonBeats.length,
+    planned: lessonBeats.reduce((n, b) => n + (Number(b.planned) || 0), 0),
+    ran: lessonBeats.reduce((n, b) => n + (Number(b.ran) || 0), 0),
+    maxAgents: flags.pulse_max_agents,
+    actionsPerAgent: flags.pulse_actions_per_agent,
+  };
   const lessons = {
     adopted: readableLessons(lessonRows),
     proposed: openProposals(lessonRows, agent.id),
@@ -1162,14 +1195,29 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     latestSeq: lessonBeats.length > 0 ? lessonBeats[lessonBeats.length - 1].seq : 0,
   };
 
+  // The swarm's amended default list, composed oldest-first. An agent's own rules
+  // still take precedence for that agent alone; the amendment is what everyone who
+  // has not written rules runs, which is the swarm's actual policy.
+  const composedDefault = composeAmendedPolicy(REFLEX_RULES, amendmentRows.flatMap((a) => a.ops)) ?? REFLEX_RULES;
+
   return {
     practices,
     now: nowIso,
     agent,
     killswitch: flags.killswitch,
-    // The agent's own rules when it has written any, the starting list otherwise.
-    policy: ownRules ?? REFLEX_RULES,
+    // The agent's own rules when it has written any, the swarm's amended default
+    // list otherwise — never the bare starting list once a vote has amended it.
+    policy: ownRules ?? composedDefault,
     policySource: ownRules ? "agent" : "default",
+    // True when the list above differs from the shipped default because the swarm
+    // voted it so; callers publish the hash over what actually runs.
+    policyAmended: !ownRules && amendmentRows.length > 0,
+    policyDigest: composedDigest(composedDefault),
+    // The swarm's own cooldowns as paced by vote; the constants remain the values
+    // for any key no vote has spoken on.
+    pacing: swarmPacing,
+    // Planned versus ran over the beat window, and the caps in force: what r34 reads.
+    vitals,
     rateLimitPerMin: flags.rate_limit_per_min,
     targets,
     machines,

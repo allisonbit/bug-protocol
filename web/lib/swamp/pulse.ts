@@ -7,6 +7,7 @@ import {
   agentCastVote,
   agentClaim,
   agentBuildInRoom,
+  agentProposeVote,
   agentProposeZone,
   agentPublishFinding,
   agentPublishOutput,
@@ -26,6 +27,7 @@ import { assertPublicHost } from "./guard";
 import { CHECK_IDS, runCheck, type CheckOutcome } from "./checks";
 import { decide, type PlannedAction } from "./brain";
 import { DIGEST_NOTE_KEY } from "./machine-digest";
+import { METABOLISM_NOTE_KEY, metabolismVotePayload } from "./metabolism";
 // The registry's own pacing notes and the sentence a gap is reported in. Imported rather
 // than composed here for the same reason the audit rules are: the keys and the cooldowns
 // are read by a rule in brain.ts as well as written here, and two copies of a key that has
@@ -1073,6 +1075,23 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         provenance: "runtime",
       });
       return `proposed a lesson about ${row.subject}`;
+    }
+
+    // r34, the homeostat, executed. The proposal goes through the SAME propose
+    // door an MCP client uses — payload validated at proposal time, bounds checked,
+    // an ordinary ballot opened — so a reflex brain and an external agent produce
+    // identical rows. The shared note is written here under the agent's own key
+    // space on the METABOLISM key so every other resident sees the pacing; a
+    // refused write returns null and the wake ends quietly.
+    case "propose_metabolism": {
+      const r = await agentProposeVote(sb, agent, {
+        kind: "metabolism",
+        title: plan.proposal.title,
+        body: plan.proposal.why,
+        payload: metabolismVotePayload(plan.proposal),
+      });
+      await remember(sb, agent.id, "note", METABOLISM_NOTE_KEY, { at: obs.now, flag: plan.proposal.flag, value: plan.proposal.value }, 2);
+      return `proposed ${plan.proposal.flag} = ${plan.proposal.value}: ${plan.proposal.why.slice(0, 120)}`;
     }
 
     // r31, settling somebody else's lesson by recounting rather than by agreeing. The update

@@ -361,6 +361,12 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   "skill.synthesis_reviewed": "plaza",
   "practice.adopted": "plaza",
   "practice.withdrawn": "plaza",
+  // The swarm governing itself stands in the Plaza, where every other swarm-level
+  // decision lands: a rulebook change, a repeal, and a retuned cooldown are all
+  // habitat news rather than work on a host.
+  "policy.amended": "plaza",
+  "policy.repealed": "plaza",
+  "pacing.changed": "plaza",
   "lesson.proposed": "plaza",
   "lesson.adopted": "plaza",
   "lesson.refuted": "plaza",
@@ -484,6 +490,11 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   "skill.synthesis_reviewed": "verdict",
   "practice.adopted": "vote",
   "practice.withdrawn": "verdict",
+  // Same glyphs as a practice: an amendment is the swarm voting on itself, a repeal
+  // and a pacing change are what a recount of the habitat produces.
+  "policy.amended": "vote",
+  "policy.repealed": "verdict",
+  "pacing.changed": "verdict",
   "lesson.proposed": "speak",
   "lesson.adopted": "verdict",
   "lesson.refuted": "verdict",

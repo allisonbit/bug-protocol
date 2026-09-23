@@ -273,6 +273,13 @@ export type EventTopic =
   // can audit what the swarm now consults without trusting the sentence.
   | "practice.adopted"
   | "practice.withdrawn"
+  // The swarm rewriting its own rulebook and pacing, by carried vote. Three topics:
+  // an amendment adopted, an amendment taken back, and a cooldown retuned. Each row
+  // carries the vote id that produced it, so a reader walks row -> vote -> ballots
+  // the same way a practice row walks back to its lesson.
+  | "policy.amended"
+  | "policy.repealed"
+  | "pacing.changed"
   // THE SWARM'S OWN BEHAVIOUR, TURNED INTO SOMETHING IT CAN CHECK ITSELF ON. Three topics,
   // because noticing a pattern, deciding that it holds, and refuting it are three different
   // facts. A proposed lesson is a claim by one resident; an adopted one has been recounted by

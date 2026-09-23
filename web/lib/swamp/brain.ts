@@ -25,6 +25,7 @@ import {
 // database, which is how the `audit:last` key that nobody wrote was found.
 import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeCooldownElapsed, pickGapToReport } from "@/lib/registry/reflex";
 import { SYNTH_DRAFT_NOTE_KEY, SYNTH_REVIEW_NOTE_KEY } from "./synthesis-notes";
+import { METABOLISM_COOLDOWN_MS, METABOLISM_NOTE_KEY, metabolismProposal } from "./metabolism";
 // The predicate that says which palette commands are actuations, shared with the lease
 // gate rather than restated here: the cooldown that bounds moving hardware and the
 // authority that permits it have to agree about what moving hardware IS.
@@ -152,10 +153,9 @@ export type PlannedAction =
    * `decision` is what the recount produced, computed in `decideReflex` from the same pure
    * derivation that produced the lesson, and `reproduced` travels with it so the record says
    * whether the pattern still held rather than only what was concluded.
-   */
-  | {
-      rule: string;
-      kind: "decide_lesson";
+   */  /** r34: propose the metabolism change the vitals call for, as an ordinary vote. */
+  | { rule: string; kind: "propose_metabolism"; proposal: { flag: string; value: number; title: string; why: string } }
+  | { rule: string; kind: "decide_lesson";
       lessonId: string;
       lessonKind: Lesson["kind"];
       subject: string;
@@ -763,7 +763,16 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         for (const machine of obs.machineWatch) {
           const last = lastCommand(obs, machine.name);
           const lastAct = lastActuation(obs, machine.name);
-          const decision = supervisionDecision({ machine, nowIso: obs.now, last, lastActuation: lastAct, pending: machine.pending });
+          const decision = supervisionDecision({
+            machine,
+            nowIso: obs.now,
+            last,
+            lastActuation: lastAct,
+            pending: machine.pending,
+            // The swarm's own pacing, when a carried vote has spoken; the
+            // constants otherwise.
+            cooldowns: { commandMs: obs.pacing.machine_command, actuationMs: obs.pacing.machine_actuation },
+          });
           if (!decision) continue;
           out.push({
             rule: rule.id,
@@ -795,6 +804,7 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
           handle: obs.agent.handle,
           lastClaimAt: noteTimestamp(sharedNote(obs, CHALLENGE_NOTE_KEY)),
           now: obs.now,
+          cooldownMs: obs.pacing.challenge,
         });
         if (!row) break;
         out.push({
@@ -818,6 +828,7 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
           audited: new Set((obs.auditedSubjects ?? []).map(normalizeSubject)),
           lastAuditAt: noteTimestamp(sharedNote(obs, AUDIT_NOTE_KEY)),
           now: obs.now,
+          cooldownMs: obs.pacing.audit,
         });
         if (!candidate) break;
         out.push({
@@ -854,6 +865,7 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
           gaps: obs.registryGaps ?? [],
           lastReportedAt: noteTimestamp(sharedNote(obs, GAP_NOTE_KEY)),
           now: obs.now,
+          cooldownMs: obs.pacing.registry_gap,
         });
         if (!gap) break;
         out.push({
@@ -879,7 +891,7 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       // skill is any good, because that judgement was made by the engine over the bytes and is
       // on the record bound to their digest.
       case "cite_registry_skill": {
-        if (!citeCooldownElapsed(noteTimestamp(sharedNote(obs, CITE_NOTE_KEY)), obs.now)) break;
+        if (!citeCooldownElapsed(noteTimestamp(sharedNote(obs, CITE_NOTE_KEY)), obs.now, obs.pacing.registry_cite)) break;
         const candidate = obs.registryCitation;
         if (!candidate) break;
         out.push({
@@ -982,6 +994,18 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       // asymmetry as the lesson decider), and not already reviewed by anyone else — which
       // for now is read as "the only audit row for this subject is the one the synthesis
       // wrote", because a second read would have written a second row.
+      // r34, the homeostat. The proposal comes from the vitals module, which
+      // derives it from the same beat spans the scoreboard publishes — so a
+      // deterministic brain proposes only what every resident could derive, and
+      // the shared note keeps it to one proposal per window swarm-wide.
+      case "propose_metabolism": {
+        if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, METABOLISM_NOTE_KEY)), obs.now, METABOLISM_COOLDOWN_MS)) break;
+        const proposal = metabolismProposal(obs.vitals);
+        if (!proposal) break;
+        out.push({ rule: rule.id, kind: "propose_metabolism", proposal });
+        break;
+      }
+
       case "review_synthesis": {
         if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, SYNTH_REVIEW_NOTE_KEY)), obs.now)) break;
         const target = obs.synthesized.find(
@@ -1680,7 +1704,12 @@ export async function decideModel(obs: Observation, budget: number): Promise<Dec
   const { rules: tuned, adjustments } = adaptRules(rules, obs.lessons.adopted);
   const reflex: Decision = {
     brain: "reflex",
-    policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
+    // The hash commits to the list that actually runs: the swarm's amended
+    // default when a vote has amended it, the agent's own rules when it wrote
+    // any, the shipped default only when nothing has spoken.
+    policyHash: obs.policySource === "default" && obs.policyAmended
+      ? obs.policyDigest
+      : policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
     actions: decideReflex(obs, tuned),
     ...(adjustments.length > 0 ? { adapted: adjustments } : {}),
   };
@@ -2405,7 +2434,11 @@ export async function decide(obs: Observation, budget: number): Promise<Decision
     const { rules: tuned, adjustments } = adaptRules(rules, obs.lessons.adopted);
     return {
       brain: "reflex",
-      policyHash: policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
+      // Same commitment as decideModel's: the hash is over what runs, including
+      // the swarm's carried amendments.
+      policyHash: obs.policySource === "default" && obs.policyAmended
+        ? obs.policyDigest
+        : policyFor("reflex", obs.policySource === "agent" ? rules : null).hash,
       actions: decideReflex(obs, tuned).slice(0, budget),
       ...(adjustments.length > 0 ? { adapted: adjustments } : {}),
     };

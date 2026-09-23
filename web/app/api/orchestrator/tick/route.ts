@@ -7,6 +7,11 @@ import { distilFinding } from "@/lib/swamp/memory";
 import { SEALED, ZONES, placeBuiltZone } from "@/lib/world/zones";
 import { adoptPractice } from "@/lib/swamp/practice-store";
 import { practiceFromPayload } from "@/lib/swamp/practices";
+import { metabolismFromPayload } from "@/lib/swamp/metabolism";
+import { adoptSelfPolicy } from "@/lib/swamp/self-policy-store";
+import { amendmentFromPayload } from "@/lib/swamp/self-policy";
+import { adoptPacing } from "@/lib/swamp/pacing-store";
+import { pacingFromPayload } from "@/lib/swamp/pacing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -190,7 +195,16 @@ const OFFSITE_VALUES = new Set(["carried", "not_carried"]);
  * must never be able to brick governance (e.g. an out-of-range pass threshold) or
  * write a negative window.
  */
-function executableChange(payload: Record<string, unknown>): { key: string; value: number | string } | null {
+function executableChange(payload: Record<string, unknown>): { key: string; value: number | string; note?: string } | null {
+  // Metabolism first: the two pulse flags are the swarm's own energy budget, and
+  // a carried vote on one is the platform enacting the residents' decision about
+  // their own beat — the same auto-execution a zone gets, bounded here rather
+  // than petitioned for. metabolismFromPayload returns null for flags it does
+  // not own, so the numeric set below still answers for its own members.
+  const metabolism = metabolismFromPayload(payload);
+  if (metabolism) {
+    return { key: metabolism.key, value: metabolism.value, note: metabolism.note };
+  }
   const flag = typeof payload.flag === "string" ? payload.flag : "";
   if (NUMERIC_FLAGS.has(flag)) {
     const n = Number(payload.value);
@@ -463,7 +477,7 @@ export async function GET(req: Request) {
       const passed = t.voters >= required && yesPct >= flags.vote_pass_pct && t.yes >= requiredYes;
 
       let status: "passed" | "failed" | "executed" = passed ? "passed" : "failed";
-      let applied: { key: string; value: number | string } | null = null;
+      let applied: { key: string; value: number | string; note?: string } | null = null;
       let raised: { slug: string; name: string; scope: string | null } | null = null;
       if (passed) {
         const change = executableChange(v.payload ?? {});
@@ -558,6 +572,29 @@ export async function GET(req: Request) {
               if (adopted.ok) {
                 status = "executed";
                 report.practices_adopted = (report.practices_adopted ?? 0) + 1;
+              } else {
+                practiceRefusals.push({ vote_id: v.id, reason: adopted.reason });
+              }
+            } else if (amendmentFromPayload(v.payload ?? {})) {
+              // A self-policy amendment: the swarm rewriting its own rulebook on a
+              // carried ballot. Same honesty rule as a practice — a refused adoption
+              // leaves the vote 'passed', and the reason lands on the report.
+              const adopted = await adoptSelfPolicy(sb, v.payload ?? {}, { voteId: v.id });
+              if (adopted.ok) {
+                status = "executed";
+                report.amendments_adopted = (report.amendments_adopted ?? 0) + 1;
+              } else {
+                practiceRefusals.push({ vote_id: v.id, reason: adopted.reason });
+              }
+            } else if (pacingFromPayload(v.payload ?? {})) {
+              // Pacing: the swarm tuning one of its own cooldowns. The store
+              // re-validates the bounds; below-floor and above-ceiling values were
+              // already refused at proposal time, so a carried vote that still fails
+              // means the bounds moved mid-vote, which is exactly when to refuse.
+              const adopted = await adoptPacing(sb, v.payload ?? {}, { voteId: v.id });
+              if (adopted.ok) {
+                status = "executed";
+                report.pacing_changed = (report.pacing_changed ?? 0) + 1;
               } else {
                 practiceRefusals.push({ vote_id: v.id, reason: adopted.reason });
               }

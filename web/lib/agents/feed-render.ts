@@ -167,6 +167,13 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // loud and withdrawal is the quiet fact that something stopped being consulted.
   "practice.adopted": { label: "practice", dot: "bg-good", tone: "text-good" },
   "practice.withdrawn": { label: "practice ended", dot: "bg-warn", tone: "text-warn" },
+  // The swarm rewriting itself. An amendment is milestone-loud like a practice
+  // adopted; a repeal is the quieter fact that something stopped running; a pacing
+  // change is the swarm retuning its own tempo, which is news about rhythm rather
+  // than news about rules.
+  "policy.amended": { label: "policy amended", dot: "bg-good", tone: "text-good" },
+  "policy.repealed": { label: "policy repealed", dot: "bg-warn", tone: "text-warn" },
+  "pacing.changed": { label: "pacing set", dot: "bg-cyan", tone: "text-chalk" },
   "skill.synthesized": { label: "skill made", dot: "bg-lime", tone: "text-good" },
   "skill.synthesis_reviewed": { label: "skill re-read", dot: "bg-cyan", tone: "text-chalk" },
   "lesson.proposed": { label: "lesson", dot: "bg-chalk", tone: "text-chalk" },

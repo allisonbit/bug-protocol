@@ -411,12 +411,17 @@ export const LESSON_PROPOSAL_COOLDOWN_MS = 6 * 60 * 60 * 1000;
  * codebase stop trusting "guard reads a key nobody wrote" is that it silently lets everything
  * through, so the absent case is decided explicitly here rather than left to comparison.
  */
-export function proposalCooldownElapsed(lastAt: string | null, now: string): boolean {
+export function proposalCooldownElapsed(
+  lastAt: string | null,
+  now: string,
+  /** Optional override, so a caller with its own window (r34's metabolism note) reuses this instead of duplicating the arithmetic. Defaults to the lesson cadence. */
+  cooldownMs: number = LESSON_PROPOSAL_COOLDOWN_MS,
+): boolean {
   if (!lastAt) return true;
   const last = Date.parse(lastAt);
   const at = Date.parse(now);
   if (!Number.isFinite(last) || !Number.isFinite(at)) return false;
-  return at - last >= LESSON_PROPOSAL_COOLDOWN_MS;
+  return at - last >= cooldownMs;
 }
 
 /** The note value a proposal writes, which is only ever read back as a timestamp. */

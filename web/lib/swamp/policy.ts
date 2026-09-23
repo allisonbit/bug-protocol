@@ -209,6 +209,9 @@ export type ReflexIntent =
   // the same engine, the same bytes, the same verdict or a refutation of the record.
   | "draft_skill"
   | "review_synthesis"
+  // r34: the swarm noticing its own pulse is mis-sized, and proposing the change
+  // as an ordinary vote. The proposal is arithmetic over beat spans, not opinion.
+  | "propose_metabolism"
   | "idle";
 
 export type ReflexRule = {
@@ -566,6 +569,21 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "review_synthesis",
     weight: 31,
   },
+  // r34, the homeostat. The swarm that can now VOTE its own energy budget needs a
+  // resident that can NOTICE when the budget is wrong: planned work dropped while a
+  // cap binds is starvation, and every beat running everything while the budget sits
+  // above the floor is slack. The proposal is derived from the same beat spans the
+  // scoreboard publishes, so every resident that reads derives the same proposal or
+  // none, and the shared note paces it the way every other swarm-wide reflex is
+  // paced. The vote that follows is ordinary governance: same turnout, same ratio.
+  // Structural: it is in STRUCTURAL_RULE_IDS in self-policy.ts, because a swarm
+  // that could vote away its own hunger would stop noticing it was starving.
+  {
+    id: "r34",
+    when: "the swarm has dropped at least a quarter of the actions it planned over the beat window while a cap binds, or has run everything planned for two windows while its budget sits above the floor, and no resident has proposed a metabolism change this window",
+    intent: "propose_metabolism",
+    weight: 30,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -664,6 +682,7 @@ export const INTENTS: ReflexIntent[] = [
   "decide_lesson",
   "draft_skill",
   "review_synthesis",
+  "propose_metabolism",
   "idle",
 ];
 

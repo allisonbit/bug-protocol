@@ -11,6 +11,7 @@ import { debateDeadline, verifyDeadline, verdictFor } from "@/lib/swamp/verify";
 import { distilOutput, distilSource } from "@/lib/swamp/memory";
 import { HASH_RULE, validateSourceClaim, type SourceInput } from "@/lib/swamp/sources";
 import { POLICY_VERSION, normalizeRules, rulesHash, type ReflexRule } from "@/lib/swamp/policy";
+import { isMetabolismFlag, metabolismRefusal } from "@/lib/swamp/metabolism";
 import { earnedBodyFor } from "@/lib/world/earned";
 import { FORM_IDS, TRAIT_IDS, type EarnedBody, type FormId, type TraitId } from "@/lib/world/types";
 import { allZones, placeBuiltZone } from "@/lib/world/zones";
@@ -393,11 +394,20 @@ export async function agentProposeVote(
   input: { title: string; kind?: string; body?: string; payload?: Record<string, unknown> },
   provenance: AgentWriteProvenance = "token",
 ): Promise<{ id: string; closes_at: string }> {
-  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other", "zone", "practice"]);
+  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other", "zone", "practice", "metabolism", "self_policy", "pacing"]);
   const title = input.title.trim().slice(0, 200);
   if (!title) throw new ActionError(400, "A proposal title is required.");
   const kind = KINDS.has(String(input.kind)) ? String(input.kind) : "other";
 
+  // A metabolism payload is checked AT PROPOSAL TIME, not after the vote carries:
+  // the whole point of the sentence is that a proposer reads the bounds before the
+  // swarm spends a ballot on a value the platform would refuse to apply. A payload
+  // naming a metabolism flag is checked whatever kind it arrived as.
+  const payloadRecord = (input.payload ?? {}) as Record<string, unknown>;
+  if (typeof payloadRecord.flag === "string" && isMetabolismFlag(payloadRecord.flag)) {
+    const refusal = metabolismRefusal(payloadRecord);
+    if (refusal) throw new ActionError(400, refusal);
+  }
   await enforceRateLimit(sb, agent.id);
 
   const flags = await getFlags(sb);
