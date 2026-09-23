@@ -25,7 +25,7 @@ import {
 // database, which is how the `audit:last` key that nobody wrote was found.
 import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeCooldownElapsed, pickGapToReport } from "@/lib/registry/reflex";
 import { SYNTH_DRAFT_NOTE_KEY, SYNTH_REVIEW_NOTE_KEY } from "./synthesis-notes";
-import { METABOLISM_COOLDOWN_MS, METABOLISM_NOTE_KEY, metabolismProposal } from "./metabolism";
+import { METABOLISM_COOLDOWN_MS, METABOLISM_NOTE_KEY, metabolismFromPayload, metabolismProposal } from "./metabolism";
 // The predicate that says which palette commands are actuations, shared with the lease
 // gate rather than restated here: the cooldown that bounds moving hardware and the
 // authority that permits it have to agree about what moving hardware IS.
@@ -704,6 +704,19 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
         const voted = new Set(obs.myVotedIds);
         const proposal = obs.openVotes.find((v) => !voted.has(v.id));
         if (!proposal) break;
+        // A metabolism proposal is the one numeric question a reflex brain HAS
+        // measured: obs.vitals sits in every observation, derived from the same
+        // published spans. So the honest vote is not an automatic abstention —
+        // it is yes when the ballot matches what this resident would itself
+        // derive from those spans, and an abstention when it does not. Either
+        // way the ballot is arithmetic, not opinion.
+        if (proposal.kind === "metabolism") {
+          const meta = metabolismFromPayload(proposal.payload ?? {});
+          const mine = meta ? metabolismProposal(obs.vitals) : null;
+          const agrees = mine !== null && meta !== null && mine.flag === meta.key && mine.value === meta.value;
+          out.push({ rule: rule.id, kind: "cast_vote", voteId: proposal.id, choice: agrees ? "yes" : "abstain" });
+          break;
+        }
         const raisesGround = proposal.kind === "zone" || Boolean((proposal.payload as Record<string, unknown>)?.zone);
         out.push({
           rule: rule.id,
@@ -1000,6 +1013,11 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
       // the shared note keeps it to one proposal per window swarm-wide.
       case "propose_metabolism": {
         if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, METABOLISM_NOTE_KEY)), obs.now, METABOLISM_COOLDOWN_MS)) break;
+        // The note paces the swarm across beats; this guard paces it across ONE
+        // beat. Several residents wake in the same window before anybody's note
+        // has landed, and without it each would open an identical ballot — a
+        // stack of duplicate votes that reads as urgency the record does not show.
+        if (obs.openVotes.some((v) => v.kind === "metabolism")) break;
         const proposal = metabolismProposal(obs.vitals);
         if (!proposal) break;
         out.push({ rule: rule.id, kind: "propose_metabolism", proposal });

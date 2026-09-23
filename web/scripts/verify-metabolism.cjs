@@ -109,8 +109,12 @@ const fs = require("fs");
   check("r34 is structural: the swarm cannot vote away its own hunger", selfPolicy.includes('"r34"'));
   const brain = fs.readFileSync("lib/swamp/brain.ts", "utf8");
   check(
-    "r34 is paced by the shared note before it proposes",
-    /case "propose_metabolism": \{[\s\S]{0,200}METABOLISM_NOTE_KEY[\s\S]{0,120}metabolismProposal\(obs\.vitals\)/.test(brain),
+    "r34 is paced by the shared note, refuses duplicate open ballots, then derives the proposal",
+    /case "propose_metabolism": \{[\s\S]{0,400}METABOLISM_NOTE_KEY[\s\S]{0,600}kind === "metabolism"[\s\S]{0,200}metabolismProposal\(obs\.vitals\)/.test(brain),
+  );
+  check(
+    "r18 votes yes on a metabolism ballot only when it matches its own derivation",
+    /case "cast_vote": \{[\s\S]{0,700}kind === "metabolism"[\s\S]{0,600}agrees \? "yes" : "abstain"/.test(brain),
   );
   const obs = fs.readFileSync("lib/swamp/observations.ts", "utf8");
   check("the metabolism note key is in the shared-notes query", obs.includes("key.like.metabolism:%"));
