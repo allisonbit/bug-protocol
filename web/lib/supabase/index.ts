@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { supabaseFetch } from "./deadline";
 
 /**
  * Server side Supabase, service-role. Storage writes, the tool mirror, and any
@@ -29,7 +30,18 @@ let _client: SupabaseClient | null = null;
 export function supabaseAdmin(): SupabaseClient | null {
   if (!SUPABASE_CONFIGURED) return null;
   if (!_client) {
-    _client = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    _client = createClient(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: supabaseFetch },
+      /**
+       * No retries. supabase-js retries a failed GET three times with backoff,
+       * so a deadline of ten seconds was really forty-seven: the read above was
+       * measured against the live outage on 2026-09-23 and took exactly that.
+       * A page render has one budget, and spending it on three more attempts to
+       * reach something that is not answering buys nothing a reader can use.
+       */
+      db: { retry: false },
+    });
   }
   return _client;
 }

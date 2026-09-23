@@ -67,12 +67,31 @@ type RegistryRead =
   | { state: "absent" }
   | { state: "unreachable"; reason: string };
 
-/** Ask the registry itself. Never this repository's memory of it. */
+/**
+ * Ask the registry itself. Never this repository's memory of it.
+ *
+ * THE DEADLINE, AND WHY THIS ONE IS SHORTER THAN THE OTHERS. This page is
+ * prerendered, so this fetch runs during the build — and on 2026-09-23 it ran
+ * with no deadline at all while the registry could not be reached from the
+ * build machine, which is what failed a deployment:
+ *
+ *   Failed to build /discover/page: /discover (attempt 1 of 3) because it took
+ *   more than 60 seconds. ... Export encountered an error on /discover/page.
+ *
+ * Three attempts, three minutes, then no deploy. A request that never answers
+ * never reaches the catch below either, so the page's own honest
+ * "unreachable" branch was unreachable too. The deadline is what makes it
+ * reachable, and it is shorter than the twenty seconds the listing checks use
+ * because a page that is being prerendered cannot spend a minute waiting on a
+ * directory: the row says `unreachable`, the reader can follow the link and
+ * judge for themselves, and the deploy does not care either way.
+ */
 async function readRegistry(): Promise<RegistryRead> {
   try {
     const res = await fetch(REGISTRY_API, {
       headers: { accept: "application/json" },
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return { state: "unreachable", reason: `HTTP ${res.status}` };
     const json = (await res.json()) as {
@@ -201,17 +220,28 @@ function ago(iso: string | null): string {
 }
 
 export default async function DiscoverPage() {
-  const registry = await readRegistry();
-
-  // The platform's own check of all three listings. A page that cannot reach the
-  // database says so rather than drawing an empty list that reads as "no problems".
-  let health: Awaited<ReturnType<typeof readListingHealth>> | null = null;
-  try {
-    const sb = (await import("@/lib/supabase")).supabaseAdmin();
-    if (sb) health = await readListingHealth(sb);
-  } catch {
-    health = null;
-  }
+  /**
+   * Both reads at once, because they are independent and this render is on a
+   * clock. In series they were the sum of two waits, and the second one is a
+   * database read that itself carries a deadline now: the page used to be able
+   * to spend ten seconds on the registry and then ten more on the database
+   * before it drew anything, which is the shape that failed the build above.
+   *
+   * The platform's own check of all three listings, and a page that cannot reach
+   * the database says so rather than drawing an empty list that reads as "no
+   * problems".
+   */
+  const [registry, health] = await Promise.all([
+    readRegistry(),
+    (async () => {
+      try {
+        const sb = (await import("@/lib/supabase")).supabaseAdmin();
+        return sb ? await readListingHealth(sb) : null;
+      } catch {
+        return null;
+      }
+    })(),
+  ]);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 pb-24 pt-20 sm:pt-28">

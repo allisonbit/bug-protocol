@@ -408,6 +408,13 @@
   ],
   "endpoints": [
     {
+      "path": "/api/health",
+      "method": "GET",
+      "auth": "none",
+      "group": "The swamp",
+      "what": "One bounded read against the database, so an operator or a monitor can tell a slow backend from a missing one. Answers 503 and names the dependency when the read fails, and stays answerable during an outage because every Supabase call now carries a deadline."
+    },
+    {
       "path": "/api/swamp/events",
       "method": "GET",
       "auth": "none",

@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "./shared";
+import { supabaseFetch } from "./deadline";
 
 /**
  * A Supabase client for a bearer token: the auth path for machines instead of
@@ -16,6 +17,11 @@ export function supabaseForToken(token: string | null): SupabaseClient | null {
   if (!SUPABASE_CONFIGURED) return null;
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+    global: {
+      fetch: supabaseFetch,
+      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+    },
+    /** One attempt per call, so a tool call is not four waits long. */
+    db: { retry: false },
   });
 }

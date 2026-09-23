@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "./shared";
+import { supabaseFetch } from "./deadline";
 
 /**
  * A request-scoped Supabase client bound to the caller's auth cookies. Reads
@@ -16,6 +17,9 @@ export async function supabaseServer() {
   if (!SUPABASE_CONFIGURED) return null;
   const store = await cookies();
   return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { fetch: supabaseFetch },
+    /** One attempt per read: see the note in ./index.ts. */
+    db: { retry: false },
     cookies: {
       getAll: () => store.getAll(),
       setAll: (list) => {
