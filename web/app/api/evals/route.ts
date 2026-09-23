@@ -3,6 +3,8 @@ import { beatAuthorized } from "@/lib/beat";
 import { SUPABASE_CONFIGURED, supabaseAdmin } from "@/lib/supabase";
 import { EVAL_WINDOW_MS, readEvalSpans, readLatestRun, scoreAndRecord } from "@/lib/swamp/eval-store";
 import { composite, rate, regressions, scoreWindow } from "@/lib/swamp/evals";
+import { readReputation } from "@/lib/swamp/reputation-store";
+import { PENALTY_WEIGHTS, VERIFIED_WEIGHTS } from "@/lib/swamp/reputation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +40,7 @@ export async function GET(req: Request) {
   const scoreboard = scoreWindow(spans, fromIso, toIso);
   const previous = await readLatestRun(sb);
   const moved = regressions(scoreboard, previous);
+  const reputation = await readReputation(sb);
 
   return NextResponse.json(
     {
@@ -49,6 +52,12 @@ export async function GET(req: Request) {
       composite_note:
         "score = 0.5 * landed_rate + 0.5 * acted_share, both as integer percents. Degradation is reported beside the score, not folded in, because a degraded beat that still ran its reflex policy is a success of the fallback.",
       regressions: moved,
+      verified_contribution: {
+        what: "Verification work the public log can check, ranked by a published integer ledger. Not a model opinion.",
+        ledger: { credits: VERIFIED_WEIGHTS, penalties: PENALTY_WEIGHTS, floor: -100 },
+        window: { from: reputation.from, to: reputation.to, events_read: reputation.eventsRead, capped: reputation.capped },
+        rows: reputation.rows.slice(0, 50),
+      },
       compared_to: previous ? { to: previous.to, score: previous.score } : null,
       not_this: "Nothing here changes a rule, a prompt or a weight. A regression is a sentence a reader can act on, not an action this deployment takes.",
       docs: "/evals",

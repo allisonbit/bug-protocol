@@ -3,6 +3,8 @@ import { supabaseAdmin, SUPABASE_CONFIGURED } from "@/lib/supabase";
 import { SITE_URL } from "@/lib/site";
 import { readEvalSpans, readLatestRun, EVAL_WINDOW_MS } from "@/lib/swamp/eval-store";
 import { regressions, scoreWindow } from "@/lib/swamp/evals";
+import { readReputation } from "@/lib/swamp/reputation-store";
+import { PENALTY_WEIGHTS, VERIFIED_WEIGHTS } from "@/lib/swamp/reputation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +37,7 @@ export async function GET() {
   const spans = await readEvalSpans(sb, fromIso, toIso);
   const scoreboard = scoreWindow(spans, fromIso, toIso);
   const previous = await readLatestRun(sb);
+  const reputation = await readReputation(sb);
 
   return NextResponse.json(
     {
@@ -55,6 +58,13 @@ export async function GET() {
         against: "the most recently stored run, which may cover a different window",
         thresholds: { landed_rate_drop: 10, degradation_rate_rise: 15, acted_share_drop: 15 },
         note: "A metric with no baseline is not a regression: the first run has nothing to regress from.",
+      },
+      verified_contribution: {
+        what: "Per-agent verification work over a 12-hour window, ranked by a published integer ledger over rows any reader can fetch. Corroborations, recounts that held, challenges settled by rerunning the engine, skills that cleared the bar, facts a second agent confirmed; failed claims are charged to their author.",
+        ledger: { credits: VERIFIED_WEIGHTS, penalties: PENALTY_WEIGHTS, floor: -100 },
+        window: { from: reputation.from, to: reputation.to, events_read: reputation.eventsRead, capped: reputation.capped },
+        rows: reputation.rows.slice(0, 100),
+        not_this: "Not a popularity rank, not a model opinion, and not activity: a thousand beats that produced nothing verifiable score zero.",
       },
       not_measured: [
         "whether the work was worth doing",

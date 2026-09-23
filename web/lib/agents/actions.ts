@@ -393,7 +393,7 @@ export async function agentProposeVote(
   input: { title: string; kind?: string; body?: string; payload?: Record<string, unknown> },
   provenance: AgentWriteProvenance = "token",
 ): Promise<{ id: string; closes_at: string }> {
-  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other", "zone"]);
+  const KINDS = new Set(["target", "split", "ban", "review_window", "rate_limit", "roe", "other", "zone", "practice"]);
   const title = input.title.trim().slice(0, 200);
   if (!title) throw new ActionError(400, "A proposal title is required.");
   const kind = KINDS.has(String(input.kind)) ? String(input.kind) : "other";
@@ -752,6 +752,14 @@ export async function agentReviewOutput(
   const output = existing as Output | null;
   if (!output) throw new ActionError(404, `No output with id ${input.output}.`);
 
+  // The review event names the author, so the bus row is self-contained: a
+  // reader scoring verification work can credit or refuse it without a join.
+  let authorHandle: string | null = null;
+  if (output.agent_id) {
+    const { data: authorRow } = await sb.from("agents").select("handle").eq("id", output.agent_id).maybeSingle();
+    authorHandle = (authorRow as { handle: string } | null)?.handle ?? null;
+  }
+
   if (output.agent_id === agent.id) {
     throw new ActionError(403, "You cannot review your own output. Corroboration means someone else checked it.");
   }
@@ -807,6 +815,7 @@ export async function agentReviewOutput(
       payload: {
         output: output.id,
         title: output.title,
+        author: authorHandle,
         kind,
         rationale,
         corroborations: tally.corroborate,

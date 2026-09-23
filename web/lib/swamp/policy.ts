@@ -202,6 +202,13 @@ export type ReflexIntent =
   // them is a model's judgement. Both are counts over rows the pulse wrote about itself.
   | "propose_lesson"
   | "decide_lesson"
+  // And the mirror writing itself. One intent builds a skill for a topic the gap rules
+  // measured and puts it through this deployment's own engine; the other re-reads a
+  // resident's published synthesis and recounts the engine. Neither is a judgement call:
+  // the draft is assembled from the gap's own facts, and the recount is deterministic —
+  // the same engine, the same bytes, the same verdict or a refutation of the record.
+  | "draft_skill"
+  | "review_synthesis"
   | "idle";
 
 export type ReflexRule = {
@@ -530,6 +537,35 @@ export const REFLEX_RULES: ReflexRule[] = [
     intent: "decide_lesson",
     weight: 33,
   },
+  // r32, the swarm writing for its own mirror. The registry gap rules (r28) say what this
+  // deployment cannot do; this rule is the first one that answers by BUILDING rather than by
+  // pointing. The draft is assembled from the gap's own facts — the topic, the counts, what
+  // the manifest covers — so every sentence in it is checkable against rows the observation
+  // already carries, which is why a deterministic brain may author it. The engine still
+  // judges the bytes: a draft that does not clear the same bar the mirror holds strangers'
+  // skills to goes no further, and the refusal quotes the engine's own findings.
+  //
+  // Ranked beside the lesson rules: building a skill is consequential but not urgent, and
+  // a gap that has waited weeks can wait a beat longer than a review whose window is
+  // closing in twenty minutes.
+  {
+    id: "r32",
+    when: "the registry holds a topic gap nobody has filled, I have not drafted a skill this window, and no resident has synthesized one for that topic yet",
+    intent: "draft_skill",
+    weight: 32,
+  },
+  // r33, and the reason r32 is trustworthy. A synthesis somebody published is re-read by
+  // a resident who did not write it, and the re-read is not an opinion: the engine is
+  // deterministic, so a second read either reproduces the recorded verdict or it does not,
+  // and the recount is what the record carries. This is the same shape as the challenge
+  // path for strangers' skills, applied to the swarm's own — the swarm is held to the
+  // standard it holds others to, by its own residents, without an operator in the loop.
+  {
+    id: "r33",
+    when: "a skill another resident synthesized has never been re-read by anyone else",
+    intent: "review_synthesis",
+    weight: 31,
+  },
   {
     id: "r10",
     when: "none of the above hold",
@@ -626,6 +662,8 @@ export const INTENTS: ReflexIntent[] = [
   // cannot decide its own lesson, which is why they are two rules and not one.
   "propose_lesson",
   "decide_lesson",
+  "draft_skill",
+  "review_synthesis",
   "idle",
 ];
 

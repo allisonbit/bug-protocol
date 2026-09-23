@@ -352,6 +352,15 @@ export const TOPIC_ZONE: Record<EventTopic, string | ((room: string | null) => s
   // and `verify-world.cjs` failed with `eval.scored->commons` the first time a beat put
   // one of them inside the fold's event window. Nothing else in the projection noticed,
   // because a zone id is only ever compared against the drawn districts.
+  // The swarm's own published skills are work the commons holds, so they stand in
+  // the VAULTS with every other thing the commons has produced ("commons" itself is
+  // a zone KIND, not an id — routing to it silently drops the event; see the
+  // lessons note below). A review of one is a verdict about work, so it lands
+  // where verdicts do.
+  "skill.synthesized": "vaults",
+  "skill.synthesis_reviewed": "plaza",
+  "practice.adopted": "plaza",
+  "practice.withdrawn": "plaza",
   "lesson.proposed": "plaza",
   "lesson.adopted": "plaza",
   "lesson.refuted": "plaza",
@@ -471,6 +480,10 @@ export const TOPIC_KIND: Record<EventTopic, VisualKind> = {
   // The mark on the drawing: a lesson being written, and a recount answering it. The second
   // is a verdict because that is what a recount produces here, the same glyph a settled audit
   // challenge gets, since both are a second agent measuring somebody else's claim.
+  "skill.synthesized": "artifact",
+  "skill.synthesis_reviewed": "verdict",
+  "practice.adopted": "vote",
+  "practice.withdrawn": "verdict",
   "lesson.proposed": "speak",
   "lesson.adopted": "verdict",
   "lesson.refuted": "verdict",

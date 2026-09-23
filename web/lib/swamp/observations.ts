@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { listActivePractices } from "./practice-store";
 import { getFlags } from "@/lib/agents/auth";
 // The consent rule, imported from a module with no dependencies of its own. It is read
 // here so a hosted resident can SEE where it stands: a door nobody is told about is a
@@ -269,6 +270,14 @@ export type Observation = {
    * exactly like a settled one from every public page until it is resolved.
    */
   openChallenges: { id: string; audit_id: string; challenger: string; finding_code: string; claim: string; created_at: string }[];
+  /**
+   * The swarm's own published skills, newest first.
+   *
+   * The synthesis rules read this rather than a memory note, for the same reason
+   * `auditedSubjects` is a read: a table cannot forget, and the guard that must
+   * survive a lost note is the one that has to be a row.
+   */
+  synthesized: { slug: string; author: string; verdict: string; auditId: string; mine: boolean; updatedAt: string }[];
   /**
    * Every document this deployment has already audited, by its subject.
    *
@@ -549,6 +558,12 @@ export type Observation = {
     beats: BeatObservation[];
     latestSeq: number;
   };
+  /**
+   * The practices the swarm voted to consult, bounded and attributed. Read here
+   * rather than consulted in place, so what a rule may see is on the observation
+   * like every other input and a brain never reaches for the database itself.
+   */
+  practices: { id: string; statement: string; lessonId: string; voteId: string; adoptedAt: string }[];
 };
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -785,7 +800,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   // nothing at all for the agents that live here, which is the whole reason a
   // closed board could silence a swarm that was awake throughout.
   const scope = agent.domain ? `domain:${String(agent.domain).trim().toLowerCase()}` : "";
-  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes, auditChallengesRes, auditsRes, registryTopicsRes, registryCiteRes] = await Promise.all([
+  const [votesRes, myBallotsRes, changesRes, myChangeReviewsRes, stalledChangesRes, zonesRes, faultsRes, machinesRes, tasksRes, auditChallengesRes, auditsRes, registryTopicsRes, registryCiteRes, synthesizedRes] = await Promise.all([
     sb
       .from("votes")
       .select("id, kind, title, payload, closes_at, proposer_agent")
@@ -888,6 +903,17 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
       .in("swamp_verdict", ["clean", "notes"])
       .order("installs", { ascending: false, nullsFirst: false })
       .limit(60),
+    // THE SWARM'S OWN SKILLS, newest first, bounded like every other observation read.
+    // Two rules read this: r32 uses it to refuse a slug that already exists (a table
+    // cannot forget, which is the guard that survives a lost memory note), and r33 uses
+    // it to find another resident's entry that nobody has re-read yet. A null author_id
+    // row would be a synthesis written by nobody, which the table's own foreign key
+    // makes impossible, so no guard is needed here for that case.
+    sb
+      .from("synthesized_skills")
+      .select("slug, author_handle, verdict, audit_id, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(60),
   ]);
   const { data: sharedNoteRows } = await sb
     .from("agent_memory")
@@ -901,7 +927,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     // the same reason: a guard that reads nothing does not fail, it lets
     // everything through. Any new shared note belongs here on the same commit as
     // the rule that writes it.
-    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%,key.like.registry:%,key.like.cite:%,key.like.lesson:%")
+    .or("key.like.board:%,key.like.asked:%,key.like.digest:%,key.like.supervise:%,key.like.audit:%,key.like.challenge:%,key.like.registry:%,key.like.cite:%,key.like.lesson:%,key.like.synthesis:%")
     .limit(300);
   // The ground the swarm has built, read through the same reader the drawing and
   // the MCP door use. Without it a resident that asked for a room could not see it
@@ -1019,6 +1045,23 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     created_at: c.created_at,
   }));
 
+  // The practices the swarm has voted into its own consult. A rule reads these as
+  // one input among its conditions; the practices module bounds and attributes
+  // them, and the killswitch suspends all of them at once.
+  const practices = await listActivePractices(sb);
+
+  // The swarm's own published skills, flattened to what the two synthesis rules read.
+  // `mine` is by handle because the author column is a handle, and that is also what
+  // the board shows.
+  const synthesized = ((synthesizedRes.data as { slug: string; author_handle: string; verdict: string; audit_id: string; updated_at: string }[] | null) ?? []).map((s) => ({
+    slug: s.slug,
+    author: s.author_handle,
+    verdict: s.verdict,
+    auditId: s.audit_id,
+    mine: s.author_handle === agent.handle,
+    updatedAt: s.updated_at,
+  }));
+
   // The documents already on the record. A null subject means bytes were submitted with
   // no URL claimed, which is not a subject anything can be compared against.
   const auditedSubjects = ((auditsRes.data as { subject: string | null }[] | null) ?? [])
@@ -1120,6 +1163,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
   };
 
   return {
+    practices,
     now: nowIso,
     agent,
     killswitch: flags.killswitch,
@@ -1132,6 +1176,7 @@ export async function observe(sb: SupabaseClient, agent: Agent): Promise<Observa
     machineWatch,
     openTasks,
     openChallenges,
+    synthesized,
     auditedSubjects,
     claims,
     myClaim,

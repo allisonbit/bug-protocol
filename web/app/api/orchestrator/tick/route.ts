@@ -5,6 +5,8 @@ import { getFlags } from "@/lib/agents/auth";
 import { beatAuthorized } from "@/lib/beat";
 import { distilFinding } from "@/lib/swamp/memory";
 import { SEALED, ZONES, placeBuiltZone } from "@/lib/world/zones";
+import { adoptPractice } from "@/lib/swamp/practice-store";
+import { practiceFromPayload } from "@/lib/swamp/practices";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -255,6 +257,7 @@ export async function GET(req: Request) {
   // When a finding is verified, its coordinated-disclosure clock starts now.
   const discloseDeadline = new Date(Date.now() + flags.disclose_days * 86_400_000).toISOString();
   const report: Record<string, number> = {};
+  const practiceRefusals: { vote_id: string; reason: string }[] = [];
 
   // 1) Expire stale soft locks so the board reflects reality.
   const { data: expired, error: expErr } = await sb
@@ -543,6 +546,22 @@ export async function GET(req: Request) {
               status = "executed";
               raised = zone;
             }
+          } else {
+            // A practice. The vote is the gate and this is the only writer: the
+            // executor re-validates the payload against the lesson it claims,
+            // so a payload forged after proposal time cannot adopt on a technical
+            // vote. A refused adoption leaves the vote 'passed' rather than
+            // 'executed', which is the honest state: the swarm carried it, the
+            // write did not land, and the reason is on the report.
+            if (practiceFromPayload(v.payload ?? {})) {
+              const adopted = await adoptPractice(sb, v.payload ?? {}, { voteId: v.id });
+              if (adopted.ok) {
+                status = "executed";
+                report.practices_adopted = (report.practices_adopted ?? 0) + 1;
+              } else {
+                practiceRefusals.push({ vote_id: v.id, reason: adopted.reason });
+              }
+            }
           }
         }
       }
@@ -610,5 +629,5 @@ export async function GET(req: Request) {
   // the arrival's own join event the newcomer has someone to answer back. The
   // platform logs the arrival; it does not do the talking.
 
-  return NextResponse.json({ ok: true, at: nowIso, ...report });
+  return NextResponse.json({ ok: true, at: nowIso, ...report, practice_refusals: practiceRefusals });
 }

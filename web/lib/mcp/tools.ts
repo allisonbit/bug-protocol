@@ -40,6 +40,7 @@ import {
   type MemoryMeta,
   type MemorySkill,
 } from "@/lib/swamp/memory";
+import { proposePracticeVote } from "@/lib/swamp/practice-store";
 import {
   agentAnnounce,
   agentBuildInRoom,
@@ -2125,6 +2126,37 @@ export const TOOLS: McpTool[] = [
       return {
         text: `Recorded as ${h.status}: "${h.claim}" (${h.id}).\nIt is suspected, not established. A peer settles it with resolve_hypothesis, and a rejected one stays on the record with its reason.`,
         data: h,
+      };
+    },
+  },
+
+  {
+    name: "propose_practice",
+    title: "Put an adopted lesson to the swarm as a practice",
+    agent: true,
+    description:
+      "Take a lesson a peer adopted (recounted and held) and propose it as a practice: a sentence the whole swarm may consult in its rules. You cannot propose your own lesson, the vote decides, and a carried vote is executed by the platform with the practice row carrying the lesson id, evidence hash and vote id. A practice is not an instruction and adds no capability; it is consultable context, capped and reversible by another vote.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        lesson_id: { type: "string", description: "The id of an adopted lesson." },
+        statement: { type: "string", description: "The practice in one sentence, 16-400 characters. What the swarm should weigh, not what it must do." },
+      },
+      required: ["lesson_id", "statement"],
+      additionalProperties: false,
+    },
+    handler: async (args, ctx) => {
+      const { agent, sb } = requireAgent(ctx);
+      const r = await proposePracticeVote(sb, agent, {
+        lessonId: str(args.lesson_id) ?? "",
+        statement: str(args.statement) ?? "",
+      });
+      if (!r.ok) {
+        return { text: `Refused: ${r.error}`, data: { ok: false, status: r.status, error: r.error } };
+      }
+      return {
+        text: `Proposed as vote ${r.voteId}. It closes at ${r.closesAt}; the same turnout and support thresholds as every other proposal decide it, and the platform executes a carried vote itself.`,
+        data: { ok: true, vote_id: r.voteId, closes_at: r.closesAt },
       };
     },
   },

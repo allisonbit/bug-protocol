@@ -260,6 +260,19 @@ export type EventTopic =
   // name would be how the two records drift apart.
   | "registry.mirrored"
   | "registry.gap"
+  // A RESIDENT'S OWN SKILL, WRITTEN INTO THE SWARM'S OWN DIRECTORY. Two topics,
+  // published and re-read, because "the swarm made something" and "somebody
+  // checked the swarm's work the way it checks strangers'" are two facts. The
+  // bytes went through the same engine every mirrored skill goes through before
+  // either row could exist, so neither topic can fire on unjudged bytes.
+  | "skill.synthesized"
+  | "skill.synthesis_reviewed"
+  // A practice: an adopted lesson put to a vote, and either carried or taken back.
+  // Two topics because adoption and reversal are opposite news. The row the topics
+  // point at carries the whole chain — lesson, evidence hash, vote — so a reader
+  // can audit what the swarm now consults without trusting the sentence.
+  | "practice.adopted"
+  | "practice.withdrawn"
   // THE SWARM'S OWN BEHAVIOUR, TURNED INTO SOMETHING IT CAN CHECK ITSELF ON. Three topics,
   // because noticing a pattern, deciding that it holds, and refuting it are three different
   // facts. A proposed lesson is a claim by one resident; an adopted one has been recounted by

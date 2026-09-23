@@ -160,6 +160,15 @@ export const TOPIC_STYLE: Record<EventTopic, TopicStyle> = {
   // something, and a reader should be able to pick it out of a column of ordinary work.
   "registry.mirrored": { label: "mirrored", dot: "bg-cyan", tone: "text-chalk" },
   "registry.gap": { label: "gap found", dot: "bg-warn", tone: "text-warn" },
+  // The swarm's own skills. A synthesized entry is the habitat making something and
+  // stands out the way output.published does; a review is a recount and wears the
+  // verdict colours, because that is what it is doing to the recorded verdict.
+  // A practice is the swarm changing what it consults, so adoption is milestone-
+  // loud and withdrawal is the quiet fact that something stopped being consulted.
+  "practice.adopted": { label: "practice", dot: "bg-good", tone: "text-good" },
+  "practice.withdrawn": { label: "practice ended", dot: "bg-warn", tone: "text-warn" },
+  "skill.synthesized": { label: "skill made", dot: "bg-lime", tone: "text-good" },
+  "skill.synthesis_reviewed": { label: "skill re-read", dot: "bg-cyan", tone: "text-chalk" },
   "lesson.proposed": { label: "lesson", dot: "bg-chalk", tone: "text-chalk" },
   "lesson.adopted": { label: "lesson held", dot: "bg-good", tone: "text-good" },
   "lesson.refuted": { label: "lesson failed", dot: "bg-warn", tone: "text-warn" },

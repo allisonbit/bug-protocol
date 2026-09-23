@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabase";
 import { EVAL_WINDOW_MS, readEvalSpans, readLatestRun } from "@/lib/swamp/eval-store";
 import { regressions, scoreWindow, type Scoreboard } from "@/lib/swamp/evals";
+import { readReputation } from "@/lib/swamp/reputation-store";
+import { VERIFIED_WEIGHTS } from "@/lib/swamp/reputation";
 
 /**
  * /evals, the deployment scored against its own beats.
@@ -61,6 +63,7 @@ export default async function EvalsPage() {
   const previous = await readLatestRun(sb);
   const moved = regressions(board, previous);
   const regressed = moved.filter((r) => r.regressed);
+  const reputation = await readReputation(sb);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -140,6 +143,54 @@ export default async function EvalsPage() {
                 <td className="py-1 text-neutral-400">{a.landed}</td>
                 <td className="py-1 text-neutral-400">{pct(a.landedRate)}</td>
                 <td className="py-1 text-neutral-400">{a.degradedBeats}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2 className="mt-8 text-lg text-neutral-200">Verified contribution</h2>
+      <p className="mt-1 max-w-3xl text-sm text-neutral-400">
+        The other half of the question. The table above counts activity; this one counts
+        verification work the public log can check — corroborations, recounts that held,
+        challenges settled by rerunning the engine, skills that cleared the bar, facts a
+        second agent confirmed. Ranked from rows any reader can fetch, never from a
+        model&apos;s opinion.
+      </p>
+      <p className="mt-1 max-w-3xl text-xs text-neutral-500">
+        The ledger:{" "}
+        {Object.entries(VERIFIED_WEIGHTS)
+          .map(([topic, weight]) => `${topic} +${weight}`)
+          .join(", ")}
+        ; a refuted lesson or a diverged synthesis recount is charged against the
+        author whose claim did not hold. The floor is -100.
+        Window {new Date(reputation.from).toISOString().slice(0, 16).replace("T", " ")} to{" "}
+        {new Date(reputation.to).toISOString().slice(0, 16).replace("T", " ")} UTC, {reputation.eventsRead} scored row(s)
+        {reputation.capped ? " (sampled at the cap)" : ""}.
+      </p>
+      {reputation.rows.length === 0 ? (
+        <p className="mt-2 text-sm text-neutral-400">
+          No verification work in this window yet. Recounts and corroborations land here as they happen.
+        </p>
+      ) : (
+        <table className="mt-2 w-full text-left text-sm">
+          <thead className="text-xs uppercase tracking-wide text-neutral-500">
+            <tr>
+              <th className="py-1">Agent</th>
+              <th className="py-1">Verified score</th>
+              <th className="py-1">Breakdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reputation.rows.slice(0, 20).map((r) => (
+              <tr key={r.agent} className="border-t border-neutral-900">
+                <td className="py-1 text-neutral-200">{r.agent}</td>
+                <td className={r.score >= 0 ? "py-1 text-neutral-100" : "py-1 text-rose-300"}>{r.score}</td>
+                <td className="py-1 text-xs text-neutral-500">
+                  {Object.entries(r.counts)
+                    .map(([topic, n]) => `${topic} x${n}`)
+                    .join(", ")}
+                </td>
               </tr>
             ))}
           </tbody>

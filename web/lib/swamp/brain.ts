@@ -24,6 +24,7 @@ import {
 // Both are pure, so the cooldowns and the eligibility are checkable without a clock or a
 // database, which is how the `audit:last` key that nobody wrote was found.
 import { CITE_NOTE_KEY, GAP_NOTE_KEY, citeCooldownElapsed, pickGapToReport } from "@/lib/registry/reflex";
+import { SYNTH_DRAFT_NOTE_KEY, SYNTH_REVIEW_NOTE_KEY } from "./synthesis-notes";
 // The predicate that says which palette commands are actuations, shared with the lease
 // gate rather than restated here: the cooldown that bounds moving hardware and the
 // authority that permits it have to agree about what moving hardware IS.
@@ -32,6 +33,7 @@ import { MAX_CHANGE_BYTES, checkPath } from "@/lib/swamp/changes";
 import { checkSourcePath } from "@/lib/source";
 import type { BoardItem } from "./discussion";
 import { rosterFromClaims } from "./roster";
+import { synthesisSlugForTopic } from "./synthesis";
 import {
   claimsByTarget,
   nextHost,
@@ -160,6 +162,8 @@ export type PlannedAction =
       decision: "adopt" | "refute";
       reason: string;
       reproduced: boolean;
+      /** The proposer's handle, carried so the bus row can name whose pattern was decided. */
+      proposedBy: string | null;
     }
   /** Arrival. Happens once; the platform refuses a second. */
   | { rule: string; kind: "announce" }
@@ -332,7 +336,28 @@ export type PlannedAction =
    * site mean nothing while looking like a swarm with opinions. A model can read, so
    * a model may vote; a reflex resident keeps the doors it can walk through honestly.
    */
-  | { rule: string; kind: "vote_on_board"; subject: number; value: 1 | -1 };
+  | { rule: string; kind: "vote_on_board"; subject: number; value: 1 | -1 }
+  /**
+   * Write a skill this habitat needs and put it through its own engine.
+   *
+   * `slug` and `body` are composed here but NOT judged here: the executor runs
+   * the same audit engine the mirror uses, and only its verdict decides whether
+   * the draft reaches the registry. A reflex agent cannot write prose, so the
+   * body is assembled from the gap's own facts — the topic, the count, what the
+   * deployment's manifest actually covers — which is why a deterministic brain
+   * may author it honestly: every sentence in it is checkable against the rows
+   * the observation already carries.
+   */
+  | { rule: string; kind: "draft_skill"; slug: string; topic: string; why: string; gapSeq: number | null }
+  /**
+   * Re-read a synthesized skill somebody already published and recount the engine.
+   *
+   * The recount is the whole of the judgement: the engine is deterministic, so a
+   * second read either reproduces the recorded verdict or it does not, and that
+   * is exactly the shape a reflex brain can settle honestly — the same shape the
+   * challenge path already uses for strangers' skills.
+   */
+  | { rule: string; kind: "review_synthesis"; slug: string; auditId: string; recordedVerdict: string };
 
 export type Decision = {
   brain: AgentBrain;
@@ -919,6 +944,56 @@ export function decideReflex(obs: Observation, rules: ReflexRule[] = REFLEX_RULE
           decision: verdict.decision,
           reason: verdict.reason,
           reproduced,
+          proposedBy: peerHandles.get(proposed.proposed_by) ?? null,
+        });
+        break;
+      }
+
+      // r32, the swarm writing for its own mirror. The gap arrives from the same
+      // observation r28 reads; what is new is the answer. The slug is derived from the
+      // topic, so a repeated gap replaces one entry rather than accumulating a family of
+      // near-identical rows, and the guard is a READ of the synthesis table (obs.synthesized)
+      // rather than a note, because a table cannot forget. The body is assembled from the
+      // gap's own facts, which is why a reflex brain may author it: there is not a sentence
+      // in it that is not checkable against rows the observation carries. The engine still
+      // judges the bytes in the executor — authorship here proposes, the verdict decides.
+      case "draft_skill": {
+        if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, SYNTH_DRAFT_NOTE_KEY)), obs.now)) break;
+        const gap = obs.registryGaps.find(
+          (g) => !obs.synthesized.some((s) => s.slug === synthesisSlugForTopic(g.topic)),
+        );
+        if (!gap) break;
+        const slug = synthesisSlugForTopic(gap.topic);
+        out.push({
+          rule: rule.id,
+          kind: "draft_skill",
+          slug,
+          topic: gap.topic,
+          why: `the registry holds ${gap.skills} skills in "${gap.topic}" and this deployment's manifest covers none of them; this draft is the swarm answering its own gap report`,
+          gapSeq: null,
+        });
+        break;
+      }
+
+      // r33, holding the swarm to its own standard. A synthesis nobody but its author has
+      // re-read is recountable: the engine is deterministic, so the second read either
+      // reproduces the verdict or refutes it, and the executor writes which. The guards are
+      // the honest ones: not mine (the author does not review their own work, the same
+      // asymmetry as the lesson decider), and not already reviewed by anyone else — which
+      // for now is read as "the only audit row for this subject is the one the synthesis
+      // wrote", because a second read would have written a second row.
+      case "review_synthesis": {
+        if (!proposalCooldownElapsed(noteTimestamp(sharedNote(obs, SYNTH_REVIEW_NOTE_KEY)), obs.now)) break;
+        const target = obs.synthesized.find(
+          (s) => !s.mine && !obs.auditedSubjects.includes(`synthesized:${s.slug}/review`),
+        );
+        if (!target) break;
+        out.push({
+          rule: rule.id,
+          kind: "review_synthesis",
+          slug: target.slug,
+          auditId: target.auditId,
+          recordedVerdict: target.verdict,
         });
         break;
       }

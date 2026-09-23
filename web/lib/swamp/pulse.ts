@@ -48,6 +48,9 @@ import {
 import { claimChallenge, recordAudit, resolveChallenge, runAudit } from "@/lib/audit/store";
 import { claimsByTarget, nextHost, observe, type Observation } from "./observations";
 import { declareSkill, proposeHypothesis } from "./memory";
+import { submitSkill, readSynthesized } from "./synthesis-store";
+import { judgeDraft, synthesisSlugForTopic, synthesisDraftBody } from "./synthesis";
+import { SYNTH_DRAFT_NOTE_KEY, SYNTH_REVIEW_NOTE_KEY, synthesisDraftNoteValue, synthesisReviewNoteValue } from "./synthesis-notes";
 import { policyFor } from "./policy";
 import { distinctMembers } from "./roster";
 import { refused } from "./refusal";
@@ -1095,6 +1098,7 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
           lesson_id: row.id,
           kind: row.kind,
           subject: row.subject,
+          proposed_by: plan.proposedBy,
           confidence: row.confidence,
           evidence_hash: row.evidence_hash,
           reproduced: plan.reproduced,
@@ -1104,6 +1108,89 @@ async function execute(sb: SupabaseClient, obs: Observation, plan: PlannedAction
         provenance: "runtime",
       });
       return plan.decision === "adopt" ? `adopted a lesson about ${row.subject}` : `refuted a lesson about ${row.subject}`;
+    }
+
+    // r32, the swarm answering its own gap report. The body is assembled HERE from the
+    // plan's facts — the topic, why it is needed, what the manifest covers — and then it
+    // goes through the same gate every stranger's skill goes through: this deployment's
+    // engine, the mirror's own bar. The store refuses a flagged draft with the engine's
+    // findings quoted, and the refusal is a MEMORY NOTE rather than an event, because a
+    // dirty draft is the author's business to fix, not the board's news. A clean draft
+    // writes the synthesized row, whose trigger mirrors it into the registry, and the
+    // board hears about it like any other work.
+    case "draft_skill": {
+      const body = synthesisDraftBody({ topic: plan.topic, why: plan.why, handle: agent.handle, now: obs.now });
+      const result = await submitSkill(sb, {
+        name: plan.slug,
+        body,
+        authorHandle: agent.handle,
+        authorId: agent.id,
+      });
+      if (!result.ok) {
+        await remember(sb, agent.id, "note", SYNTH_DRAFT_NOTE_KEY, { slug: plan.slug, verdict: `refused:${result.code}`, at: obs.now }, 2);
+        return `draft ${plan.slug} refused: ${result.reason}`;
+      }
+      await remember(sb, agent.id, "note", SYNTH_DRAFT_NOTE_KEY, synthesisDraftNoteValue({ slug: result.slug, verdict: result.verdict }, obs.now), 3);
+      await appendEvent(sb, {
+        topic: "skill.synthesized",
+        agent,
+        payload: {
+          text: `wrote and published a skill, "${plan.slug}", filling the "${plan.topic}" gap — its own engine judged the bytes ${result.verdict}`,
+          slug: result.slug,
+          ref: result.ref,
+          topic: plan.topic,
+          verdict: result.verdict,
+          digest: result.digest,
+          audit_id: result.auditId,
+          why: plan.why,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return `synthesized a skill, "${result.slug}" (${result.verdict}), into the registry`;
+    }
+
+    // r33, the recount. Read the synthesized bytes and the audit row they are bound to,
+    // run the engine again, and publish the comparison. A reproduced verdict is the
+    // record getting stronger; a divergent one is the record catching itself — both are
+    // worth a row, and the second is worth knowing about immediately. The review writes
+    // its own audit row under a review subject, so "nobody has re-read this" stays a
+    // readable fact from the audits table alone.
+    case "review_synthesis": {
+      const entry = await readSynthesized(sb, plan.slug);
+      if (!entry) return null;
+      const judged = judgeDraft(entry.body);
+      const reproduced = judged.verdict === plan.recordedVerdict && judged.digest === entry.digest;
+      const reviewSubject = `synthesized:${plan.slug}/review`;
+      await recordAudit(sb, {
+        result: { ...judged, subject: reviewSubject },
+        subject: reviewSubject,
+        source: "submitted",
+        content: entry.body,
+        submittedBy: agent.handle,
+        agent: { id: agent.id, handle: agent.handle },
+      });
+      await remember(sb, agent.id, "note", SYNTH_REVIEW_NOTE_KEY, synthesisReviewNoteValue({ slug: plan.slug, reproduced }, obs.now), 2);
+      await appendEvent(sb, {
+        topic: "skill.synthesis_reviewed",
+        agent,
+        payload: {
+          text: reproduced
+            ? `re-read the synthesized skill "${plan.slug}" and the engine reproduced the recorded verdict (${plan.recordedVerdict})`
+            : `re-read the synthesized skill "${plan.slug}" and the engine DID NOT reproduce the recorded verdict: got ${judged.verdict}, recorded ${plan.recordedVerdict}`,
+          slug: plan.slug,
+          author: entry.author_handle,
+          audit_id: plan.auditId,
+          recorded_verdict: plan.recordedVerdict,
+          recounted_verdict: judged.verdict,
+          reproduced,
+        },
+        signature: null,
+        provenance: "runtime",
+      });
+      return reproduced
+        ? `re-read "${plan.slug}" and the verdict held`
+        : `re-read "${plan.slug}" and the verdict DIVERGED (${plan.recordedVerdict} -> ${judged.verdict})`;
     }
 
     case "post_to_board": {
